@@ -174,7 +174,8 @@ BOOTSTRAP_FILES := \
     Token.ez.h \
     Unix.ez.c \
     Unix.ez.h \
-    ezcc.ez.c
+    ezcc.ez.c \
+    Unix.h
 
 .PHONY: all clean
 
