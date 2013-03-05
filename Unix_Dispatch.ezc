@@ -1,0 +1,838 @@
+easy_c 1.0
+
+# Copyright (c) 2011 by Wayne C. Gramlich
+# All rights reserved.
+
+# This library provides a structured way managing I/O events
+# and dispatching on the availability input and output.  Ultimately,
+# it is a layer on top of the Unix/Posix select(2) call.
+#
+# Before everything, the user creates a {Globals} type.  The type name
+# does not need to be Globals, but the most common name is Globals.
+# The {Globals} object contains whatever data structures the user needs
+# to accomplish all of the I/O activities.  In particular, the user
+# typically stores a pointer to each {Unix_Dispatch} object in {Globals}.
+# ({Unix_Dispatch} objects are discussed below.)  Here is an example of
+# a {Globals} declaration:
+#
+#   define Globals
+#       record
+#           dispatch1 Unix_Dispatch[Globals]
+#           dispatch2 Unix_Dispatch[Globals]
+#	    random Integer
+#	    ....
+#
+# There is typically only one {Globals} object created.  It is created
+# right before the {Unix_Dispatcher} object is created.  ({Unix_Dispatcher}
+# discussed immediately below.)  After the {Unix_Dispatcher} is created,
+# the fields of {Globals} are initialized.
+#
+# The user creates a single {Unix_Dispatcher} object that is parameterized
+# by the previously mentioned {Globals} type.  This is done as follows:
+#
+#   ...
+#   globals :@= new@Globals()
+#   dispatcher :@= create@Unix_Dispatcher[Globals](globals)
+#   assert dispatcher.globals == globals
+#   ...
+#
+# There is one public field in {Unix_Dispatcher} called {globals}.
+# The rest of the {Unix_Dispatcher} object is private.
+#
+# After the {Unix_Dispatcher} object is created, the user creates an ordered
+# list of {Unix_Dispatch} objects -- one for each file/socket number to
+# monitored for I/O.  The Unix_Dispatch object has a number of public
+# fields:
+#
+#   define Unix_Dispatch[Globals]
+#       record
+#           dispatcher Unix_Dispatcher[Globals]
+#	    file_socket_number Integer
+#           read Logical
+#           write Logical
+#           except Logical
+#           routine [<= Unix_Dispatch[Globals], Logical, Logical, Logical]
+#	    input_buffer String
+#	    output_buffer String
+#           ....
+#
+# where
+#
+#     {dispatcher} is the {Unix_Dispatcher} object
+#     {file_socket_number} is the file number or socket number being monitored.
+#         When it is -1, no monitoring occurs.
+#     {read}, {write}, and {except} specify what I/O conditions to monitor
+#     {routine} is the dispatch routine that is called when an I/O condition
+#         is triggered
+#     {input_buffer} is a temporary input buffer
+#     {output_buffer} is a temporary input buffer
+#
+# Other fields are likely to be added in the future.
+#
+# A dispatch routine has the following basic structure:
+#
+#   routine dispatch1@Easy_C
+#       takes dispatch Unix_Dispatch[Globals]
+#       takes read Logical
+#       takes write Logical
+#       takes except Logical
+#       returns_nothing
+#
+#       file_socket_number := dispatch.file_socket_number
+#       globals := dispatch.dispatcher.globals
+#       if read
+#            # Perform read related operations here:
+#       if write
+#            # Perform write related operations here:
+#       if except
+#            # Perform except related operations here:
+#
+# The {dispatch} argument coincides with the {Unix_Dispatch} object.
+# The corresponding {file_socket_number} is extracted from the {dispatch}
+# {argument}.  The {Globals} object is extracted via the {dispatcher} field
+# as shown above.  {read}, {write}, and {except} arguments indicate whether
+# the specified condition has triggered for {file_socket_number}.
+#
+# Each {Unix_Dispatch} object is created via a call to
+# {dispatch_allocate@Unix_Dispatcher()}  The form is:
+#
+#    globals := ...
+#    dispatcher := create@Unix_Dispatcher[Globals](globals)
+#    dispatch1 :@=
+#      dispatch_allocate@(dispatcher, fd, routine, read, write, except)
+#
+# where
+#
+#    {dispatcher} is the {Unix_Dispatcher} object,
+#    {fd} is the file socket number to be monitord,
+#    {routine} is the disptach routine that is called to process each
+#        active I/O event, and
+#    {read}, {write} and {except} specify which I/O conditions to montior.
+#
+# routine returns a {Unix_Dispatch} object.  Each call to {dispatch_allocate}()
+# appends the created {Unix_Dispatch} object to the internal dispatch list
+# in the {Unix_Dispatcher} object.  Typically, each {Unix_Dispatch} object
+# that is allocated is stored inside of the {Globals} object.
+
+library Easy_C
+library Unix
+library Unix_Termios
+
+# {Unix_Dispatch} routines:
+
+define Unix_Dispatch[Globals]
+    record
+	close_when_done Logical		# Flag to auto close on write flush
+	globals Globals			# {Globals} object
+	except Logical			# Dispatch on exception
+	except_routine [<= Unix_Dispatch[Globals]] # Exception routine
+	file_socket_number Integer	# File/Socket number
+	input_buffer String		# Input buffer of data read
+	io_routine [<= Unix_Dispatch[Globals], Logical, Logical, Logical]
+	name String			# Name of dispatch object
+	output_buffer String		# Output buffer of data to write
+	read Logical			# Dispatch on read available
+	read_routine [<= Unix_Dispatch[Globals]] # Read routine
+	write Logical			# Dispatch on write available
+
+
+routine accept@Unix_Dispatch[Globals]
+    takes listen Unix_Dispatch[Globals]
+    takes connect Unix_Dispatch[Globals]
+    takes read_routine [<= Unix_Dispatch[Globals]]
+    returns_nothing
+
+    # This routine will will accept a connection on the listen socket
+    # associated with {listen} and bind {connect} to that connection.
+    # {read_routine} is invoke for input on {connect}.  Before this
+    # routine, {connect} must be closed.
+
+    listen_socket :@= listen.file_socket_number
+    connect_socket :@= accept@Unix(listen_socket)
+    assert connect_socket >= 0i
+
+    connect.file_socket_number := connect_socket
+    connect.io_routine := standard_io_routine@Unix_Dispatch[Globals]
+    connect.read_routine := read_routine
+    connect.read := 1t
+
+
+routine accept_io_routine@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    takes read Logical
+    takes write Logical
+    takes except Logical
+    returns_nothing
+
+    # This routine is the routine for dealing listen sockets:
+
+    # Process any available input data:
+    if read
+	call dispatch.read_routine(dispatch)
+
+    if write
+	call dispatch.except_routine(dispatch)
+
+    if except
+	call dispatch.except_routine(dispatch)
+
+
+routine auto_close@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    returns_nothing
+
+    # This routine will mark {dispatch} to be automatically closed
+    # when there is no more data to be written.
+
+    dispatch.close_when_done := 1t
+    dispatch.write := 1t
+
+
+routine close@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    returns_nothing
+
+    # This routine will close {dispatch}.
+
+    file_socket_number :@= dispatch.file_socket_number
+    if file_socket_number >= 0i
+	call close@Unix(file_socket_number)
+	call reset@(dispatch)
+
+
+routine closed_create@Unix_Dispatch[Globals]
+    takes name String
+    takes globals Globals
+    returns Unix_Dispatch[Globals]
+
+    # This routine will create and return a {Unix_Dispatch} object
+    # with a name of {name}.  This routine should not be called
+    # directly, it is intended to be called from one of the {Unix_Dispatcher}
+    # routines.
+
+    # Create {unix_dispatch} and fill in its fields:
+    dispatch :@= new@Unix_Dispatch[Globals]()
+    dispatch.input_buffer := new@String()
+    dispatch.globals := globals
+    dispatch.name := read_only_copy@(name)
+    dispatch.output_buffer := new@String()
+    call reset@(dispatch)
+    return dispatch
+
+
+routine fail_io_routine@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    takes read Logical
+    takes write Logical
+    takes except Logical
+    returns_nothing
+
+    # This is an I/O routine simply fails.  It is typically attached
+    # to a closed {Unix_Dispatch} object as the {io_routine}.
+
+    call d@(form@("No I/O routine for dispatch %v%\n\") / f@(dispatch.name))
+    assert 0f
+
+
+routine fail_routine@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    returns_nothing
+
+    # This is a routine that simply fails.  It is typically attached
+    # to a closed {Unix_Dispatch} object at the {except_routine} and
+    # {read_routine}.
+
+    error :@= errno@Unix()
+    text :@= errno_convert@Unix(null@String, error)
+    call d@(form@("Dispatch object %v% failed %d% (=%v%)\n\") %
+      f@(dispatch.name) % f@(error) / f@(text))
+    assert 0f
+
+
+routine input_disable@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    returns_nothing
+
+    # This routine will disable data input from {dispatch}.
+
+    dispatch.read := 0t
+
+
+routine input_enable@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    takes input_routine [<= Unix_Dispatch[Globals]]
+    returns_nothing
+
+    # This routine will enable {dispatch} for reading data.  Each time
+    # there is new data to be processed, {input_routine} is called with
+    # {dispatch} as its argument.  The new data resides in
+    # {dispatch.input_buffer}.  If {dispatch.input_buffer} is empty,
+    # there is a good chance that it means that we are at either
+    # end-of-file or the socket connection has closed.
+
+    dispatch.read_routine := input_routine
+    dispatch.read := 1t
+
+
+routine listen@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    takes address String
+    takes port_number Unsigned
+    takes queue_length Unsigned
+    takes accept_routine [<= Unix_Dispatch[Globals]]
+    returns Logical
+
+    # This routine will allocate a listen socket and bind it to listen
+    # for connections at {address} and {port_number} with a queue length
+    # of {queue_length}.  The listen socket is attached to {dispatch},
+    # which must be in the closed state.
+
+    listen_socket :@= socket_stream_create@Unix()
+    assert listen_socket >= 0i
+
+    # Mark {listen_socket} so that the address can be reused:
+    reuse_address :@= unix_so_reuseaddr@Integer
+    if set_socket_option@Unix(listen_socket, reuse_address, 1i) < 0i
+ 	call d@("setsockopt reuse address failed\n")
+	return 1t
+    
+    # Mark {listen_socket} as keep alive so we know when it goes away:
+    keep_alive :@= unix_so_keepalive@Integer
+    if set_socket_option@Unix(listen_socket, keep_alive, 1i) < 0i
+	call d@("setsockopt keep alive failed\n")
+	return 1t
+
+    internet_address :@= internet_address_lookup@Unix(address)
+    #call d@(form@("ia=%x%\n\") / f@(internet_address))
+    if bind@Unix(listen_socket, internet_address, port_number) < 0i
+	error :@= errno@Unix()
+	message :@= errno_convert@Unix(null@String, error)
+	call d@(form@("err=%d% (%v%)\n\") % f@(error) / f@(message))
+	return 1t
+
+    assert listen@Unix(listen_socket, integer@(queue_length)) >= 0i
+
+    dispatch.file_socket_number := listen_socket
+    dispatch.io_routine := accept_io_routine@Unix_Dispatch[Globals]
+    dispatch.read_routine := accept_routine
+    dispatch.read := 1t
+
+    return 0f
+
+
+routine open_read@Unix_Dispatch[Globals]
+    takes file Unix_Dispatch[Globals]
+    takes file_name String
+    takes read_routine [<= Unix_Dispatch[Globals]]
+    returns Logical
+
+    # This routine will open {file_name} and attach it {dispatch} for
+    # reading.  {read_routine} is called to process any input.  {dispatch}
+    # must be closed before calling this routine.  If {file_name} can not
+    # be opened, {true@Logical} is returned; other {false@Logical} is returned.
+
+    non_block_flag :@= unix_file_o_nonblock@Unsigned
+    read_only_flag :@= unix_file_o_rdonly@Unsigned
+    flags :@= non_block_flag | read_only_flag
+    file_number :@= open@Unix(file_name, flags, 0)
+    if file_number < 0i
+	# Open failed.
+	call d@(form@("errno=%d%\n\") / f@(errno@Unix()))
+	call d@(form@("Could not open %v% for reading\n\") / f@(file_name))
+	return 1t
+
+    file.file_socket_number := file_number
+    file.io_routine := standard_io_routine@Unix_Dispatch[Globals]
+    file.read_routine := read_routine
+    file.read := 1t
+
+    return 0f
+
+
+routine serial_open@Unix_Dispatch[Globals]
+    takes serial Unix_Dispatch[Globals]
+    takes serial_device_name String
+    takes baud_rate Unsigned
+    takes read_routine [<= Unix_Dispatch[Globals]]
+    returns Logical
+
+    # This routine will 
+
+    serial_number :@=
+      terminal_open@Unix_Termios(serial_device_name, baud_rate, 1t)
+    if serial_number < 0i
+	return 1t
+
+    serial.file_socket_number := serial_number
+    serial.io_routine := standard_io_routine@Unix_Dispatch[Globals]
+    serial.read_routine := read_routine
+    serial.read := 1t
+
+    return 0f
+
+routine socket_connect@Unix_Dispatch[Globals]
+    takes connect Unix_Dispatch[Globals]
+    takes address String
+    takes port_number Unsigned
+    takes read_routine [<= Unix_Dispatch[Globals]]
+    returns_nothing
+
+    socket_number :@= socket_stream_create@Unix()
+    assert socket_number >= 0i
+
+    internet_address :@= internet_address_lookup@Unix(address)
+    result :@= connect@Unix(socket_number, internet_address, port_number)
+    if result < 0i
+	call d@(form@("Can not open connection to %d%.%d%.%d%.%d%:%d%\n\") %
+	  f@((internet_address >> 24) & 0xff) %
+	  f@((internet_address >> 16) & 0xff) %
+	  f@((internet_address >> 8) & 0xff) %
+	  f@(internet_address & 0xff) / f@(port_number))
+	assert 0f
+
+    call non_blocking@Easy_C(socket_number)
+
+    connect.file_socket_number := socket_number
+    connect.io_routine := standard_io_routine@Unix_Dispatch[Globals]
+    connect.read_routine := read_routine
+    connect.read := 1t
+
+
+routine standard_io_routine@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    takes read Logical
+    takes write Logical
+    takes except Logical
+    returns_nothing
+
+    # This routine is the standard routine for dealing read and write
+    # I/O to a file descriptor.
+
+    #call d@(form@("standard_io_routine(%v%, %l%, %l%, %l%)\n\") %
+    #  f@(dispatch.name) % f@(read) % f@(write) / f@(except))
+
+    # Process exceptions first:
+    if except
+	call dispatch.except_routine(dispatch)
+
+    # Process writes next:
+    if write
+	output_buffer :@= dispatch.output_buffer
+	output_buffer_size :@= output_buffer.size
+
+	#call d@(form@("standard_io: %s% write %d%\n\") %
+	#  f@(dispatch.name) / f@(output_buffer_size))
+
+	if output_buffer.size = 0
+	    # No data to write:
+	    dispatch.write := 0f
+	    if dispatch.close_when_done
+		#call d@(form@("Autoclosing %v%\n\") / f@(dispatch.name))
+		call close@(dispatch)
+	else
+	    # Write {output_buffer} to {file_socket_number}:
+	    file_socket_number :@= dispatch.file_socket_number
+	    amount_written :@= write@Unix(file_socket_number,
+	      output_buffer, 0, output_buffer_size)
+	    if amount_written >= 0i
+		# Some data was written:
+		written :@= unsigned@(amount_written)
+		if written = output_buffer_size
+		    # We wrote all the data:
+		    call trim@(output_buffer, 0)
+		    dispatch.write := 0f
+		    if dispatch.close_when_done
+			#call d@(form@("Autoclosing %v%\n\") /
+			#  f@(dispatch.name))
+			call close@(dispatch)
+		else
+		    # We wrote some of the data; delete what was written:
+		    call range_delete@(output_buffer, 0, written)
+	    else
+		# We had a failure:
+		call dispatch.except_routine(dispatch)
+	    
+    # Finally process any reads:
+    if read
+	# Clear {input_buffer}:
+	input_buffer :@= dispatch.input_buffer
+	call trim@(input_buffer, 0)
+
+	# Read in up to 4096 bytes from {file_socket_number}:
+	file_socket_number :@= dispatch.file_socket_number
+	amount_read :@= read@Unix(file_socket_number, input_buffer, 0, 4096)
+
+	if amount_read >= 0i
+	    # We got some data and it was appended to {input_buffer}:
+
+	    # No call out to the user's {read_routine} to process it:
+	    call dispatch.read_routine(dispatch)
+
+	    # Clear {input_buffer} for the next time:
+	    call trim@(input_buffer, 0)
+	else
+	    # We had a failure:
+	    call dispatch.except_routine(dispatch)
+
+
+routine io_enable@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    takes io_routine [<= Unix_Dispatch[Globals], Logical, Logical, Logical]
+    takes read Logical
+    takes write Logical
+    takes except Logical
+    returns_nothing
+
+    # This routine will enable {io_routine} to be called when there
+    # I/O to be done.  {read} enables read I/O.  {write} enables write I/O.
+    # and {except} enables exception processing.
+
+    dispatch.io_routine := io_routine
+    dispatch.read := read
+    dispatch.write := write
+    dispatch.except := except
+
+
+routine reset@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    returns_nothing
+
+    # This routine will reset {dispatch}.  This is a private routine
+    # that should not be called by user code.
+
+    dispatch.close_when_done := 0f
+    dispatch.except := 0f
+    dispatch.except_routine := fail_routine@Unix_Dispatch[Globals]
+    dispatch.file_socket_number := -1i
+    dispatch.io_routine := fail_io_routine@Unix_Dispatch[Globals]
+    dispatch.read := 0f
+    dispatch.read_routine := fail_routine@Unix_Dispatch[Globals]
+    dispatch.write := 0f
+    call trim@(dispatch.input_buffer, 0)
+    call trim@(dispatch.output_buffer, 0)
+
+
+routine write@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    takes text String
+    returns_nothing
+
+    # This rooutine will write {text} to {dispatch}.
+
+    call string_append@(dispatch.output_buffer, text)
+    dispatch.write := 1t
+
+
+routine write_disable@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    returns_nothing
+
+    # This routine will disable writing to {dispatch}.
+
+    dispatch.write := 0f
+
+
+routine write_enable@Unix_Dispatch[Globals]
+    takes dispatch Unix_Dispatch[Globals]
+    returns_nothing
+
+    # This routine will enable writing to {dispatch}.
+
+    dispatch.write := 1t
+
+
+# {Unix_Dispatcher} routines:
+
+define Unix_Dispatcher[Globals]
+    record
+	dispatches Array[Unix_Dispatch[Globals]] # Dispatch routine list
+	globals Globals			# Globals needed for dispatch routines
+	read_file_set Unix_File_Set	# Read file set for select(2)
+	write_file_set Unix_File_Set	# Write file set for select(2)
+	except_file_set Unix_File_Set	# Exception file set for select(2)
+	timeout_microseconds Unsigned	# Delay in microseconds
+	timeout_routine [<= Unix_Dispatcher[Globals]] # Timeout routine
+	timeout_seconds Unsigned	# Delay in seconds (or 0xffffffff)
+
+
+routine closed_allocate@Unix_Dispatcher[Globals]
+    takes dispatcher Unix_Dispatcher[Globals]
+    takes name String
+    returns Unix_Dispatch[Globals]
+
+    # Ths routine will return a closed {Unix_Dispatch} object suitable
+    # for being opened in the future.
+
+    closed :@= closed_create@Unix_Dispatch[Globals](name, dispatcher.globals)
+    call append@(dispatcher.dispatches, closed)
+    return closed
+
+
+routine connect_allocate@Unix_Dispatcher[Globals]
+    takes dispatcher Unix_Dispatcher[Globals]
+    takes name String
+    takes address String
+    takes port_number Unsigned
+    takes read_routine [<= Unix_Dispatch[Globals]]
+    returns Unix_Dispatch[Globals]
+
+    # This routine will allocate and return a {Unix_Dispatch} object
+    # named {name} that is attached to {serial_device_name} running
+    # at {baud_rate}.  {read_routine} is invoked to handle any input.
+
+    connect :@= closed_allocate@(dispatcher, name)
+    call socket_connect@(connect, address, port_number, read_routine)
+    return connect
+
+
+routine console_allocate@Unix_Dispatcher[Globals]
+    takes dispatcher Unix_Dispatcher[Globals]
+    takes name String
+    takes read_routine [<= Unix_Dispatch[Globals]]
+    returns Unix_Dispatch[Globals]
+
+    # This routine will allocate a {Unix_Dispatch} object that is attached
+    # to the session console and calls {read_routine} when there is input
+    # available.
+
+    console :@= closed_allocate@Unix_Dispatcher[Globals](dispatcher, name)
+    console.file_socket_number := 0i
+    console.io_routine := standard_io_routine@Unix_Dispatch[Globals]
+    console.read_routine := read_routine
+    console.read := 1t
+    return console
+    
+
+routine create@Unix_Dispatcher[Globals]
+    takes globals Globals
+    returns Unix_Dispatcher[Globals]
+
+    # This routine will create and return a {Unix_Dispatcher} object
+    # that contains {globals}.
+
+    # Create {unix_dispatcher} and fill in the fields:
+    unix_dispatcher :@= new@Unix_Dispatcher[Globals]()
+    unix_dispatcher.dispatches := new@Array[Unix_Dispatch[Globals]]()
+    unix_dispatcher.except_file_set := new@Unix_File_Set()
+    unix_dispatcher.globals := globals
+    unix_dispatcher.read_file_set := new@Unix_File_Set()
+    unix_dispatcher.write_file_set := new@Unix_File_Set()
+    unix_dispatcher.timeout_seconds := 0xffffffff
+    unix_dispatcher.timeout_microseconds := 0
+    unix_dispatcher.timeout_routine := timeout_fail@Unix_Dispatcher[Globals]
+    return unix_dispatcher
+
+
+routine dispatch_loop@Unix_Dispatcher[Globals]
+    takes unix_dispatcher Unix_Dispatcher[Globals]
+    returns_nothing
+
+    # This routine will fire up the dispatch loop for {unix_dispatcher}.
+
+    # Grab the file sets out of {unix_dispatcher}:
+    except_file_set :@= unix_dispatcher.except_file_set
+    read_file_set :@= unix_dispatcher.read_file_set
+    write_file_set :@= unix_dispatcher.write_file_set
+
+    # Extract some other fields:
+    dispatches :@= unix_dispatcher.dispatches
+    globals :@= unix_dispatcher.globals
+
+    # Keep looping as long as we have active dispatches:
+    while dispatches.size != 0
+	# Zero out the file sets:
+	call zero@(except_file_set)
+	call zero@(read_file_set)
+	call zero@(write_file_set)
+
+	# Iterate through {dispatches} an initialize the file sets:
+	size :@= dispatches.size
+	#call d@(form@("dispatches.size=%d%\n\") / f@(size))
+	index :@= 0
+	while index < size
+	    dispatch :@= dispatches[index]
+	    #call d@(form@("[[%d%]]: %v% %d% %l% %l% %l%\n\") %
+	    #  f@(index) % f@(dispatch.name) % f@(dispatch.file_socket_number) %
+	    #  f@(dispatch.read) % f@(dispatch.write) / f@(dispatch.except))
+	    file_socket_number :@= dispatch.file_socket_number
+	    if file_socket_number >= 0i
+		if dispatch.except
+		    call set@(except_file_set, file_socket_number)
+		if dispatch.read
+		    call set@(read_file_set, file_socket_number)
+		if dispatch.write
+		    call set@(write_file_set, file_socket_number)
+	    index := index + 1
+
+	# Perform the select(2):
+	#call d@(form@("before: read=%f% write=%f% except=%f%\n\") %
+	#  f@(read_file_set) % f@(write_file_set) / f@(except_file_set))
+
+	count :@= select@Unix(read_file_set, write_file_set, except_file_set,
+	  unix_dispatcher.timeout_seconds, unix_dispatcher.timeout_microseconds)
+
+	#call d@(form@("after: read=%f% write=%f% except=%f% count=%d%\n\") %
+	#  f@(read_file_set) % f@(write_file_set) % f@(except_file_set) /
+	#  f@(count))
+
+	# Now dispatch for each set bit in the file sets:
+	if count > 0i
+	    index := 0
+	    while index < size
+		# Fetch {dispatch} and {file_socket_number}:
+		dispatch :@= dispatches[index]
+		file_socket_number :@= dispatch.file_socket_number
+
+		# Dispatch if bit is set in file sets:
+		if file_socket_number >= 0i
+		    except :@= is_set@(except_file_set, file_socket_number)
+		    read :@= is_set@(read_file_set, file_socket_number)
+		    write :@= is_set@(write_file_set, file_socket_number)
+		    if except || read || write
+			#call d@(form@("=>%v%\n\") / f@(dispatch.name))
+			call dispatch.io_routine(dispatch, read, write, except)
+		index := index + 1
+	else_if count = 0i
+	    # We timed out:
+	    call unix_dispatcher.timeout_routine(unix_dispatcher)
+
+
+routine listen_allocate@Unix_Dispatcher[Globals]
+    takes dispatcher Unix_Dispatcher[Globals]
+    takes name String
+    takes address String
+    takes port_number Unsigned
+    takes queue_length Unsigned
+    takes connect_routine [<= Unix_Dispatch[Globals]]
+    returns Unix_Dispatch[Globals]
+
+    # This routine will allocate and return {Unix_Dispatch} object with a name
+    # of {name} that contains a listen socket that is bound to {address} and
+    # {port} with a queue length of {queue_length}.
+
+    listen :@= closed_allocate@(dispatcher, name)
+    if listen@(listen, address, port_number, queue_length, connect_routine)
+	call d@(form@("Unable to listen on %v% at port %d%\n\") %
+	  f@(address) / f@(port_number))
+	call exit@System(1)
+    return listen
+
+
+routine open_file_number_allocate@Unix_Dispatcher[Globals]
+    takes dispatcher Unix_Dispatcher[Globals]
+    takes name String
+    takes file_number Integer
+    takes read_routine [<= Unix_Dispatch[Globals]]
+    returns Unix_Dispatch[Globals]
+
+    dispatch :@= closed_allocate@(dispatcher, name)
+    dispatch.file_socket_number := file_number
+    dispatch.io_routine := standard_io_routine@Unix_Dispatch[Globals]
+    dispatch.read_routine := read_routine
+    dispatch.read := 1t
+    return dispatch
+
+
+routine serial_allocate@Unix_Dispatcher[Globals]
+    takes dispatcher Unix_Dispatcher[Globals]
+    takes name String
+    takes serial_device_name String
+    takes baud_rate Unsigned
+    takes read_routine [<= Unix_Dispatch[Globals]]
+    returns Unix_Dispatch[Globals]
+
+    # This routine will allocate and return a {Unix_Dispatch} object
+    # named {name} that is attached to {serial_device_name} running
+    # at {baud_rate}.  {read_routine} is invoked to handle any input.
+
+    serial :@= closed_allocate@(dispatcher, name)
+    call serial_open@(serial, serial_device_name, baud_rate, read_routine)
+    return serial
+
+
+routine non_blocking@Easy_C
+    takes file_socket_number Integer
+    returns_nothing
+
+    # This routine will set {file_socket_number} to non-blocking mode.
+
+    # Read {flags} from {file_socket_number}:
+    flags :@=
+      file_control@Unix(file_socket_number, unix_file_f_getfl@Integer, 0i)
+
+    #call d@(form@("flags=%x%\n\") / f@(flags))
+
+    # Update {flags} to specify O_NONBLOCK:
+    assert flags >= 0i
+    flags := flags | integer@(unix_file_o_nonblock@Unsigned)
+
+    # Store the new {flags} to {file_socket_number}
+    result :@=
+      file_control@Unix(file_socket_number, unix_file_f_setfl@Integer, flags)
+    assert result >= 0i
+
+
+routine timeout_disable@Unix_Dispatcher[Globals]
+    takes unix_dispatcher Unix_Dispatcher[Globals]
+    returns_nothing
+
+    # This routine will disable timeout events.
+
+    unix_dispatcher.timeout_seconds := 0xffffffff
+    unix_dispatcher.timeout_microseconds := 0
+    unix_dispatcher.timeout_routine := timeout_fail@Unix_Dispatcher[Globals]
+
+
+routine timeout_enable@Unix_Dispatcher[Globals]
+    takes unix_dispatcher Unix_Dispatcher[Globals]
+    takes timout_seconds Unsigned
+    takes timout_microseconds Unsigned
+    takes timout_routine [<=Unix_Dispatcher[Globals]]
+    returns_nothing
+
+    # This routine will enable a timeout event after {timeout_seconds}
+    # and {timout_microseconds} have elapsed.  The timeout event
+    # causes {timeout_routine} to be called.
+
+    unix_dispatcher.timeout_seconds := timout_seconds
+    unix_dispatcher.timeout_microseconds := timout_microseconds
+    unix_dispatcher.timeout_routine := timout_routine
+
+
+routine timeout_fail@Unix_Dispatcher[Globals]
+    takes unix_dispatcher Unix_Dispatcher[Globals]
+
+    # This routine will fail if called.
+
+    assert 0f
+
+
+# This is is code for a non-blocking connect, which eventually needs to
+# be supported:
+#
+#    # Set up dispatch entries for {unix_dispatcher}:
+#
+#    # Set {host_socket} to be non-blocking:
+#    host_socket_flags :@=
+#      file_control@Unix(host_socket, unix_file_f_getfl@Integer, 0i)
+#    call d@(form@("host_socket_flags=%x%\n\") / f@(host_socket_flags))
+#    if host_socket_flags < 0i
+#	error_number :@= errno@Unix()
+#	call d@(form@("Error=%d% (%v%)\n\") %
+#	  f@(error_number) / f@(errno_convert@Unix(null@String, error_number)))
+#    host_socket_flags :=
+#      host_socket_flags | integer@(unix_file_o_nonblock@Unsigned)
+#    result :@= file_control@Unix(host_socket,
+#      unix_file_f_setfl@Integer, host_socket_flags)
+#    assert result >= 0i
+#
+#    # 0xc0a80105 = 192.168.1.5:
+#    result := connect@Unix(host_socket, 0xc0a80105, 5555)
+#    if result >= 0i
+#	assert 0f
+#    else
+#	assert errno@Unix() = unix_errno_inprogress@Unsigned
+#
+#    #call dispatch_loop@(unix_dispatcher)
+#
+#    call d@("Got here\n")

@@ -1,0 +1,301 @@
+easy_c 1.0
+
+# Copyright (c) 2007-2008 by Wayne C. Gramlich
+# All rights reserved.
+
+library Easy_C
+include "math.h"
+load "-lm"
+
+# {Double} stuff:
+
+routine absolute@Double
+    takes value Double
+    returns Double
+    external fabs
+
+    # This routine will return the absolue value of {value}.
+
+
+routine absolute@Float
+    takes value Float
+    returns Float
+    external fabsf
+
+    # This routine will return the absolue value of {value}.
+
+
+routine arc_cosine@Double
+    takes angle Double
+    returns Double
+    external acos
+
+    # This routine will compute and return arc_cosine({angle}).
+
+
+routine arc_cosine@Float
+    takes angle Float
+    returns Float
+    external acosf
+
+    # This routine will compute and return arc_cosine({angle}).
+
+
+routine arc_sine@Double
+    takes angle Double
+    returns Double
+    external asin
+
+    # This routine will compute and return arc_sine({angle}).
+
+
+routine arc_sine@Float
+    takes angle Float
+    returns Float
+    external asinf
+
+    # This routine will compute and return arc_sine({angle}).
+
+
+routine arc_tangent@Double
+    takes x Double
+    returns Double
+    external atan
+
+    # This routine will compute and return arc_tangent({x}).
+
+
+routine arc_tangent@Float
+    takes x Float
+    returns Float
+    external atanf
+
+    # This routine will compute and return arc_tangent({x}).
+
+
+routine arc_tangent2@Double
+    takes y Double
+    takes x Double
+    returns Double
+    external atan2
+
+    # This routine will compute and return arc_tangent2({y}, {x}).
+    # This computes arc_tangent({y}/{x}) taking into account what
+    # quadrants {x} and {y} are in.
+
+
+routine arc_tangent2@Float
+    takes y Float
+    takes x Float
+    returns Float
+    external atan2f
+
+    # This routine will compute and return arc_tangent2({y}, {x}).
+    # This computes arc_tangent({y}/{x}) taking into account what
+    # quadrants {x} and {y} are in.
+
+
+routine cube_root@Double
+    takes x Double
+    returns Double
+    external cbrt
+
+    # This routine will compute and return cube_root({x}).
+
+
+routine ceiling@Double
+    takes x Double
+    returns Double
+    external ceil
+
+    # This routine will compute and return the ceiling of {x}.
+
+
+routine ceiling@Float
+    takes x Float
+    returns Float
+    external ceilf
+
+    # This routine will compute and return the ceiling of {x}.
+
+
+routine cosine@Double
+    takes angle Double
+    returns Double
+    external cos
+
+    # This routine will compute and return cosine({angle}).
+
+
+routine cosine@Float
+    takes angle Float
+    returns Float
+    external cosf
+
+    # This routine will compute and return cosine({angle}).
+
+
+routine floor@Double
+    takes x Double
+    returns Double
+    external floor
+
+    # This routine will compute and return the floor({x}).
+
+
+routine floor@Float
+    takes x Float
+    returns Float
+    external floorf
+
+    # This routine will compute and return the floor({x}).
+
+
+routine maximum@Double
+    takes a Double
+    takes b Double
+    returns Double
+
+    # This routine will return the maximum of {a} and {b}.
+
+    result :@= a
+    if b > a
+	result := b
+    return result
+
+
+routine maximum@Float
+    takes a Float
+    takes b Float
+    returns Float
+
+    # This routine will return the maximum of {a} and {b}.
+
+    result :@= a
+    if b > a
+	result := b
+    return result
+
+
+routine minimum@Double
+    takes a Double
+    takes b Double
+    returns Double
+
+    # This routine will return the minimum of {a} and {b}.
+
+    result :@= a
+    if b < a
+	result := b
+    return result
+
+
+routine minimum@Float
+    takes a Float
+    takes b Float
+    returns Float
+
+    # This routine will return the minimum of {a} and {b}.
+
+    result :@= a
+    if b < a
+	result := b
+    return result
+
+
+routine natural_log@Double
+    takes x Double
+    returns Double
+    external log
+
+    # This routine will compute and return the natural_log({x}).
+
+
+routine base_10_log@Double
+    takes x Double
+    returns Double
+    external log10
+
+    # This routine will compute and return the base_10_log({x}).
+
+
+routine power@Double
+    takes x Double
+    takes y Double
+    returns Double
+    external pow
+
+    # This routine will compute and return power({x}, {y}).
+
+routine power@Float
+    takes x Float
+    takes y Float
+    returns Float
+    external powf
+
+    # This routine will compute and return power({x}, {y}).
+
+routine round@Double
+    takes x Double
+    returns Double
+    external floor
+
+    # This routine will compute and return the round({x}).
+
+
+routine sine@Double
+    takes angle Double
+    returns Double
+    external sin
+
+    # This routine will compute and return sine({angle}).
+
+
+routine sine@Float
+    takes angle Float
+    returns Float
+    external sinf
+
+    # This routine will compute and return sine({angle}).
+
+
+routine square_root@Double
+    takes x Double
+    returns Double
+    external sqrt
+
+    # This routine will compute and return square_root({angle}).
+
+
+routine square_root@Float
+    takes x Float
+    returns Float
+    external sqrtf
+
+    # This routine will compute and return square_root({angle}).
+
+
+routine tangent@Double
+    takes angle Double
+    returns Double
+    external tan
+
+    # This routine will compute and return tangent({angle}).
+
+
+routine tangent@Float
+    takes angle Float
+    returns Float
+    external tanf
+
+    # This routine will compute and return tangent({angle}).
+
+
+routine truncate@Double
+    takes x Double
+    returns Double
+    external trunc
+
+    # This routine will compute and return the truncate({x}).
+
+

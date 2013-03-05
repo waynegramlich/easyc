@@ -1,0 +1,94 @@
+Easy-C To Do List:
+ - Do not choke on blank lines at beginning of indentation
+ - Do better checking of continuation lines
+ - Finish all overloading
+ - Add multiple returns
+ - Add iterators
+ - Write a test suite
+ - Add add@String() with compiler support
+ - Detect duplicate case clauses
+ - Get individual compile working
+ - Get link time checking working
+ - Get OGSL working on multiple servers
+ - Generate .rpm and .deb files
+ - Improve string library
+ - Add a garbage collector
+ - Add a memory leak detector
+ - Add long jump
+ - Rationalize exceptions
+ - Check for type existance in {takes} and {returns} clause
+ - Fix FIXME's:
+ - Add PIC16 code generator?
+ - Add co-types
+ - Re-factor Hash_Table[...]
+ - Generate correct cast code for integer@Unsigned(0)
+
+AVR features:
+ - Add bit twiddle operations?
+ - Add :<op>= assignment
+ - Add bind?
+
+Documentation
+ - Keep transfering stuff over to wiki
+ - Add library reference manual
+ - Write a rationale
+ - Expand the tutorial
+ - Write error messages appendix
+
+Done:
+ - Add interrupt routine support.
+ - Add support for memory array definiton and access
+ - Add search path
+ - Add Byte and Short
+ - Start supporting AVR
+ - Fix missing ^ operator
+ - Infinite loops happen when EOF occurs before EOL; fix.
+ - Add cast routines
+ - Don't crash with no arguments
+ - Add prof and gprof
+
+AVR Notes:
+ - The avr-libc manual actually provides most of the interesting
+   documentation.  FUSES is set to set the fuses.  -mmcu must be
+   set to an appropriate device to compile correctly.
+ - inttypes.h contains all of the various interger types
+ - The AVR-Dragon is a good way to go.  It taps out at 32KB
+   of program memory (i.e. 16KW.)  After that, the high end
+   Atmel JTAG ICE (~$300) or the much cheaper AVR-ICE Cube (~$40)
+   can be used.
+ - The AVR Butterfly is a cheap ($20).  A nice board to plug it
+   into can be obtained from smilymicros.com.
+ - The 2x3 connectors can be obtained from DigiKey.  They are
+   called rectangular connectores (free floating). Weird name.
+ - The various AVR packages can be downloaded via apt-get.
+   (Alas, they are out of date.)
+ - It is necessary to get the latest gcc/binutils/libc.  The
+   sticky message in AVR Freaks/GCC forum, explains how.
+ - Interrupt vectors and support may be tricky.  Actually, they
+   were pretty easy.
+
+Misc:
+
+
+    for datum in visit_and_sum@(foo) returns sum
+	call p@(form@("%d%\n\") / f@(datum))
+	if datum = 0
+	    break
+    call p@(form@("%d%\n\") / f@(sum))
+
+    routine visit_and_sum@Foo
+	takes foo Foo
+	returns Unsigned
+	yields Unsigned
+
+	data :@= foo.data
+	size :@= data.size
+	index :@= 0
+	sum :@= 0
+	while index < size
+	    datum :@= data[index]
+	    sum := sum + datum
+	    yield datum
+	    if_break
+		break
+	return sum

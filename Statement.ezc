@@ -1,0 +1,890 @@
+easy_c 1.0
+
+# Copyright (c) 2004-2007 by Wayne C. Gramlich.
+# All rights reserved.
+
+library Compiler
+library Declaration
+library EZCC
+library Easy_C
+library Expression
+library Parse
+library Token
+
+# {Assert_Statement} routines:
+
+routine visit@Assert_Statement
+    takes assert Assert_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {call} using {compiler} and append any
+    # code to {buffer}.
+
+    switch compiler.phase
+      case c_emit
+	expression :@= assert.expression
+	code_chunk :@= c_emit@(expression, compiler, 0)
+	type :@= type@(code_chunk, expression)
+	if type !== null@Type
+	    if equal@(type, compiler.type_logical)
+		location :@= assert.assert.keyword
+		source_name :@= location.source_name
+
+		# Output the code:
+		call string_append@(buffer,
+		  form@("%p%if (!(%s%)) {\n\") %
+		  f@(compiler.c_pad) / f@(code_chunk))
+		call string_append@(buffer,
+		  form@("%p%    System__assert_fail((String)%e%, %d%);\n\") %
+		    f@(compiler.c_pad) % f@(source_name) /
+		    f@(location.line_number))
+		call string_append@(buffer,
+		  form@("%p%}\n\") / f@(compiler.c_pad))
+	    else
+		call log@(compiler, expression.location,
+		  form@("assert expression %e% is type %t%, not Logical") %
+		    f@(expression) / f@(type))
+
+
+# {Break_Empty_Statement} routines:
+
+routine visit@Break_Empty_Statement
+    takes break_empty Break_Empty_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {break_empty} using {compiler} and append any
+    # code {buffer}.
+
+    switch compiler.phase
+      case c_emit
+	loop_levels :@= compiler.loop_levels
+	loop_levels_size :@= loop_levels.size
+	switch_levels :@= compiler.switch_levels
+	switch_levels_size :@= switch_levels.size
+	if loop_levels_size = 0
+	    #FIXME: enable error message!!!
+	    #log :@= log@Messages(compiler.messages, break_empty.break,
+	    #  "Break must occur within a loop")
+	else
+	    call pad_append@(compiler, buffer)
+	    loop_level :@= loop_levels[loop_levels_size - 1]
+	    if switch_levels_size != 0
+		switch_level :@= switch_levels[switch_levels_size - 1]
+		if switch_level > loop_level
+		    # Break from inside of a loop:
+		    break_labels :@= compiler.break_labels
+		    assert break_labels.size = loop_levels_size
+		    break_label :@= break_labels[loop_levels_size - 1]
+		    if break_label = 0
+			label_count :@= compiler.label_count + 1
+			compiler.label_count := label_count
+			break_label := label_count
+			break_labels[loop_levels_size - 1] := break_label
+
+		    call string_append@(buffer,
+		      form@("goto break__%d%;\n\") / f@(break_label))
+		else
+		    call buffer_append@("break;\n\", buffer)
+	    else
+		call buffer_append@("break;\n\", buffer)
+
+
+# {Break_Level_Statement} routines:
+
+routine visit@Break_Level_Statement
+    takes break_level Break_Level_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {break_level} using {compiler} and append any
+    # code {buffer}.
+
+    switch compiler.phase
+      case c_emit
+	number :@= unsigned_convert@(break_level.number.value)
+	break_labels :@= compiler.break_labels
+	break_labels_size :@= break_labels.size
+	if number = 0
+	    call log@(compiler, break_level.number,
+	      form@("break must be followed by a positive number, not %qv%") /
+	      f@(break_level.number.value))
+	else_if number <= break_labels_size
+	    # We have a valid number of levels to break:
+	    call pad_append@(compiler, buffer)
+
+	    loop_levels :@= compiler.loop_levels
+	    loop_levels_size :@= loop_levels.size
+	    switch_levels :@= compiler.switch_levels
+	    switch_levels_size :@= switch_levels.size
+	    assert break_labels_size = loop_levels_size
+	    loop_level :@= loop_levels[loop_levels_size - 1]
+	    switch_level :@= 0
+	    if switch_levels_size != 0
+		switch_level := switch_levels[switch_levels_size - 1]
+	    if loop_level > switch_level && number = 1
+		call buffer_append@("break;\n\", buffer)
+	    else		
+		break_label :@= break_labels[break_labels_size - number]
+		if break_label = 0
+		    label_count :@= compiler.label_count + 1
+		    compiler.label_count := label_count
+		    break_label := label_count
+		    break_labels[break_labels_size - number] := break_label
+
+	    	temporary :@= compiler.temporary
+		call string_append@(buffer,
+		  form@("goto break__%d%;\n\") / f@(break_label))
+	else
+	    call log@(compiler, break_level.number,
+	      form@("Currently nested in %d% loops, break %d% will not work") %
+	      f@(break_labels_size) / f@(number))
+
+
+# {Call_Statement} routines:
+
+routine visit@Call_Statement
+    takes call Call_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {call} using {compiler} and append any
+    # code to {buffer}.
+
+    #put@("=>visit@call_statement\n\", debug_stream)
+
+    switch compiler.phase
+      case c_emit
+	call pad_append@(compiler, buffer)
+	call buffer_append@("(void)", buffer)
+	compiler.cast_suppress := true@Logical
+	code_chunk :@= c_emit@(call.expression, compiler, 0)
+	compiler.cast_suppress := false@Logical
+	call buffer_append@(code_chunk, buffer)
+	call buffer_append@(";\n\", buffer)
+
+    #put@("<=visit@call_statement\n\", debug_stream)
+
+
+# {Continue_Empty_Statement} routines:
+
+routine visit@Continue_Empty_Statement
+    takes continue_empty Continue_Empty_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {continue_empty} using {compiler} and append any
+    # code {buffer}.
+
+    assert false@Logical
+
+
+# {Continue_Level_Statement} routines:
+
+routine visit@Continue_Level_Statement
+    takes continue_level Continue_Level_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {continue_level} using {compiler} and append any
+    # code {buffer}.
+
+    assert false@Logical
+
+
+# {If_Statement} routines:
+
+routine visit@If_Statement
+    takes if If_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {xif} using {compiler} appending any
+    # code to {buffer}.
+
+    switch compiler.phase
+      case c_emit
+	if_clauses :@= if.if_clauses
+	size :@= if_clauses.size
+	index :@= 0
+	while index < size
+	    if_clause :@= if_clauses[index]
+	    call pad_append@Compiler(compiler, buffer)
+	    statements :@= compiler.statements
+	    switch if_clause.kind
+	      case if_part
+		if_part :@= if_clause.if_part
+		call buffer_append@("if (", buffer)
+		expression :@= if_part.expression
+		code_chunk :@= c_emit@(expression, compiler, 0)
+		call buffer_append@(code_chunk, buffer)
+		call buffer_append@(") {\n\", buffer)
+		statements := if_part.statements
+	      case else_if_part
+		else_if_part :@= if_clause.else_if_part
+		call buffer_append@("} else if (", buffer)
+		expression := else_if_part.expression
+		code_chunk := c_emit@(expression, compiler, 0)
+		call buffer_append@(code_chunk, buffer)
+		call buffer_append@(") {\n\", buffer)
+		statements := else_if_part.statements
+	      case else_part
+		else_part :@= if_clause.else_part
+		call buffer_append@("} else {\n\", buffer)
+		statements := else_part.statements
+
+	    call level_begin@(compiler)
+	    call visit@(statements, buffer, compiler, visit@Statement)
+	    call level_end@(compiler)
+	    index := index + 1
+	call pad_append@(compiler, buffer)
+	call buffer_append@("}\n\", buffer)
+
+
+# {Return_Statement} routines:
+
+routine visit@Return_Statement
+    takes return Return_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will append the code for {xreturn} to {code}
+    # using {compiler}.
+
+    switch compiler.phase
+      case c_emit
+	call pad_append@(compiler, buffer)
+	call buffer_append@("return", buffer)
+	routine :@= compiler.current_routine
+	routine_return_type :@= return_type@(routine)
+	switch return.kind
+	  case expression
+	    return_clause_expression :@= return.expression
+	    if routine_return_type == null@Type
+		call log@(compiler, return_clause_expression.end_of_line,
+		  "Returning a value from a routine that returns nothing")
+	    else
+		call buffer_append@String(" ", buffer)
+		expression :@= return_clause_expression.expression
+		code_chunk :@= c_emit@(expression, compiler, 0)
+		return_type :@= type@(code_chunk, expression)
+		if return_type == null@Type
+		    call log@(compiler, expression.location,
+		      form@("Expression %e% does not have a type") /
+		        f@(expression))
+		else_if equal@(return_type, routine_return_type)
+		    call buffer_append@(code_chunk, buffer)
+		else
+		    call log@(compiler, expression.location,
+		      form@("Returning '%e%' (type %t%) instead of type %t%") %
+		      f@(expression) % f@(return_type) /
+		      f@(routine_return_type))
+          case empty
+	    return_clause_empty :@= return.empty
+	    if routine_return_type !== null@Type
+		call log@(compiler, return_clause_empty.end_of_line,
+		  form@("Routine needs to return a value of type %t%") /
+		  f@(routine_return_type))
+	call buffer_append@(";\n\", buffer)
+
+
+# {Set_Statement} routines:
+
+routine visit@Set_Statement
+    takes set Set_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {set} using {compiler} and appending any
+    # code to {buffer}.
+
+    #put@(form@("=>visit@Set_Statement(): tracing: %l%\n\") / 
+    #  f@(compiler.tracing), error@Out_Stream)
+    
+    switch compiler.phase
+      case c_emit
+	call pad_append@(compiler, buffer)
+	expression :@= set.expression
+	code_chunk :@= c_emit@(expression, compiler, 0)
+	call buffer_append@(code_chunk, buffer)
+	call buffer_append@(";\n\", buffer)
+
+    #call put@("<=visit@Set_Statement()\n\", error@Out_Stream)
+
+
+# {Statement} routines:
+
+routine f@Statement
+    takes statement Statement
+    returns String
+
+    # This routine will format {statement} as a {String} and return it.
+
+    value :@= field_next@Format()
+    traverser :@= create@Traverser(value, new@Array[Token]())
+    call traverse@(statement, traverser)
+    return value
+
+
+routine format@Statement
+    takes statement Statement
+    takes buffer String
+    returns_nothing
+
+    # This routine will insert {argument} into {buffer} at the
+    # next "%e%" location.
+
+    anchor :@= format_begin@(buffer)
+    size :@= buffer.size
+    index :@= anchor + 1
+    character :@= ' '
+    while index < size && character != '%'
+	character := buffer[index]
+	index := index + 1
+    traverser :@= create@Traverser(buffer, new@Array[Token]())
+    call traverse@(statement, traverser)
+    call format_end@(buffer, anchor)
+
+
+routine location_get@Statement
+    takes statement Statement
+    returns Token
+
+    # This routine will return a location {Token} for {statement}.
+
+    location :@= null@Token
+    switch statement.kind
+      all_cases_required
+      case assert
+	location := statement.assert.assert.keyword
+      case break_empty
+	location := statement.break_empty.end_of_line
+      case break_level
+	location := statement.break_level.end_of_line
+      case call
+	location := statement.call.call.keyword
+      case continue_empty
+	location := statement.continue_empty.end_of_line
+      case continue_level
+	location := statement.continue_level.end_of_line
+      case do_nothing
+	location := statement.do_nothing.do_nothing.keyword
+      case end_of_line
+	location := statement.end_of_line
+      case error
+	error :@= statement.error
+	tokens :@= error.tokens
+	if tokens.size != 0
+	    location := tokens[0]
+      case if
+	if :@= statement.if
+	if_clauses :@= if.if_clauses
+	if if_clauses.size != 0
+	    if_clause :@= if_clauses[0]
+	    switch if_clause.kind
+	      all_cases_required
+	      case if_part
+		location := if_clause.if_part.if.keyword
+	      case else_if_part
+		location := if_clause.else_if_part.else_if.keyword
+	      case else_part
+		location := if_clause.else_part.else.keyword
+      case note
+	location := statement.note.comment
+      case return
+	return :@= statement.return
+	switch return.kind
+	  case expression
+	    location := return.expression.return.keyword
+	  case empty
+	    location := return.empty.return.keyword
+      case set
+	location := statement.set.set
+      case switch
+	location := statement.switch.switch.keyword
+      case while
+	location := statement.while.while.keyword
+    return location
+    
+
+routine visit@Statement
+    takes statement Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {statement} using {compiler} and appending
+    # any code to {buffer}.
+
+    location :@= statement.location
+    call location_push@(compiler, "statement", location)
+
+    tracing :@= false@Logical
+    #tracing := true@Logical
+
+    temporary :@= compiler.temporary
+    line_number :@= location.line_number
+
+    previous_tracing :@= compiler.tracing
+    compiler.tracing :=  line_number = compiler.trace_line
+    if tracing
+	call put@(form@("Statement: Line:%d% Trace:%l%\n\") %
+	  f@(line_number) / f@(compiler.tracing), error@Out_Stream)
+
+    switch statement.kind
+      all_cases_required
+      case assert
+	call visit@(statement.assert, buffer, compiler)
+      case break_empty
+	call visit@(statement.break_empty, buffer, compiler)
+      case break_level
+	call visit@(statement.break_level, buffer, compiler)
+      case call
+	call visit@(statement.call, buffer, compiler)
+      case continue_empty
+	call visit@(statement.continue_empty, buffer, compiler)
+      case continue_level
+	call visit@(statement.continue_level, buffer, compiler)
+      case do_nothing
+	call pad_append@(compiler, buffer)
+	call buffer_append@("/* do_nothing */\n\", buffer)
+      case end_of_line
+	call buffer_append@("\n\", buffer)
+      case error
+	do_nothing
+      case if
+	call visit@(statement.if, buffer, compiler)
+      case note
+	call visit@(statement.note, buffer, compiler)
+      case return
+	call visit@(statement.return, buffer, compiler)
+      case set
+	call visit@(statement.set, buffer, compiler)
+      case switch
+	call visit@(statement.switch, buffer, compiler)
+      case while
+	call visit@(statement.while, buffer, compiler)
+
+    compiler.tracing := previous_tracing
+    if tracing
+	call put@("<=visit@statement()\n\", error@Out_Stream)
+
+    call location_pop@(compiler)
+
+
+# {Switch_Statement} routines:
+
+routine visit@Switch_Statement
+    takes switch Switch_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {switch} using {compiler} and appending
+    # any code to {buffer}.
+
+    temporary :@= compiler.temporary
+    switch compiler.phase
+      case c_emit
+	code_chunk :@= c_emit@(switch.expression, compiler, 0)
+	type :@= type@(code_chunk, switch.expression)
+	if type !== null@Type
+	    type_name :@= base_name@(type)
+	    define :@= lookup@(compiler.define_table, type_name)
+	    if define == null@Define_Declaration
+		call log@(compiler, switch.switch.keyword,
+		  form@("Type %t% is not declared") / f@(type))
+	    else_if is_enumeration@(define)
+		# We have an enumeration type:
+		enumeration :@= define.enumeration
+		item_names :@= new@Array[String]()
+		if enumeration == null@Enumeration_Clause
+		    enumeration_prefix :@= define.enumeration_prefix
+		    item_names := item_names@(enumeration_prefix)
+		else
+		    item_names := item_names@(enumeration)
+		used_cases :@= new@Array[Token]()
+		call sort@(item_names, compare@String)
+		call pad_append@(compiler, buffer)
+
+		call buffer_append@("switch (", buffer)
+		call buffer_append@(code_chunk, buffer)
+		call buffer_append@(") {\n\", buffer)
+
+		switch_levels :@= compiler.switch_levels
+		switch_levels_size :@= switch_levels.size
+		call append@(switch_levels, compiler.level)
+
+		call level_begin@(compiler)
+		all_cases_required :@= false@Logical
+		have_default :@= false@Logical
+		switch_clauses :@= switch.switch_clauses
+		size :@= switch_clauses.size
+		index :@= 0
+		while index < size
+		    switch_clause :@= switch_clauses[index]
+		    switch switch_clause.kind
+		      case all_cases_required
+			all_cases_required := true@Logical
+		      case case
+			switch_case :@= switch_clause.case
+			cases :@= switch_case.cases
+			switch cases.kind
+			  case symbol
+			    # Simple symbol
+			    case_name :@= cases.symbol
+			    typed_name_object :@=
+			      type_name_lookup@(compiler,
+			      case_name.value, type, null@Token)
+			    if typed_name_object == null@Typed_Name_Object
+				call log@(compiler, case_name,
+				  form@("Case %s% is not valid for %t%") %
+				  f@(case_name.value) / f@(type))
+			    else
+				call pad_append@(compiler, buffer)
+				call append@(used_cases, case_name)
+				call string_append@(buffer,
+				  form@("case %s%___%s%:\n\") %
+				  f@(type_name) / f@(case_name.value))
+			  case list
+			    # Comma separated (or complex expression):
+			    list :@= cases.list
+			    operators :@= list.operators
+			    assert operators.size != 0
+			    switch operators[0].lexeme
+			      case comma
+				expressions :@= list.expressions
+				expressions_size :@= expressions.size
+				expressions_index :@= 0
+				while expressions_index < expressions_size
+				    expression :@=
+				      expressions[expressions_index]
+				    switch expression.kind
+				      case symbol
+					case_name :@= expression.symbol
+					call pad_append@(compiler, buffer)
+					call append@(used_cases, case_name)
+					call string_append@(buffer,
+					  form@("case %s%___%s%:\n\") %
+					  f@(type_name) /
+					  f@(case_name.value))
+				      default
+					call log@(compiler,
+					  expression.location,
+					  form@("%e% is not symbol") /
+					  f@(expression))
+				    expressions_index := expressions_index + 1
+			      default
+				case_code_chunk :@=
+				  constant_evaluate@(cases, compiler, 0)
+				if case_code_chunk == null@Code_Chunk
+				    call pad_append@(compiler, buffer)
+				    call string_append@(buffer,
+				      form@("case %c%\n\") /
+				      f@(case_code_chunk))
+				else
+				    call log@(compiler, cases.location,
+				      form@("Case %e% is not valid") /
+				      f@(cases))
+			  default
+			    # See whether it can be reduced to a constant:
+			    case_code_chunk :@=
+			      constant_evaluate@(cases, compiler, 0)
+			    if case_code_chunk == null@Code_Chunk
+				call pad_append@(compiler, buffer)
+				call string_append@(buffer,
+				  form@("case %c%\n\") / f@(case_code_chunk))
+			    else
+				call log@(compiler, cases.location,
+				  form@("Case %e% is not valid") / f@(cases))
+
+			call level_begin@(compiler)
+			call visit@(switch_case.statements,
+			  buffer, compiler, visit@Statement)
+			call pad_append@(compiler, buffer)
+			call buffer_append@("break;\n\", buffer)
+			call level_end@(compiler)
+		      case default
+			switch_default :@= switch_clause.default
+			have_default := true@Logical
+			call pad_append@(compiler, buffer)
+			call buffer_append@("default:\n\", buffer)
+			call level_begin@(compiler)
+			call visit@(switch_default.statements,
+			  buffer, compiler, visit@Statement)
+			call pad_append@(compiler, buffer)
+			call buffer_append@("break;\n\", buffer)
+			call level_end@(compiler)
+		      case note
+			call pad_append@(compiler, buffer)
+			call buffer_append@("/* ", buffer)
+			call buffer_append@(switch_clause.note.comment.value,
+			   buffer)
+			call buffer_append@("*/\n\", buffer)
+		      case end_of_line
+			call buffer_append@("\n\", buffer)
+		      case error
+			do_nothing
+
+		    if index >= size
+			break
+		    index := index + 1
+		call level_end@(compiler)
+
+		# Do some error checking:
+		call sort@(used_cases, compare@Token)
+		used_cases_size :@= used_cases.size
+		used_cases_index :@= 1
+		while index < size
+		    used_case1 :@= used_cases[used_cases_index - 1]
+		    used_case2 :@= used_cases[used_cases_index]
+		    if equal@(used_case1.value, used_case2.value)
+			# Evil duplicate case:
+			call log@(compiler, used_case2,
+			  form@("Duplicate case name %qv% in switch") /
+			  f@(used_case2.value))
+			call log@(compiler, used_case1,
+			  form@("Previous case name %qv% is here") /
+			  f@(used_case1.value))
+		    used_cases_index := used_cases_index + 1
+
+		# Search for missing cases when 'all_cases_required' is set:
+		zero :@= 0i
+		item_names_size :@= item_names.size
+		if all_cases_required && used_cases_size != item_names_size
+		    location :@= switch.switch.keyword
+		    used_cases_index := 0
+		    item_names_index :@= 0
+		    while item_names_index < item_names_size &&
+		      used_cases_index < used_cases_size
+			# Match up a case:
+			used_case :@= used_cases[used_cases_index]
+			item_name :@= item_names[item_names_index]
+			compare :@= compare@(used_case.value, item_name)
+			if compare = zero
+			    used_cases_index := used_cases_index + 1
+			    item_names_index := item_names_index + 1
+			else_if compare < zero
+			    call log@(compiler, used_case,
+			      form@("Illegal case %qv% in switch statement") /
+			      f@(used_case.value))
+			    used_cases_index := used_cases_index + 1
+			else
+			    call log@(compiler, location,
+			      form@("Missing case %qv% in switch statement") /
+			      f@(item_name))
+			    item_names_index := item_names_index + 1
+		    while item_names_index < item_names_size
+			item_name :@= item_names[item_names_index]
+			call log@(compiler, location,
+			  form@("Missing case %qv% in switch statement") /
+			  f@(item_name))
+			item_names_index := item_names_index + 1
+
+		call pad_append@(compiler, buffer)
+		call buffer_append@("}\n\", buffer)
+
+		call trim@(switch_levels, switch_levels_size)
+	    else_if is_scalar@(type) && !is_float_scalar@(type)
+		# We have a scalar enumeration type:
+
+		call pad_append@(compiler, buffer)
+		used_chunks :@= new@Array[Code_Chunk]()
+
+		call buffer_append@("switch (", buffer)
+		call buffer_append@(code_chunk, buffer)
+		call buffer_append@(") {\n\", buffer)
+
+		switch_levels :@= compiler.switch_levels
+		switch_levels_size :@= switch_levels.size
+		call append@(switch_levels, compiler.level)
+
+		call level_begin@(compiler)
+		have_default :@= false@Logical
+		switch_clauses :@= switch.switch_clauses
+		size :@= switch_clauses.size
+		index :@= 0
+		while index < size
+		    switch_clause :@= switch_clauses[index]
+		    switch switch_clause.kind
+		      case all_cases_required
+			xxx :@= switch_clause.all_cases_required
+			call log@(compiler, xxx.all_cases_required.keyword,
+			  "all_cases_required not allowed for scalar switch")
+		      case case
+			switch_case :@= switch_clause.case
+			cases :@= switch_case.cases
+			do_constant :@= false@Logical
+			switch cases.kind
+			  case list
+			    case_list :@= cases.list
+			    operators :@= case_list.operators
+			    assert operators.size != 0
+			    switch operators[0].lexeme
+			      case comma
+				expressions :@= case_list.expressions
+				expressions_size :@= expressions.size
+				expressions_index :@= 0
+				while expressions_index < expressions_size
+				    expression :@=
+				      expressions[expressions_index]
+				    case_chunk :@=
+				      constant_evaluate@(expression,
+				      compiler, 0)
+				    if case_chunk == null@Code_Chunk
+					call log@(compiler,
+					  expression.location,
+					  form@("%e% is not a constant") /
+					  f@(expression))
+				    else_if type@(case_chunk,
+				      expression) !== type
+					call log@(compiler,
+					  expression.location,
+					  form@("Type of %e% is wrong") /
+					  f@(expression))
+				    else
+					call pad_append@(compiler, buffer)
+					call append@(used_chunks,
+					  case_chunk)
+					call string_append@(buffer,
+					  form@("case %c%:\n\") /
+					  f@(case_chunk))
+				    expressions_index :=
+				      expressions_index + 1
+			      default
+				do_constant := true@Logical
+			  default
+			    do_constant := true@Logical
+			if do_constant
+			    case_chunk :@=
+			      constant_evaluate@(cases, compiler, 0)
+			    if case_chunk == null@Code_Chunk
+				# We have a bad constant:
+				call log@(compiler, cases.location,
+				  form@("case value %e% is not a const.") /
+				  f@(cases))
+			    else
+				case_type :@= type@(case_chunk, cases)
+				if equal@(case_type, type)
+				    # We have a case constant:
+				    call pad_append@(compiler, buffer)
+				    call append@(used_chunks, case_chunk)
+				    call string_append@(buffer,
+				      form@("case %c%:\n\") /
+				      f@(case_chunk))
+				else
+				    # Type mismatch:
+				    call log@(compiler, cases.location,
+				      form@("%e% has type %t%, not %t%") %
+				      f@(cases) % f@(case_type) / f@(type))
+
+			call level_begin@(compiler)
+			call visit@(switch_case.statements,
+			  buffer, compiler, visit@Statement)
+			call pad_append@(compiler, buffer)
+			call buffer_append@("break;\n\", buffer)
+			call level_end@(compiler)
+		      case default
+			switch_default :@= switch_clause.default
+			have_default := true@Logical
+			call pad_append@(compiler, buffer)
+			call buffer_append@("default:\n\", buffer)
+			call level_begin@(compiler)
+			call visit@(switch_default.statements,
+			  buffer, compiler, visit@Statement)
+			call pad_append@(compiler, buffer)
+			call buffer_append@("break;\n\", buffer)
+			call level_end@(compiler)
+		      case note
+			call pad_append@(compiler, buffer)
+			call buffer_append@("/* ", buffer)
+			call buffer_append@(switch_clause.note.comment.value,
+			   buffer)
+			call buffer_append@("*/\n\", buffer)
+		      case end_of_line
+			call buffer_append@("\n\", buffer)
+		      case error
+			do_nothing
+
+		    if index >= size
+			break
+		    index := index + 1
+		call level_end@(compiler)
+
+		call pad_append@(compiler, buffer)
+		call buffer_append@("}\n\", buffer)
+
+		call trim@(switch_levels, switch_levels_size)
+
+	    else
+		call log@(compiler, switch.expression.location,
+		  form@("Type %t% is not an enumeration or non-float scalar") /
+		  f@(type))
+
+
+# {while_statement} routines:
+
+routine visit@While_Statement
+    takes while While_Statement
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {xwhile} using {compiler} appending any
+    # code to {code}.  {statement} is used for breakpoint allocation.
+
+    switch compiler.phase
+      case c_emit
+	temporary :@= compiler.temporary
+	break_labels :@= compiler.break_labels
+	continue_labels :@= compiler.continue_labels
+	loop_levels :@= compiler.loop_levels
+
+	call pad_append@(compiler, buffer)
+	call buffer_append@("while (", buffer)
+
+	code_chunk :@= c_emit@(while.expression, compiler, 0)
+	call buffer_append@(code_chunk, buffer)
+	call buffer_append@(") {\n\", buffer)
+
+	size :@= break_labels.size
+	assert continue_labels.size = size && loop_levels.size = size
+	call append@(break_labels, 0)
+	call append@(continue_labels, 0)
+	call append@(loop_levels, compiler.level)
+
+	call level_begin@(compiler)
+	call visit@(while.statements, buffer, compiler, visit@Statement)
+
+	continue_label :@= continue_labels[size]
+	if continue_label !== 0
+	    call pad_append@(compiler, buffer)
+	    call string_append@(buffer,
+	      form@("continue__%d%:;\n\") / f@(continue_label))
+
+	call level_end@(compiler)
+
+	call pad_append@(compiler, buffer)
+	call buffer_append@("}\n\", buffer)
+
+	break_label :@= break_labels[size]
+	if break_label !== 0
+	    call pad_append@(compiler, buffer)
+	    call string_append@(buffer,
+	      form@("break__%d%:;\n\") / f@(break_label))
+
+	call trim@(break_labels, size)
+	call trim@(continue_labels, size)
+	call trim@(loop_levels, size)
+
+

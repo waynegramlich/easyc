@@ -1,0 +1,9 @@
+easy_c 1.0
+library Easy_C
+
+routine main@Easy_C
+    takes arguments Array[String]
+    returns Integer
+
+    call p@("Hello, World!\n\")
+    return 0i

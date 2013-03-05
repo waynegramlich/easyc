@@ -1,0 +1,1948 @@
+								<HTML>
+								<Head>
+								<Title>
+Easy-C Tutorial
+								</Title>
+								</Head>
+								<Body>
+								<H1>
+Easy-C Tutorial
+								</H1>
+								<H2>
+Table of Contents
+								</H2>
+								<P>
+								<OL><LI>
+	<A HRef="#Download_and_Install">
+    Download_and_Install</A>
+								</LI><LI>
+	<A HRef="#Hello_World">
+    Hello World!</A>
+								</LI><LI>
+	<A HRef="#Formatting">
+    Formatting</A>
+								</LI><LI>
+	<A HRef="#Variables_and_Simple_Loops">
+    Variables and Simple Loops</A>
+								</LI><LI>
+	<A HRef="#Strings_and_Arrays">
+    Strings and Arrays</A>
+								</LI><LI>
+	<A HRef="#If_Statements_and_Relational_Expressions">
+    If_Statements_and_Relational_Expressions</A>
+								</LI><LI>
+	<A HRef="#Expressions">
+    Expressions</A>
+								</LI><LI>
+	<A HRef="#Enumerated_Types">
+    Enumerated Types</A>
+								</LI><LI>
+	<A HRef="#Record_Types">
+    Record Types</A>
+								</LI><LI>
+	<A HRef="#Variant_Types">
+    Variant Types</A>
+								</LI><LI>
+	<A HRef="#Routine_Variables">
+    Routine Variables</A>
+								</LI><LI>
+	<A HRef="#Parameterized_Types">
+    Parameterized Types</A>
+								</LI></OL>
+								</P>
+								<H2>
+    <A Name="Introduction">
+1. Introduction</A>
+								</H2>
+								<P>
+Easy-C is language that has similar expressive power
+to the popular ANSI-C language while avoiding many
+of the issues that make ANSI-C difficult and/or
+tedious to code in.  Easy-C is a strongly typed object
+oriented language.
+								</P><P>
+{Disclaimer: I have to do another sweep through the
+compiler adding a few minor features before the code
+in this tutorial will actually compile. -Wayne}
+								</P>
+								<H2>
+    <A Name="Hello_World">
+2. Hello World!</A>
+								</H2>
+								<P>
+The simplest program is contained in
+<Code>Hello.ezc</Code> and when executed prints
+out the string "Hello, World!" and exists.
+The Easy-C program that does this is shown below:
+								<Code><Pre>
+    easy_c 1.0	
+    library Easy_C
+
+    routine main@Easy_C
+	takes arguments Array[String]
+	returns Integer
+
+	call p@("Hello, World!\n\")
+	return 0i						</Pre></Code>
+
+<Code>Hello.ezc</Code> is compiled and executed by
+the following commands:
+								<Pre>
+    prompt> ezc Hello
+    prompt> ./Hello
+    Hello, World!
+    prompt>							</Pre>
+
+Please give it a try before reading the code
+explanation below.
+								</P><P>
+The first line is:
+								<Code><Pre>
+    easy_c 1.0							</Pre></Code>
+
+This line specifies that the program is an Easy-C
+program at the 1.0 version of the language.  The
+version number incremented whenever changes are
+made to the Easy-C language.  Upward compatible
+changes increment the fractional part (e.g. 1.1,
+1.2, etc.) and incompatible changes increment the
+integer part (2.0, 3.0, etc.)  This line allows
+the compiler to easily figure out if it can compile
+the code that follows.  This little statement avoids
+the chaos that ensues when incompatible language
+changes occur
+								</P><P>
+Note that in Easy-C each declaration and statement
+occurs on its own line.  There are no nasty semi-colons
+(';') to sprinkle through out the code.  The reason
+for this is to simplify error recovery.  If the compiler
+can not figure what a line means, it will display an
+error message and continue to the next line.  This is
+in sharp contrast to other programming languages where
+a single missing semi-colon can cause multiple pages
+of obscure error messages.  That form of compiler
+ill behavior is a thing of the past with Easy-C.
+								</P><P>
+The next declaration is:
+								<Code><Pre>
+    library Easy_C						</Pre></Code>
+
+This specifies that a library of types and routines
+is to be made available for the program.  The
+<Code>Easy_C</Code> library defines all of the basic
+types such as <Code>Logical</Code>, <Code>Unsigned</Code>,
+<Code>Integer</Code>, etc.  Pretty much every program
+has this declaration, since most programs use the
+basic types.
+								</P><P>
+This next few lines specify the name, arguments,
+and return values for a procedure:
+								<Code><Pre>
+    routine main@Easy_C
+	takes arguments Array[String]
+	returns Unsigned					</Pre></Code>
+
+The name of the routine is <Code>main@Easy_C</Code>.
+In Easy-C, every routine is associated with a type.
+The routine name is <Code>main</Code> and the
+type is <Code>Easy_C</Code>.   This routine takes
+a single argument called <Code>arguments</Code>
+of type <Code>Array[String]</Code>.  The
+<Code>Hello.ezc</Code> program does not use
+<Code>arguments</Code>.  The routine returns a
+single value of type <Code>Unsigned</Code>.
+								</P><P>
+This is the first instance of using indentation in
+Easy-C.  All routine declarations, statements and
+comments are indented.  By convention, the lines
+are indented by 4 spaces, but the compiler will
+accept any consistent indentation amount (i.e. all
+3 spaces, 4 spaces, 5 spaces, etc.)  The reason for
+using indentation is to improve compiler error
+recovery when something goes wrong.  If there are
+errors inside of the code for a routine, the compiler
+will gracefully recover when it encounters the next
+routine declaration.  In other compilers, a missing
+open or close brace can cause pages of error messages.
+This bogus compiler behavior is a thing of the past
+using Easy-C.
+								</P><P>
+The next line prints out "Hello, World!":
+								<Code><Pre>
+    call p@("Hello, World!\n\")					</Pre></Code>
+
+The word <Code>call</Code> is followed by
+an expression that is evaluated.  Any return
+values are ignored.  In this particular case,
+a routine called <Code>p@String</Code> is
+invoked.  The routine name is <Code>p</Code>
+and the type name is <Code>String</Code>.
+The <Code>p@String</Code> routine takes a
+single argument of type <Code>String</Code>
+and returns nothing.  This routine prints
+its string argument out on the command console.
+								</P><P>
+This routine call could have alternatively
+been written as:
+								<Code><Pre>
+    call p@String("Hello, World!\n\")				</Code></Pre>
+
+The rule in Easy-C is that type name between
+the <Code>@</Code> and <Code>(</Code> can be
+dropped, if the type of the routine first
+argument is the same.  Since the type of
+<Code>"Hello, World!\n\"</Code> is type
+<Code>String</Code>, there is no need use this
+longer and wordier alternative.
+								</P><P>
+A string constant is enclosed in double quotes
+("...".)  Each character in the string is printed
+out on the console.  Alternate character encoding
+is done by enclosing the alternate character
+encoding between two backslash characters (\...\.)
+Each symbol between the backslashes corresponds to
+a single character.  Commonly used characters such
+as new-line (line-feed) or horizontal tab are encoded
+as <Code>"\n\"</Code> and <Code>"\t\"</Code>
+respectively.  More than one character can be encoded
+by simply separating the symbols by commas.  For
+example, three tabs in a row are represented as
+<Code>"\t,t,t\"</Code>.  For the string,
+<Code>"Hello, World!\n\"</Code> we are terminating
+the string constant with a new-line character.
+								</P><P>
+The last line in the routine is:
+								<Code><Pre>
+    return 0i							</Pre></Code>
+
+This routine will cause the program to terminate with
+a status code of 0.  The "i" afterward makes the 0 have
+a type of <Code>Integer</Code> rather than a type of
+<Code>Unsigned</Code>.  A status code of 0 means "The
+program is done now and everything was acceptable",
+whereas a non-zero status code means "something bad
+happened, but program is all done anyhow."  Program
+exit status codes are used by people who write so
+called shell programs.  Easy-C is not a shell programming
+language, so no further discussion is shell programming
+is required here.
+								</P><P>
+So, here is the <Code>Hello.ezc</Code> program all
+over again:
+								<Code><Pre>
+    easy_c 1.0	
+    library Easy_C
+
+    routine main@Easy_C
+	takes arguments Array[String]
+	returns Integer
+
+	call p@("Hello, World!\n\")
+	return 0i						</Pre></Code>
+
+Hopefully, after the explanation above, it mostly
+makes sense now.
+								</P>
+								<H2>
+    <A Name="Formatting">
+3. Formatting</A>
+								</H2>
+								<P>
+Printing string constants is all well and good,
+but sometimes we want to use the computer, to well...,
+compute things.  For that, we need a way to print
+results such as numbers, strings, an the like.
+The Easy-C formatting system is designed to allow
+for easy formatting of numbers, string, and such.
+In addition, the Easy-C formatting system also
+introduces some additional language features.
+								</P><P>
+The <Code>Format.ezc</Code> program is shown below.
+Please do not dwell on it too long, it needs some
+pretty thorough discussion before it will make much
+sense:
+								<Code><Pre>
+    easy_c 1.0
+    library Easy_C
+
+    routine main@Easy_C
+	takes arguments Array[String]
+	returns Integer
+
+	call p@(form@("Decimal:%d% Hexadecimal:%x%\n\") %
+	  f@(1234) / f@(4321))
+	call p@(form@("Raw String:%s% Visual_String:%v%\n\") %
+	  f@("Hello") / f@("Hello, World!\n\"))
+	return 0i						</Pre></Code>
+
+As usual, please compile it and run it as follows:
+								<Pre>
+    prompt> ezc Format
+    prompt> ./Format
+    Decimal:1234 Hexadecimal:0x10e1
+    Raw String:Hello Visual String:"Hello, World!\n\"
+    prompt>							</Pre>
+
+Now that you have actually run the program, it is now
+time to figure out what is actually going on.  Please,
+continue reading.
+								</P><P>
+A basic formatting expression is organized as
+follows:
+								<Code><Pre>
+    form@("...") % f@(...) % f@(...) % ... / f@(...)
+
+    \         /  \       / \       /       \       /
+     ----1----    ---2---   ---2---         ---3---		</Pre></Code>
+
+There are three basic phases to formatting:
+								<OL><LI>
+    The format template string is specified via
+    the call to <Code>form@("...")</Code>, where
+    <Code>"..."</Code> is the template string.
+								</LI><LI>
+    Each successive call of the form
+    "<Code>% f@(...)</Code>" fills in one more
+    format field in the template string.
+								</LI><LI>
+    The last call of the form "<Code>/ f@(...)</Code>"
+    fills in the last format field and causes the
+    final formatted string to be returned.
+								</LI></OL>
+The three phases are identified by number in the
+statement above.
+								</P><P>
+So what is the percent ('%') and forward slash ('/')
+stuff all about?  As in many other programming
+languages, the percent ('%') is the remainder operator
+and the forward slash ('/') is the divide operator.
+For numbers, remainder and divide are pretty well defined
+concepts.  For example,
+<Code>9&nbsp;%&nbsp;4&nbsp;=&nbsp;1</Code> and
+<Code>9&nbsp;/&nbsp;4&nbsp;=&nbsp;2</Code>.  For floating
+point numbers <Code>9.9&nbsp;%&nbsp;4.4&nbsp;=&nbsp;1.1</Code>
+and <Code>9.9&nbsp;/&nbsp;4.4&nbsp;=&nbsp;2.25</Code>.
+But what does division and remainder mean when applied to
+strings?  The short answer is string division and remainder
+does not make any sense at all.  The longer answer
+involves understanding a concept called operator overloading.
+								</P><P>
+In older programming languages, the binary and
+unary arithmetic operators could only be used for
+built-in types.  Over time, the concept of allowing
+these operators to be used for user defined types
+occurred.  The ability use arithmetic operators
+on user defined types is called "operator overloading".
+								</P><P>
+So how does operator overloading work?  For operator
+overloading, the compiler substitutes a routine call
+for the operator.  The rule is:
+								<Code><Pre>
+    left / right						</Pre></Code>
+
+is replaced by:
+								<Code><Pre>
+    divide@{typeof left}(left, right)				</Pre></Code>
+
+For example, the expression:
+								<Code><Pre>
+    9 / 4							</Pre></Code>
+
+is replaced by:
+								<Code><Pre>
+    divide@Unsigned(9, 4)					</Pre></Code>
+
+Similarly, the expression:
+								<Code><Pre>
+    9.9 / 4.4							</Pre></Code>
+
+is replaced by:
+								<Code><Pre>
+    remainder@Double(9.9, 4.4)					</Pre></Code>
+
+And finally, when it comes to strings:
+								<Code><Pre>
+    "left" % "right"						</Pre></Code>
+
+is replaced by:
+								<Code><Pre>
+    remainder@String("left", "right")				</Pre></Code>
+
+Hopefully, operator overloading is starting to make
+sense.
+								</P><P>
+In Easy-C, the string remainder and divide operators
+have been allocated to the string formatting subsystem.
+The reason for this allocation is because:
+								<UL><LI>
+    there is no natural meaning for divide and
+    remainder for strings, and
+								</LI><LI>
+    string formatting strings is a very common
+    thing for programmers to do, so it is worth
+    while making it a little easier.
+								</LI></UL>
+So ultimately, that is the reason why you see
+the percent '%' and '/' characters splattered
+in string formatting expressions.
+								</P><P>
+So, what happens internally to the compiler is that:
+								<Code><Pre>
+    form@("...") % f@(a) / f@(b)				</Pre></Code>
+
+gets turned into:
+								<Code><Pre>
+    divide@String(remainder@String(form@("..."), f@(a)), f@(b))	</Pre></Code>
+
+or slightly more compactly:
+								<Code><Pre>
+    divide@(remainder@(form@("..."), f@(a)), f@(b))		</Pre></Code>
+
+which is a little easier to read, but not nearly as
+easy to read as the first line.
+								</P><P>
+Now it is time to talk about the
+<Code>form@String()</Code> routine.  When this
+routine is called, it starts the formatting system.
+Its only argument is of type <Code>String</Code> and
+contains the overall formatting string template.
+The string format template is a string that
+one or more format fields embedded in it.
+A format field consists of one or more characters
+(usually lower case letters ) bracketed by a pair
+of percent characters ('%').  For example,
+<Code>"...%d%..."</Code> is one and 
+<Code>"...%10Rd%..."</Code> is another.  Just
+as an aside, <Code>"...%%..."</Code> is converted
+into a single percent character on output and is
+not counted as a formatting field because there
+is no character between the percent characters.
+The <Code>form@String()</Code> routine just happens
+to return the string that was passed in as an
+argument without any modifications.
+								</P><P>
+Every basic type in Easy-C has a routine of
+the form <Code>f@</Code><Em>basic_type</Em>.
+This routine takes a <Em>basic_type</Em>
+as its only argument, and returns a formatted
+string as its return value.  Each time
+<Code>f@</Code><Em>basic_type</Em> is called,
+it will fetch the next format field from the
+formatting system and use that to control overall
+formatting.  For example, the <Code>f@Unsigned</Code>
+routine will treat <Code>"...%d%..."</Code>
+as a directive to format its argument as
+a decimal number.  Similarly,
+<Code>"...%x%..."</Code> causes the number to
+be formatted as a hexadecimal number.
+For example,
+								<Code><Pre>
+    f@Unsigned(1234)						</Pre></Code>
+
+replaces the format field of <Code>"...%d%...</Code>
+with <Code>"...1234..."</Code>.  Similarly,
+								<Code><Pre>
+    f@Unsigned(4321)						</Pre></Code>
+
+replaces the format field of <Code>"...%x%..."</Code>
+with <Code>"...0x10e1..."</Code>.
+								</P><P>
+The amounts and kinds of formatting are defined
+for each <Code>f@</Code><Em>type</Em> routine.
+For the <Code>f@Unsigned</Code> routine, decimal
+and hexadecimal formatting are available.  For
+<Code>f@String</Code>, there are three supported
+formats:
+								<BlockQuote>
+								<DL><DT>
+    <Code>"...%s%..."</Code>					</DT><DD>
+	Do no formatting at all, just copy each
+	character into the format field.  This is
+	a raw format.
+								</DD><DT>
+    <Code>"...%v%..."</Code>					</DT><DD>
+	This is a visual format where the string is
+	enclosed in double quotes and uses the same
+	formatting rules that Easy-C uses.
+								</DD><DT>
+    <Code>"...%a%..."</Code>					</DT><DD>
+	This is an ANSI-C format that causes the
+	string to look like an ANSI-C string.
+								</DD></DL>
+								</BlockQuote>
+								</P><P>
+One of the key facets of the Easy-C formatting
+system is that it allows people to define and
+implement their own <Code>f@</Code><Em>user_type</Em>
+routines to be used in conjunction with the
+Easy-C formatting system.  This capability is not
+discussed here, but it is an important consideration
+of the overall Easy-C formatting system design.
+								</P><P>
+The last topic that needs some discussion, is the
+topic of continuation lines.  As in all programming
+languages, it is possible to have statements and/or
+declarations that do not conveniently fit on one
+line.  The solution is to have a mechanism for letting
+the statement/declaration span multiple lines.
+In Easy-C, the way a statement/expression is continued
+onto the next line is to:
+								<UL><LI>
+    end the line with a punctuation token other
+    than ']' or ')', and
+								</LI><LI>
+    that the second and subsequent lines are indented
+    by the same amount <Em>and</Em> they are all
+    indented by at least one space more than the first
+    line.
+								</LI></UL>
+Following the two rules above are all that is
+needed to successfully span multiple lines.
+								</P><P>
+The following statement from program at the beginning
+of this section spans two lines via continuation:
+
+								<Code><Pre>
+	call p@(form@("Decimal:%d% Hexadecimal:%x%\n\") %
+	  f@(1234) / f@(4321))					</Pre></Code>
+
+The first line ends in a percent ('%') and the next
+line finishes the statement.  Note that the second line
+is indented from the first line by two additional spaces.
+This line could have been entered as:
+								<Code><Pre>
+	call p@(form@("Decimal:%d% Hexadecimal:%x%\n\") % f@(1234) / f@(1234))</Pre></Code>
+
+or spanning three lines as:
+								<Code><Pre>
+	call p@(form@(
+	  "Decimal:%d% Hexadecimal:%x%\n\") %
+	  f@(1234) / f@(4321))					</Pre></Code>
+
+All three are all equivalent.
+								</P><P>
+After all that discussion, we can finally understand
+what is going on with the program presented at the
+beginning of this section.  The two statements:
+								<Code><Pre>
+	call p@(form@("Decimal:%d% Hexadecimal:%x%\n\") %
+	  f@(1234) / f@(4321))
+	call p@(form@("Raw String:%s% Visual_String:%v%\n\") %
+	  f@("Hello") / f@("Hello, World!\n\"))			</Pre></Code>
+
+invoke the formatting system twice.  The first statement
+prints two numbers (the first in decimal and the second
+in hexadecimal).  The second statement prints two
+strings (the first in raw mode and the second in
+visual mode.)
+								</P><P>
+That pretty much wraps up the initial foray into
+the Easy-C formatting system.  With this initial
+understanding it is now possible to write programs
+that compute things and print out the results.
+All-in-all, a pretty handy thing to be able to do.
+								</P>
+								<H2>
+    <A Name="Variables_and_Simple_Loops">
+4. Variables and Simple Loops</A>
+								</H2>
+								<P>
+The next program is <Code>Simple_Loop.ezc</Code>
+and is listed below:
+								<Code><Pre>
+    easy_c 1.0
+    library Easy_C
+
+    routine main@Easy_C
+	takes arguments Array[String]
+	returns Unsigned
+
+	index :@= 0
+	call p@("index\t\square\n\")
+	while index <= 10
+	    square :@= index * index
+	    call p@(form@("%d%\t\%d%\n\") % f@(index) / f@(square))
+	    index := index + 1
+
+	return 0						</Pre></Code>
+
+<Code>Simple_Loop.ezc</Code> is compiled and
+executed as follows:
+								<Pre>
+    prompt> ezc Simple_Loop
+    prompt> ./Simple_Loop
+    index   square
+    0       0
+    1       1
+    2       4
+    3       9
+    4       16
+    5       25
+    6       36
+    7       49
+    8       64
+    9       81
+    10      100
+    prompt>							</Pre>
+
+This pretty simple program just prints an index
+and its associated squares.
+								</P><P>
+There are exactly two ways to specify local
+variables for a routine in Easy-C:
+								<UL><LI>
+    A local variable is specified by a
+    <Code>takes</Code> clause.
+								</LI><LI>
+    A local variable is specified by the
+    define assign operator (':@=').
+								</LI></UL>
+This program has one <Code>takes</Code> clause
+and two define assign operators.
+								</P><P>
+The following <Code>takes</Code> clause:
+								<Code><Pre>
+	takes arguments Array[String]				</Pre></Code>
+
+defines a variable named <Code>arguments</Code>
+of type <Code>Array[String]</Code>.  This is
+a routine argument that is passed in when the
+<Code>main@Easy_C</Code> routine is called.
+There is one <Code>takes</Code> clause for
+each routine argument.  If a routine takes
+no arguments at all, <Code>takes_nothing</Code>
+is required.  Thus a routine declaration, must
+either specify <Code>takes_nothing</Code>
+<Em>or</Em> one or more <Code>takes</Code>
+clauses.
+								</P><P>
+The other way to define a local variable is using
+the define assign operator <Code>:@='</Code>.
+The define assign operator is used as follows:
+								<Pre>
+    <Em>variable</Em> <Code>:@=</Code> <Em>expression</Em>	</Pre>
+
+where <Em>variable</Em> is a new local variable
+and <Em>expression</Em> is an expression to be
+evaluated.  The type of <Em>variable</Em> is defined
+to be {typeof <Em>expression</Em>}.  For example,
+								<Code><Pre>
+    sum :@= 2 + 2						</Pre></Code>
+
+defines a new variable called <Code>sum</Code> of
+type <Code>Unsigned</Code>.  The type is
+<Code>Unsigned</Code> because the value of the
+expression <Code>2&nbsp;+&nbsp;2</Code> is
+of type <Code>Unsigned</Code>.
+								<P></P>
+As another example,
+								<Code><Pre>
+    hello :@= "Hello"						</Pre></Code>
+
+This expression creates a new variable
+<Code>hello</Code> of type <Code>String</Code>
+and whose value is <Code>"Hello"</Code>.
+								</P><P>
+Once a variable is defined it remains in scope
+(i.e. accessible) for the remainder of the code
+at the same indentation level.  The language
+does not allow a variable to be defined in the
+same scope more than once.  Thus,
+								<Code><Pre>
+    sum :@= 0
+    sum :@= sum + 1	#Error					</Pre></Code>
+
+has an error on the second line, since the first
+line has already defined the <Code>sum</Code>
+variable.
+								</P><P>
+The way that parsing works in Easy-C, is that each
+statement and declaration starts with key word
+like <Code>routine</Code>, <Code>call</Code>, etc.
+The only exception to this rule is the two assignment
+operators ':=" and ":@=".  What happens is that the
+compiler scans each line looking for ':=" or ":@=".
+If it finds either one, it prepends an invisible
+<Code>{assign}</Code> to the beginning of the line.
+Thus,
+								<Code><Pre>
+    sum :@= 1 + 2						</Pre></Code>
+
+looks like:
+								<Code><Pre>
+    {assign} sum :@= 1 + 2					</Pre></Code>
+
+to the compiler.
+								</P><P>
+The prescan technology in conjunction with every
+other statement and declaration starting with a
+keyword has an interesting characteristic of
+allowing Easy-C to completely dispense with reserved
+words.  In other languages, a reserved word is
+one that can only be used as a statement/declaration
+keyword and not as a type name or variable name.
+In Easy-C, there are no reserved words, so the
+following code is perfectly legal:
+								<Code><Pre>
+    routine :@= 1
+    takes :@= 2
+    call :@= 3							</Pre></Code>
+
+because the compiler actually sees:
+								<Code><Pre>
+    {assign} routine :@= 1
+    {assign} takes :@= 2
+    {assign} call :@= 3						</Pre></Code>
+
+Please note, reusing keywords can make the code
+harder read, so you should probably avoid reusing
+a keyword.  However, if you do manage to use a
+keyword as a variable, no harm is done.
+								</P><P>
+Enough about variables, prescanning, and keywords.
+Now it is time to introduce the <Code>while</Code>
+statement.  The <Code>while</Code> statement has
+the following basic form:
+								<Code><Pre>
+    while <Em>logical_expression</Em>
+	<Em>indented_statements</Em>				</Pre></Code>
+
+where <Code><Em>logical_expression</Em></Code> is
+an expression that returns a value of type
+<Code>Logical</Code>.  The only two values of
+type <Code>Logical</Code> are <Code>true</Code>
+and <Code>false</Code>.  The <Code>while</Code>
+statement evaluates
+<Code><Em>logical_expression</Em></Code> and if
+it returns a value of <Code>true</Code>, the
+<Code><Em>indented&nbsp;statements</Em></Code>
+are executed.  After
+<Code><Em>indented&nbsp;statements</Em></Code>
+are executed, <Code><Em>logical_expression</Em></Code>
+is retested and the loop repeats.  The first time
+<Code><Em>logical_expression</Em></Code>
+returns <Code>false</Code> the <Code>while</Code>
+statement terminates and execution moves onto the
+statement that follows the <Code>while</Code>
+statement.
+								</P><P>
+In the program above, the <Code>while</Code>
+statement is:
+								<Code><Pre>
+	while index <= 10
+	    square :@= index * index
+	    call p@(form@("%d%\t\%d%\n\") % f@(index) / f@(square))
+	    index := index + 1					</Pre></Code>
+	
+This code repeatably tests the variable
+<Code>index</Code> to see if it is less than
+or equal to 10.  The '<Code>&lt;=</Code>' operator
+stands for "less than or equal".  As long as
+<Code>index</Code> is less than or equal to 10,
+the loop body is executed.  In the loop body,
+the variable <Code>square</Code> is defined and
+assigned a value of the square of <Code>index</Code>.
+Both <Code>index</Code> and <Code>square</Code>
+are printed out using the string formatting system
+in the next line.  Lastly, the variable <Code>index</Code>
+in incremented by one and the loop continues.
+								</P><P>
+That pretty much covers simple <Code>while</Code>
+loops and local variable creation.
+								</P>
+								<H2>
+    <A Name="Strings_and_Arrays">
+5. Strings and Arrays</A>
+								</H2>
+								<P>
+The delcaration:
+								<Code><Pre>
+    library Easy_C						</Pre></Code>
+
+loads the compiler with the Easy-C basic types --
+<Code>Integer</Code>, <Code>Unsigned</Code>,
+<Code>Float</Code>, <Code>Double</Code>,
+<Code>Character</Code>, and <Code>Logical</Code>.
+In addition, this library provides three somewhat
+more substantial types -- <Code>String</Code>,
+<Code>Array</Code>, and <Code>Hash_Table</Code>.
+This section discusses the <Code>String</Code>
+and <Code>Array</Code> types.
+								</P><P>
+Both the <Code>Array</Code> and <Code>String</Code>
+types implement variable length data structures.
+A <Code>String</Code> is a sequence of
+<Code>Character</Code>'s.  The <Code>Array</Code>
+is more general purpose and implements a variable
+length sequence of objects of the same type.
+Thus, <Code>Array[Unsigned]</Code> implements a
+sequence of <Code>Unsigned</Code> numbers,
+and <Code>Array[String]</Code> implements a sequence
+of <Code>String</Code>.  The <Code>String</Code>
+type is discussed first, with a discussion of
+								</P><P>
+A <Code>String</Code> is a sequence of zero, one,
+or more <Character>'s.  The first character has
+an index of 0, the second an index of 1, etc.
+Using the <Code>[...]</Code> operator it is possible
+to index individual character from a string:
+								<Code><Pre>
+    hello :@= "Hello"
+    h :@= hello[0]	# h = 'h'
+    e :@= hello[1]	# e = 'e'
+    l :@= hello[2]	# l = 'l'
+    o :@= hello[4]	# o = 'o'				</Pre><Code>
+
+It turns out that there two kinds of
+<Code>String</Code> -- a mutable string and an
+immutable string.  A mutable string is one
+whose contents can be changed and an immutable string
+is one whose contents can not be changed.  It turns out
+that string constants are immutable.  Thus, the constant
+<Code>"Hello"</Code> above can not be modified, since
+it is an immutable string.  The easiest way to obtain
+a mutable string is by allocating a new mutable string
+via the <Code>new@String</Code> routine.  This routine
+will return a new empty mutable <Code>String</Code>
+object as follows:
+								<Code><Pre>
+    text := new@String()					</Pre></Code>
+    # text = ""
+
+Another string can be appended to <Code>text</Code>
+as follows:
+								<Code><Pre>
+    call string_append@(text, "Hello")	# Append String
+    # text = "Hello"						</Pre></Code>
+
+Since <Code>text</Code> is mutable, characters can be
+inserted, deleted, and changed in place.  Characters
+can be trimmed of the end with <Code>trim@String</Code>:
+Individual characters can be changed via:
+								<Code><Pre>
+    call trim@(text, 4)	# Trim to 4 characters in length
+    # text = "Hell"						</Pre></Code>
+
+Individual character can changed by simple assignment:
+								<Code><Pre>
+    text[0] := "Y"	# Change 1st character
+    # text = "Yell"
+    text[3] := 'p'	# Change 4th character
+    # text = "Yelp"						</Pre></Code
+
+A single character can be appended via
+<Code>append@String</Code> as follows:
+								<Code><Pre>
+    call append@(text, '!")	# Append '!' character
+    # text = "Yelp!"						</Pre></Code>
+
+A single character can be inserted via:
+								<Code><Pre>
+    call insert@(text, 3, 'r')	# Insert 'r' after 4th character
+    # text = "Yelpr!"
+    call insert@(text, 3, 'e')	# Insert 'e' after 4th character
+    # text = "Yelper!"						</Pre></Code>
+
+A single character can be deleted via:
+							
+    call delete@(text, 2)	# Delete 3rd character
+    # text = "Yeper!"						</Pre></Code>
+
+There are a number of other routines for doing block
+inserts and deletes of strings as well.  An immutable
+copy of a string can be made using
+<Code>read_only_copy@String</Code>:
+								<Code><Pre>
+    immutable :@= read_only_copy@(text)				</Pre></Code>
+    # immutable = "Yeper!"
+
+Conversely, a mutable string can be made using the
+<Code>read_write_copy@String</Code> routine as follows:
+								<Code><Pre>
+    mutable :@= read_write_copy@("Hello")			</Pre></Code>
+    # mutable = "Hello"
+
+Lastly, size of the string is obtained via the
+<Code>size_get@String</Code> routine:
+								<Code><Pre>
+    size :@= size_get@(text)
+    # text= "Yeper!" and size = 6				</Pre></Code>
+
+It turns out that syntactically easier way of
+fetching the string size is:
+								<Code><Pre>
+    size := text.size
+    # text = "Yeper! and size = 6				</Pre></Code>
+								</P><P>
+There are a whole bunch of additional string routines
+that can be used to compare strings, convert between
+upper and lower case, convert them into different types,
+etc.  These additional routines are summarized in the
+{to be written} Easy-C library reference.
+								</P><P>
+Now it is time to switch over to discussing the
+<Code>Array</Code> type.  The <Code>Array</Code>
+type a special kind of type called a parameterized 
+type.  The parameter is another type that is enclosed
+in square brackets (<Code>[...]</Code>) after the base
+type name.  Thus, for <Code>Array[Unsigned]</Code>,
+the base type is <Code>Array</Code> and the parameter
+type is <Code>Unsigned</Code>.  Similarly, the
+parameter type for <Code>Array[String]</Code> is
+<Code>String</Code>.  Nested, parameterized types
+are allowed as in <Code>Array[Array[Unsigned]]</Code>,
+where the parameter is <Code>Array[Unsigned]</Code>.
+Lastly, it is possible to have a parameterized type
+with more than one parameter; for example, the
+<Code>Hash_Table</Code> type takes to parameters as
+in <Code>Hash_Table[String, Unsigned]</Code>.  There
+is no further discussion about <Code>Hash_Table</Code>
+in this section, it is mentioned just so that you
+know that types with multiple parameters are permitted.
+								</P><P>
+Now that you know that <Code>Array</Code> is a
+parameterized type, what does it mean?  For the
+<Code>Array</Code> type, the parameter type specifies
+what type of object can be stored into the specific
+<Code>Array</Code>.  So, an object of type
+<Code>Array[Unsigned]</Code> contains a sequence
+of zero, one or more <Code>Unsigned</Code> objects.
+Similarly, an <Code>Array[String]</Code> object
+contains a sequence of <Code>String</Code> objects.
+								</P><P>
+So, how does a <Code>String</Code> object differ
+from an <Code>Array[Character]</Code> object?
+Other than the fact the types are not interchangeable,
+there is little material difference between the two.
+The <Code>Array</Code> type supports many of the
+operations as strings, such as,
+<Code>insert@Array</Code>, <Code>append@Array</Code>,
+<Code>trim@Array</Code>, <Code>delete@Array</Code>,
+etc.  In general, there more specialized operations
+that are only available for <Code>String</Code>
+objects, such as <Code>read_only_copy@String</Code>.
+In short, you should always use a <Code>String</Code>
+instead of an <Code>Array[Character]</Code> object,
+but the compiler will not complain if you use
+<Code>Array[Character]</Code>.
+								</P><P>
+Unlike <Code>String</Code> object, the
+<Code>Array</Code> type does not support mutable
+and immutable arrays.  All <Code>Array</Code> objects
+are mutable at all times.
+								</P><P>
+The code below shows some examples of the
+<Code>Array</Code> type in action.
+								<Code><Pre>
+    colors :@= new@Array[String]()	# Allocate new Array
+    # colors = []
+    call append@Array[String](colors, "Red")
+    # colors = ["Red"]
+    call append@(colors, "Blue")	# A shorter way
+    # colors = ["Red", "Blue"]
+    call insert@(colors, 1, "White")	# Insert a color
+    # colors = ["Red", "White", "Blue"]
+    white :@= colors[1]			# Fetch a value
+    # colors = ["Red", "White", "Blue"]
+    colors[1] := "Green"		# Replace a color
+    # colors = ["Red", "Green", "Blue"]
+    call trim@(colors, 2)		# Remove last color
+    # colors = ["Red", "Green"]
+    call delete@(colors, 0)		# Remove first color
+    # colors = ["Green"]
+    call trim@(colors, 0)		# Empty the array
+    # colors = []						</Pre></Code>
+
+That should be enough to get the basic idea behind
+the <Code>Array</Code> type.
+								</P><P>
+To briefly summarize, both the <Code>String</Code>
+and <Code>Array</Code> represent sequences with
+many similar operations between them.  The
+<Code>String</Code> is optimized of a sequence of
+<Code>Character</Code>'s, and the <Code>Array</Code>
+is used for other sequences.
+								</P>
+								<H2>
+    <A Name="If_Statements_and_Relational_Expressions">
+6. If Statements and Relational Expressions</A>
+								</H2>
+								<P>
+The <Code>if</Code> statement in Easy-C is very
+similar to the <Code>if</Code> statement in many
+other languages.  The overall form is shown below:
+								<Code><Pre>
+    if <Em>expression_1</Em>
+	<Em>nested_statements_1</Em>
+    else_if <Em>Expression_2</Em>
+	<Em>nested_statements_2</Em>
+    ...
+    else_if <Em>Expression_N</Em>
+	<Em>nested_statements_N</Em>
+    else
+	<Em>nested_statements_last</Em>				</Pre></Code>
+
+Basically, each of the expressions is evaluated
+in sequence until the first expression returns
+<Code>true</Code>.  For the first expression that
+evaluates to <Code>true</Code> the nested statements
+immediately under the expression are executed.
+After the nested statements are executed, the
+statement is finished and code execution resumes
+immediately after the <Code>if</Code> statement.
+In the case, where none of the expressions evaluates
+to <Code>true</Code>, the nested statements under
+the <Code>else</Code> clause are executed instead.
+Finally, the <Code>else_if</Code> and <Code>else</Code>
+clause are optional.  The only required portion of
+an <Code>if</Code> statement is the first expression
+(i.e. <Code><Em>expression_1</Em></Code>) and the
+nested statements immediately following.
+								</P><P>
+Here are some example code sequences using the
+<Code>if</Code> statement:
+								<Code><Pre>
+    # Keep {angle} between -pi and +pi:
+    angle :@= ...
+    if angle > pi
+	angle := angle - 2 * pi
+    else_if angle < -pi
+	angle := angle + 2 * pi					</Pre></Code>
+
+and another:
+								<Code><Pre>
+    # Compute absolute value:
+    value :@= ...
+    if value < 0
+	value := -value						</Pre></Code>
+
+and yet another:
+								<Code><Pre>
+    # Convert hexadecimal to a number between 0 and 15:
+    digit :@= 0
+    if '0' <= character && character <= '9'
+	digit := unsigned@(character - '0')
+    else_if 'A' <= character && character <= 'F'
+	digit := unsigned@(character - 'A') + 10
+    else_if 'a' <= character && character <= 'f'
+	digit := unsigned@(character - 'a') + 10		</Pre></Code>
+
+This is the first instance in this tutorial of the
+conditional and operator ('<Code>&&</Code>').  It
+is probably time to talk about relational operators
+and conditional operators.
+								</P><P>
+In Easy-C, there are three logical operators:
+								<BlockQuote>
+    <Table Border>
+      <TR>
+	<TH Align="Center">Operator</TH>
+	<TH Align="Center">Name</TH>
+      </TR><TR>
+	<TD Align="Center">a &amp;&amp; b</TD>
+	<TD Align="Center">Conditional-AND</TD>
+      </TR><TR>
+	<TD Align="Center">a || b</TD>
+	<TD Align="Center">Conditional-OR</TD>
+      </TR><TR>
+	<TD Align="Center">!a</TD>
+	<TD Align="Center">Logical Not</TD>
+      </TR>
+    </Table>
+								</BlockQuote>
+The first two operators are binary operators
+and the last operators is a unary operator.
+For conditional-AND and conditional OR, the
+left expression is always evaluated and the
+right expression may be evaluated depending
+upon the value of the first expression.  This
+is summarized in the two tables below:
+								<BlockQuote>
+    <Table Border>
+      <TR>
+	<TH>a</TH>
+	<TH>b</TH>
+	<TH>a &amp;&amp; b</TH>
+      </TR><TR>
+	<TD>false</TD>
+	<TD>unevaluated</TD>
+	<TD>false</TD>
+      </TR><TR>
+	<TD>true</TD>
+	<TD>false</TD>
+	<TD>false</TD>
+      </TR><TR>
+	<TD>true</TD>
+	<TD>true</TD>
+	<TD>true</TD>
+      </TR>
+    </Table>
+								</BlockQuote>
+								<BlockQuote>
+    <Table Border>
+      <TR>
+	<TH>a</TH>
+	<TH>b</TH>
+	<TH>a || b</TH>
+      </TR><TR>
+	<TD>false</TD>
+	<TD>false</TD>
+	<TD>false</TD>
+      </TR><TR>
+	<TD>false</TD>
+	<TD>true</TD>
+	<TD>true</TD>
+      </TR><TR>
+	<TD>true</TD>
+	<TD>unevaluated</TD>
+	<TD>true</TD>
+      </TR>
+    </Table>
+								</BlockQuote>
+The logical not operator ('<Code>!</Code>') just
+inverts its value as follows:
+								<BlockQuote>
+    <Table Border>
+      <TR>
+	<TH>a</TH>
+	<TH>!a</TH>
+      </TR><TR>
+	<TD>false</TD>
+	<TD>true</TD>
+      </TR><TR>
+	<TD>true</TD>
+	<TD>false</TD>
+    </Table>
+								</BlockQuote>
+								</P><P>
+In Easy-C there are 8 relational operators as summarized
+in the table below:
+								<BlockQuote>
+    <Table Border>
+      <TR>
+	<TH Align="Center">Operator</TH>
+	<TH Align="Center">Name</TH>
+	<TH Align="Center">Routine</TH>
+      </TR><TR>
+	<TD Align="Center">a = b</TD>
+	<TD Align="Center">Equal</TD>
+	<TD Align="Center"><Code>equal@(a, b)</Code></TD>
+      </TR><TR>
+	<TD Align="Center">a != b</TD>
+	<TD Align="Center">Not Equal</TD>
+	<TD Align="Center"><Code>!equal@(a, b)</Code></TD>
+      </TR><TR>
+	<TD Align="Center">a &lt; b</TD>
+	<TD Align="Center">Less Than</TD>
+	<TD Align="Center"><Code>less_than@(a, b)</Code></TD>
+      </TR><TR>
+	<TD Align="Center">a &lt;= b</TD>
+	<TD Align="Center">Less Than or Equal</TD>
+	<TD Align="Center"><Code>!greater_than@(a, b)</Code></TD>
+      </TR><TR>
+	<TD Align="Center">a &gt; b</TD>
+	<TD Align="Center">Greater Than</TD>
+	<TD Align="Center"><Code>greater_than@(a, b)</Code></TD>
+      </TR><TR>
+	<TD Align="Center">a &gt;= b</TD>
+	<TD Align="Center">Greater Than or Equal</TD>
+	<TD Align="Center"><Code>!less_than@(a, b)</Code></TD>
+      </TR><TR>
+	<TD Align="Center">a == b</TD>
+	<TD Align="Center">Identical</TD>
+	<TD Align="Center"><Code>identical@(a, b)</Code></TD>
+      </TR><TR>
+	<TD Align="Center">a !== b</TD>
+	<TD Align="Center">Not Identical</TD>
+	<TD Align="Center"><Code>!identical@(a, b)</Code></TD>
+      </TR>
+    </Table>
+								</BlockQuote>
+The first two columns are pretty self-explanatory.
+The third column is the routine that is used by the
+compiler to compute the result.  Just like most binary
+operators, the compiler is actually substituting a
+routine call for the operator.  For:
+								<Code><Pre>
+    a = b							</Pre></Code>
+
+the compiler substitutes:
+								<Code><Pre>
+    equal@{typeof a}(a, b)					</Pre></Code>
+
+and similarly for:
+								<Code><Pre>
+    a != b							</Pre></Code>
+
+The first 6 relational operators do not need any real
+discussion, since they are the common relational
+operators for comparing numbers.  The last two are
+kind of unique to Easy-C and are discussed below in
+the section on objects.
+								</P><P>
+The precedence of the operators is such that the
+expression below:
+								<Code><Pre>
+    if '0' <= character && character <= '9'			</Pre></Code>
+
+is grouped as follows:
+								<Code><Pre>
+    if ('0' <= character) && (character <= '9')			</Pre></Code>
+
+								</P>
+								<H2>
+    <A Name="Expressions">
+7. Expressions</A>
+								</H2>
+								<P>
+The table below expresses the precedence of operators
+in Easy-C:
+								<BlockQuote>
+    <Table Border>
+      <TR>
+	<TH>Prec.</TH>
+	<TH>Operators</TH>
+	<TH>Assoc.</TH>
+	<TH>Routines</TH>
+      </TR><TR>
+	<TD>14</TD>
+	<TD>t[ t]</TD>
+	<TD>left</TD> 
+	<TD></TD>
+      </TR><TR>
+	<TD>13</TD>
+	<TD>( @( ) i[ i] @ .</TD>
+	<TD>left</TD>
+ 	<TD>fetch_#(), store_#(), field_set(), field_get()</TD>
+      </TR><TR>
+	<TD>12</TD>
+	<TD>u- u! u+ u~</TD>
+	<TD>right</TD>
+	<TD>negate(), not()</TD>
+      </TR><TR>
+	<TD>11</TD>
+	<TD>* / %</TD>
+	<TD>left</TD>
+	<TD>multiply(), divide(), remainder()</TD>
+      </TR><TR>
+	<TD>10</TD>
+	<TD>+ -</TD>
+	<TD>left</TD>
+	<TD>add, minus</TD>
+      </TR><TR>
+	<TD>9</TD>
+	<TD>&lt;&lt; &gt;&gt;</TD>
+	<TD>left</TD>
+	<TD>left_shift(), right_shift()</TD>
+      </TR><TR>
+	<TD>8</TD>
+	<TD>&amp;</TD>
+	<TD>left</TD>
+	<TD>and()</TD>
+      </TR><TR>
+	<TD>7</TD>
+	<TD>^</TD>
+	<TD>left</TD>
+	<TD>xor()</TD>
+      </TR><TR>
+	<TD>6</TD>
+	<TD>|</TD>
+	<TD>left</TD>
+	<TD>or()</TD>
+      </TR><TR>
+	<TD>5</TD>
+	<TD>&lt; &gt; &lt;= &gt;= != = == !==</TD>
+	<TD>left</TD>
+	<TD>equal(), less_than(), greater_than(), identical()</TD>
+      </TR><TR>
+	<TD>4</TD>
+	<TD>&amp;&amp;</TD>
+	<TD>left</TD>
+	<TD></TD>
+      </TR><TR>
+	<TD>3</TD>
+	<TD>||</TD>
+	<TD>left</TD>
+	<TD></TD>
+      </TR><TR>
+	<TD>2</TD>
+	<TD>,</TD>
+	<TD>left</TD>
+	<TD></TD>
+      </TR><TR>
+	<TD>1</TD>
+	<TD>:= :@=</TD>
+	<TD>left</TD>
+	<TD></TD>
+      </TR>
+    </Table>
+								</BlockQuote>
+The operators that are preceded by a letter need a little
+more discussion.  The 't[' and 't]' refer to when a square
+brackets are used for type parameters.  Conversely, 'i['
+and 'i]', refer to when square brackets are used as an
+indexing operator (e.g. <Code>Array</Code> fetch and
+store.)  Finally, the 'u-', 'u!', 'u+', and 'u~' refer
+to unary operators.  Unary operators are the only ones
+that group right to left in their associativity (e.g. ---a
+is the same a -(-(-a)).)   All other operators are left
+to right associativity.
+								</P><P>
+For those of you that are familiar with the operator
+precedence of ANSI-C, you should be warned that there
+are a few differences between Easy-C and ANSI-C
+precedence.  In particular, the relational operators
+in Easy-C have a lower precedence than in ANSI-C.
+In addition, the precedence of comma and assignment
+are swapped.
+								</P><P>
+In ANSI-C, the evaluation order for routine arguments
+undefined.  In Easy-C, left to right evaluation
+is strictly enforced.
+								</P>
+								<H2>
+    <A HRef="Enumerated_Types">
+8. Enumerated Types</A>
+								</H2>
+								<P>
+So far we have been using types that have been
+predefined in the <Code>Easy_C</Code> library.
+In this section, we start defining our own types.
+We start with the simplest type, an enumerated
+type.  The code below defines a new type called
+<Code>Color</Code>:
+								<Code><Pre>
+    define Color
+	enumeration
+	    red
+	    green
+	    blue						</Pre></Code>
+
+This new type has define 3 global symbols:
+								<Code><Pre>
+    red@Color
+    green@Color
+    blue@Color							</Pre></Code>
+
+A color variable can exactly one of those three values.
+For example,
+								<Code><Pre>
+    color1 :@= red@Color
+    color2 :@= blue@Color					</Pre><Code>
+
+The only comparison operator that is predefined for
+an enumerated type is the identical operator
+('<Code>==</Code>'.)  The identical operator returns
+true if two objects are indistinguishable from one
+another.  Thus, the following piece of code works
+with our new <Code>Color</Code> type:
+								<Code><Pre>
+    if color == red@Color
+	call p@("Red\n\")
+    else_if color == green@Color
+	call p@("Green\n\")
+    else_if color == blue@Color
+	call p@("Blue\n\")					</Pre></Code>
+
+The piece of code above is sufficiently common that
+there is a statement, called <Code>switch</Code>
+statement, that basically implements the code above.
+For example, the code above can be replaced with:
+								<Code><Pre>
+    switch color
+      case red
+	call p@("Red\n\")
+      case green
+	call p@("Green\n\")
+      case blue
+	call p@("Blue\n\")					</Pre></Code>
+								</P><P>
+It is allowed to put multiple enumeration names on
+the same <Code>case</Code> clause separated by commas:
+								</Code><Pre>
+    switch color
+      case red, green
+	call p@("Red or green\n\")
+      case blue
+	call p@("Blue\n\")					</Pre></Code>
+
+A <Code>default</Code> can deal with all cases that
+are not explicitly named:
+								<Code><Pre>
+    switch color
+      case red
+	call p@("Red\n\")
+      default
+	call p@("Other\n\")					</Pre></Code>
+
+Lastly, there is <Code>all_cases_required</Code> clause.
+This clause instructs the compiler that you intend to
+explicitly name all possible enumeration values as
+case clauses in a switch statement:
+								<Code><Pre>
+    switch color
+      all_cases_required
+      case red, green
+	call p@("Red or green\n\")
+      case blue
+	call p@("Blue\n\")					</Pre></Code>
+
+If either <Code>red</Code>, <Code>green</Code>, or
+<Code>blue</Code> were left out of the switch statement
+the compiler would complain.  More importantly, if you
+add another color to the original type definition, the
+compiler will also complain.
+								</P>
+								<H2>
+    <A Name="Record_Types">
+9. Record Types</A>
+								</H2>
+								<P>
+The next type that can be defined is called the
+record type.  A example record type is defined as
+follows:
+								<Code><Pre>
+    define Point2
+	record
+	    x Double
+	    y Double						</Pre></Code>
+
+This defines a new type named <Code>Point2</Code>
+with two fields -- <Code>x</Code> and <Code>y</Code>.
+The type of both fields is <Code>Double</Code>.
+In addition, the define declaration above defines
+a new routine called <Code>new@Point2</Code> which
+is invoked to create each new <Code>Point2</Code>
+object.  Lastly, the declaration above also causes
+the an initial instance of <Code>Point2</Code> to
+be assigned to a global constant named
+<Code>null@Point2</Code>.
+								</P><P>
+The code below shows some basic operations on
+<Code>Point2</Code> objects:
+								<Code><Pre>
+    point :@= new@Point2()
+    point.x := 1.0
+    point.y := 1.0
+    x :@= point.x
+    y :@= point.y
+    radius :@= square_root@(x * x + y * y)
+    angle :@= arc_tangent2@(x, y)				</Pre></Code>
+
+The first line:
+								<Code><Pre>
+    point :@= new@Point2()					</Pre></Code>
+
+allocates a new <Code>Point2</Code> object by
+invoking <Code>new@Point2()</Code>.  The new
+<Code>Point2</Code> object is stored in the
+new local variable <Code>point</Code>.  The
+next two lines:
+								<Code><Pre>
+    point.x := 1.0
+    point.y := 1.0						</Pre></Code>
+
+assign initial values to the <Code>x</Code> and
+<Code>y</Code> fields of newly created
+<Code>Point2</Code> object.  The next two lines
+fetch the values out of the newly created
+<Code>Point2</Code> object:
+								<Code><Pre>
+    x :@= point.x
+    y :@= point.y						</Pre></Code>
+
+The values are stored in local variables named
+<Code>x</Code> and <Code>y</Code>.  Lastly, the
+polar representation is computed via the last
+two lines:
+								<Code><Pre>
+    radius :@= square_root@(x * x + y * y)
+    angle :@= arc_tangent2@(x, y)				</Pre></Code>
+
+These two lines invoke the
+<Code>square_root@Double</Code> and
+<Code>arc_tangent2@Double</Code> routines to
+compute a radius and angle for polar coordinates.
+								</P><P>
+In addition to the actual field names defined for
+the record, it is possible to create pseudo field
+names.  This is done by defining get and/or set
+routines.  For example, assume that we want to be
+able to access polar coordinates for a
+<Code>Point2</Code> object.  The following two
+routines provide "get" routines for the values:
+								<Code><Pre>
+    routine radius_get@Point2
+	takes point Point2
+	returns Double
+
+	# This routine returns the Polar coordinate radius.
+
+	x :@= point.x
+	y :@= point.y
+	return square_root@(x * x + y * y)
+
+    routine angle_get@Point2
+	takes point Point2
+	returns Double
+
+	# This routine returns the Polar coordinate angle.
+
+	return arc_tangent2@(point.x, point.y)			</Pre></Code>
+
+With these two routines, it is possible to write the
+following code:
+								<Code><Pre>
+    point :@= new@Point2()
+    # ...
+    angle :@= angle_get@(point)
+    radius :@= radius_get@(point)				</Pre></Code>
+
+However, the compile is trained to recognize routines
+that end in "_get" as special.  If the compile sees
+syntax of the form
+<Code><Em>expression</Em>.<Em>name</Em></Code>, it
+first checks to see of <Code><Em>name</Em></Code>
+is a valid field name.  If not, it looks for a
+routine of the form
+<Code><Em>name</Em>_get@{typeof <Em>expression</Em>}</Code>.
+If it find the routine.  Thus, the code:
+								<Code><Pre>
+    angle :@= point.angle
+    radius :@= point.radius					</Pre></Code>
+
+is converted into:
+								<Code><Pre>
+    angle :@= angle_get@(point)
+    radius :@= radius_get@(point)				</Pre></Code>
+
+Used sparingly, "get" (and "set") routines can really
+improve the legibility of code.  In general, when you
+write a "get" routine, it should be "idempotent".  What
+this means is that if you call it twice in a row, it
+will return the same value both times.
+								</P><P>
+It is possible to write "set" routines the same way.
+The "set" routines for polar coordinates are not nearly
+as easy to understand though:
+								<Code><Pre>
+    routine angle_set@Point2
+	takes point Point2
+	takes angle Double
+	returns_nothing
+
+	# This routine will set the angle of {point} to {angle}.
+
+	x :@= point.x
+	y :@= point.y
+	radius :@= square_root@(x * x + y * y)
+	point.x := radius * cosine@(angle)
+	point.y := radius * sine@(angle)
+
+    routine radius_set@Point2
+	takes point Point2
+	takes radius Double
+	returns_nothing
+
+	# This routine will set the radius of {point} to {radius}.
+
+	angle :@= arc_tangent2@(point.x, point.y)
+	point.x := radius * cosine@(angle)
+	point.y := radius * sine@(angle)			</Pre></Code>
+
+and the following code:
+								<Code><Pre>
+    point.radius := 2.0
+    point.angle := 0.0						</Pre></Code>
+
+is translated into the following code by the compiler:
+								<Code><Pre>
+    call radius_set@(point, 2.0)
+    call angle_set@(point, 0.0)					</Pre></Code>
+
+That pretty much covers basic record types.
+								</P>
+								<H2>
+    <A Name="Variant_Types">
+10. Variant Types</A>
+								</H2>
+								<P>
+The last major type is the variant type.  A variant
+type allows an object to point to objects of different
+types.  The following type declaration:
+								<Code><Pre>
+    define Number
+	variant kind Number_Kind
+	    double Double					</Pre></Code>
+	    integer Integer
+	    unsigned Unsigned
+
+actually defines two types -- <Code>Number</Code>
+and <Code>Number_Kind</Code>.  The
+<Code>Number_Kind</Code> type is an enumeration type
+that is equivalent to:
+								<Code><Pre>
+    define Number_Kind
+	enumeration
+	    double
+	    integer
+	    unsigned						</Pre></Code>
+
+The main type is <Code>Number</Code> and it can
+contain either a <Code>Double</Code>,
+<Code>Integer</Code> or <Code>Unsigned</Code>,
+but only one at a time.  As with record types,
+the declaration above defines the
+<Code>new@Number</Code> routine and a global
+constant called <Code>null@Number</Code>.
+The <Code>print@Number</Code> routine below shows
+some code for manipulating a number object:
+								<Code><Pre>
+    routine print@Number
+	takes number Number
+	returns_nothing
+
+	# This routine will print out the contents of {number}.
+
+	switch number.kind
+	  case double
+	    call p@(form@("double:%f%\n\") / f@(number.double))
+	  case integer
+	    call p@(form@("integer:%d%\n\") / f@(number.integer))
+	  case unsigned
+	    call p@(form@("unsigned:%f%\n\") / f@(number.unsigned))</Pre></Code>
+
+In the code above, the <Code>switch</Code>
+statement accesses the <Code>kind</Code> field
+of the <Code>number</Code> object.  The
+<Code>kind</Code> field contains either the value
+<Code>double@Number_Kind</Code>,
+<Code>integer@Number_Kind</Code>, or
+<Code>unsigned@Number_Kind</Code>, depending
+upon whether <Code>Number</Code> object
+pointed to by <Code>number</Code> is 
+<Code>Double</Code>, <Code>Integer</Code>,
+or <Code>Unsigned</Code> type respectively.
+Once the switch statement has dispatched to the
+correct case clause, the actual variant value is
+fetched using the dot ('<Code>.</Code>') operator.
+In the case of <Code>case double</Code>,
+								<Code><Pre>
+    number.double						</Pre></Code>
+
+returns the double value stored <Code>number</Code>.
+								</P><P>
+Values are stored into a variant in a similar fashion.
+Consider the code below:
+								<Code><Pre>
+    number1 :@= new@Number()
+    number1.double := 3.1415926
+    number2 :@= new@Number()
+    number2.unsigned := 17					</Pre></Code>
+
+In the first two lines: the new variable
+<Code>number1</Code> is assigned a newly
+created <Code>Number</Code> object:
+								<Code><Pre>
+    number1 :@= new@Number()					</Pre></Code>
+
+It is then forced to contain a <Code>Double</Code>
+by:
+								<Code><Pre>
+    number1.double := 3.1415926					</Pre></Code>
+
+The last two lines do the same thing for
+<Code>number2</Code>, but stuff an
+<Code>Unsigned</Code> type into it.
+								</P><P>
+What happens if the following chunk of code is
+executed:
+								<Code><Pre>
+    switch number.kind
+      case double
+	d :@= number.unsigned	# Error				</Code></Pre>
+
+In this case, when it is attempt to fetch an
+unsigned value from <Code>number</Code> when it
+actually contains a <Code>Double</Code> object,
+a fatal run time error occurs.
+								</P><P>
+It turns out that variant types and record types
+can be combined in a single <Code>define</Code>
+declaration.  This is shown in the next section
+on parameterized types.
+								</P>
+								<H2>
+    <A Name="Routine_Variables">
+11. Routine Variables</A>
+								</H2>
+								<P>
+Easy-C permits routines to be treated like objects.
+Two routines are of the same type if they have the
+same number of arguments with the same types, and
+returns the same number of arguments with the same
+types.  Thus, the following to routines have the
+same type:
+								<Code><Pre>
+    routine add@Unsigned
+	takes left Unsigned
+	takes right Unsigned
+	returns Unsigned
+
+	return left + right
+
+
+    routine multiply@Unsigned
+	takes left Unsigned
+	takes right Unsigned
+	returns Unsigned
+
+	return left * right					</Pre></Code>
+
+They can be assigned to variables just as you would
+expect:
+								<Code><Pre>
+    operate :@= add@Unsigned
+    operate := multiply@Unsigned				</Pre></Code>
+
+after they are assigned to a variable, they can be
+invoked like a routine:
+								</Code><Pre>
+    result :@= operate(2, 2)					</Pre><Code>
+
+They can also be passed as arguments to a routine.
+A routine argument needs both a name and a routine
+type.  They syntax for a routine type is:
+								<Code><Pre>
+    [{return type} <= {argument 1}, ..., {argument N}]		</Pre></Code>
+
+Thus, the type for the two routines above is:
+								<Code><Pre>
+    [Unsigned <= Unsigned, Unsigned]				</Pre></Code>
+
+An example of a routine that takes a routine variable
+is:
+								<Code><Pre>
+    routine compute@Easy_C
+	takes left Unsigned
+	takes right Unsigned
+	takes operator [Unsigned <= Unsigned, Unsigned]
+	returns Unsigned
+
+	return operator(left, right)				</Pre></Code>
+
+If the routine does not return anything, there is
+nothing between the open square bracket ('[') and
+the '<=".  For example,
+								<Code><Pre>
+    [ <= Unsigned, Unsigned]					</Pre></Code>
+
+Similarly, if there are no routine arguments, there
+is nothing between the '<=" and the ']':
+								<Code><Pre>
+    [ Unsigned <= ]						</Pre></Code>
+
+Routine variables are particularly useful for
+some parameterized types and routines.
+    
+								</P>
+								<H2>
+    <A Name="Parameterized_Types">
+12. Parameterized Types</A>
+								</H2>
+								<P>
+Easy-C permits parameterized types.  A parameterized
+type is a powerful form of code reuse.  The first
+instance of parameterized type is the <Code>Array</Code>
+several sections earlier.  It turns out that you can
+define your own parameterized type as well.  In this
+section, we declare and define a new parameterized
+type call <Code>Tree</Code>.
+								</P><P>
+The <Code>Tree</Code> is actually two types, a top
+level object that is the tree root and a lower level
+object that contains tree elements.  The two declarations
+are listed immediately below:
+								<Code><Pre>
+    define Compare
+	record
+	    less_than
+	    equal
+	    greater_than
+
+    define Tree[Key, Value]
+	record
+	    element_empty Tree_Bind[Key, Value] # Empty Element
+	    key_compare [Compare <= Key, Key] # Key compare routine
+	    key_empty Key		# Empty Key
+	    root Tree_Bind[Key, Value]	# Root element of the tree
+	    size Unsigned		# Number of tree elements
+	    value_empty Value		# Empty Value
+
+    define Tree_Bind[Key, Value]
+	record
+	    key Key			# Key
+	    value Value			# Value
+	    left Tree_Bind[Key, Value]	# Left branch
+	    right Tree_Bind[Key, Value]	# Right branch		</Pre></Code>
+
+Both the <Code>Tree</Code> and the <Code>Tree_Bind</Code>
+types are parameterized with the same type place holder
+parameter types <Code>Key</Code> and <Code>Value</Code>.
+In a parameterized type definition, each parameter type
+must be a simple type name.  Trying to define a type
+like:
+								<Code><Pre>
+    define Bad_Type[Array[Key], Array[Value]]	# Bad Type	</Pre></Code>
+
+will not work.  The define record (or variant)
+can have as many fields as needed.  The scope of
+the parameter types is until the declaration,
+after which that parameter type is no longer
+recognized as a legal type.  Thus, for the
+duration of the type declaration above,
+<Code>Key</Code> and <Code>Value</Code> are
+treated like any other type such as
+<Code>Unsigned</Code>, <Code>Integer</Code>,
+or <Code>Array</Code>.  Lastly, the parameter types
+can not be further parameterized themselves as
+in:
+								<Code><Pre>
+	record
+	    illegal1 Key[Unsigned]	# Bad type
+	    illagal2 Array[Key[Unsigned]] # Bad type		</Pre></Code>
+
+Now that we have the types defined, it is time to
+define a few routines to manipulate the types:
+
+								<Code><Pre>
+    routine create@Tree[Key, Value]
+	takes key_compare [Compare <= Key, Key]
+	takes key_empty Key
+	takes value_empty Value
+	returns Tree[Key, Value]
+
+	# Create and return a new {Tree} object.
+
+	# Create an empty {Tree_Element} object:
+	element_empty :@= new@Tree_Element[Key, Value]()
+	element_empty.key := key_empty
+	element_empty.value := value_empty
+	element_empty.left := element_empty
+	element_empty.right := element_empty
+
+	# Now create the {Tree} object:
+	tree :@= new@Tree[Key, Value]()
+	tree.key_compare := key_compare
+	tree.key_empty := key_empty
+	tree.value_empty := value_empty
+	tree.element_empty := element_empty
+	tree.size := 0
+	tree.root := element_empty
+	return tree						</Pre></Code>
+
+First, this routine creates an <Code>Tree_Element</Code>
+object and stores that into <Code>empty_element</Code>
+object.  Note that the <Code>left</Code> and
+<Code>right</Code> fields are initialized to
+<Code>empty_element</Code>.  Second, the
+<Code>Tree</Code> object is created, initialized and
+returned.
+								</P><P>
+The <Code>insert@Tree</Code> is shown below:
+								<Code><Pre>
+    routine insert@Tree[Key, Value]
+	takes tree Tree[Key, Value]
+	takes key Key
+	takes value Value
+	returns Logical
+
+	# This routine will insert {value} into {tree} with
+	# with a key of {key}.  {true} is returned if key is
+	# already in {tree}.
+
+	empty_element :@= tree.empty_element
+	key_compare :@= tree.key_compare
+
+	# Search through the tree:
+	previous :@= empty_element
+	current :@= tree.root
+	compare :@= equal@Compare
+	while current != empty_element
+	    compare := key_compare(key, current.key)
+	    switch compare
+	      case less_than
+		previous := current
+		current := current.left
+	      case greater_than
+		previous := current
+		current := current.right
+	      case equal
+		current.value := value
+		return true@Logical
+
+	# Create the {key}/{value} binding:
+	current := new@Tree_Element[Key, Value]()
+	current.key := key
+	current.value := value
+	current.left := empty_element
+	current.right := empty_element
+
+	# Splice {current} into the binding:
+	switch compare
+	  case equal
+	    tree.root := current
+	  case less_than
+	    previous.left := current
+	  case greater_than
+	    previous.right := current
+	return false@Logical					</Pre></Code>
+
+This routine searches <Code>tree</Code> starting at
+<Code>tree.root</Code> looking for a
+<Code>Tree_Element</Code> object that matches
+<Code>key</Code>.  The <Code>key_compare</Code>
+routine is used to compare routines.  When
+<Code>key_compare</Code> returns
+<Code>less_than@Compare</Code>, the left branch of
+the tree is traversed; otherwise the right branch
+is traversed.
+								</P><P>
+The <Code>lookup@Tree</Code> routine is shown below:
+								<Code><Pre>
+    routine lookup@Tree[Key, Value]
+	takes tree tree[Key, Value]
+	takes key Key
+	returns Value
+
+	# This routine will return the value that is bound to
+	# {key} in {tree}.
+	
+	key_compare :@= tree.key_compare
+	empty_element :@= tree.empty_element
+
+	current :@= tree.root
+	while current != empty_element
+	    switch key_compare@(key, current.key)
+	      case equal
+		return current.value
+	      case less_than
+		current := current.left
+	      case greater_than
+		current := current.right
+	return tree.value_empty					</Pre></Code>
+
+This routine simple traverses the tree until
+a <Code>Tree_Element</Code> object that matches
+<Code>key</Code> is found (or not.)
+								</P>
+								<HR>
+								<Address>
+    <A HRef="../../copyright.html">
+Copyright</A> &copy; 2007-2010 by
+    <A HRef="../../gramlich.html">
+Wayne C. Gramlich</A>.
+All rights reserved.
+								</Address>
+								</Body>
+								</HTML>

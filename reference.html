@@ -1,0 +1,1135 @@
+								<HTML>
+								<Head>
+								<Title>
+Easy-C Language Reference
+								</Title>
+								</Head>
+								<Body>
+								<H1>
+Easy-C Language Reference
+								</H1>
+								<H2>
+Table of Contents
+								</H2>
+								<P>
+								<OL><LI>
+	<A HRef="#Introduction">
+    Introduction</A>
+								</LI><LI>
+	<A HRef="#Lexical_Issues">
+    Lexical Issues</A>
+								</LI><LI>
+	<A HRef="#Object_Model">
+    Object Model</A>
+								</LI><LI>
+	<A HRef="#Declarations">
+    Declarations</A>
+								</LI><LI>
+	<A HRef="#Statements">
+    Statements</A>
+								</LI><LI>
+	<A HRef="#Expressions">
+    Expressions</A>
+								</LI></OL>
+								</P>
+								<H2>
+    <A Name="Introduction">
+1. Introduction</A>
+								</H2>
+								<P>
+Easy-C is language that has similar expressive power
+to the popular ANSI-C language while avoiding many
+of the issues that make ANSI-C difficult and/or
+tedious to code in.  Easy-C is a strongly typed object
+oriented language.
+								</P>
+								<H2>
+    <A Name="Lexical_Issues">
+2. Lexical Issues</A>
+								</H2>
+								<P>
+The lexical components of are symbols, numbers, strings,
+punctuation, and comments.  In addition, like other
+some other more recent programming languages, Easy-C
+uses the white space at the beginning of each line to
+provide indentation information to guide compilation.
+The following lexical components are accepted:
+								</P><P>
+								<BlockQuote>
+								<DL><DT>
+    Symbols							</DT><DD>
+	Symbols are a sequence of letters ('A'-Z',
+	'a'-'z'), digits ('0'-'9', and underscores
+	('_'.)  No symbol can start with a digit.
+	Letters from the Latin-9 (ISO-8859-15)
+	alphabet is permitted for letters.  The
+	letters can be upper case or lower case.
+	Examples: a, b, a123, top_speed.
+								</DD><DT>
+    Numbers							</DT><DD>
+	Numbers start with a digit ('0'-'9'.)  There
+	are three kinds of numbers -- decimal, hexadecimal,
+	and floating-point.  A decimal number consists
+	exclusively of decimal digits ('0'-'9'.)
+	A hexadecimal number consists of '0x' followed
+	by 1 or more hexadecimals digits ('0'-'9, 'A'-'F',
+	'a'-'f').  Floating point have a mandatory
+	mantissa followed by an optional exponent.
+	The mantissa consists of at least one decimal
+	digit ('0'-'9') and at exactly one decimal
+	point ('.'.)  The decimal point may at the
+	beginning, middle or end of the mantissa, but
+	it must be present.  The optional exponent is
+	the letter 'E' (or 'e') followed by an optional
+	sign ('-' or '+') followed by one or more decimal
+	digits.
+								</DD><DT>
+    Strings							</DT><DD>
+	Strings specify a sequence of zero, one or more
+	characters (also referred to as codes.)  There
+	are character strings that are enclosed in single
+	quotes ("'") and must specify exactly one character.
+	Regular strings enclosed in double quotes ('"') and
+	specify zero, one or more characters.  Any printing
+	character from the Latin-9 character (plus space)
+	is allowed between the quotes, except for the quote
+	character itself.  There is a mechanism for expressing
+	other characters inside a string that involves the
+	use of the backslash character ('\').  A backslash
+	('\') followed by a list of comma separated symbols
+	and decimal numbers followed by another backslash
+	('\') defines a list of characters where each
+	number/symbol corresponds to a character.  The
+	allowed symbols are:
+								<BlockQuote>
+	    <Table Border>
+	      <TR><TH>Symbol</TH><TH>Description</TH><TH>Code</TH></TR>
+	      <TR><TD>n</TD>  <TD>New-line</TD>         <TD>10</TD></TR>
+	      <TR><TD>r</TD>  <TD>Carriage Return</TD>  <TD>13</TD></TR>
+	      <TR><TD>t</TD>  <TD>Horizontal Tab</TD>   <TD> 9</TD></TR>
+	      <TR><TD>sq</TD> <TD>Single Quote</TD>     <TD>39</TD></TR>
+	      <TR><TD>dq</TD> <TD>Double Quote</TD>     <TD>34</TD></TR>
+	      <TR><TD>bsl</TD><TD>Backslash</TD>        <TD>92</TD></TR>
+	    </Table>
+								</BlockQuote>
+								</DD><DT>
+    Punctuation							</DT><DD>
+	The following single character punctuation
+	is allowed - '~', '!', '@', '%', '^', '&',
+	'*', '(', ')', '-', '+', '=', '[', ']',
+	'<', '>', ',', '|', and '/'.
+	The following double character punctuation
+	is allowed - '&&', '==', '||', '<=', '>=",
+	'!=', ':=", and '@('.
+	The following triple character punctuation
+	is allowed - ':@='.
+								</DD><DT>
+    Comments							</DT><DD>
+	Comments start with a '#' and continue to the
+	end of the line.
+								</DD><DT>
+    Blank Lines							</DT><DD>
+	Blank lines have no visible tokens on the
+	line and are completely ignored.
+								</DD><DT>
+    Indentation and Shite Space					</DT><DD>
+	White space consists exclusively of the
+	horizontal tab and space character.  At the
+	beginning of the line, tabs space over to
+	the next multiple of 8 spaces.  All other
+	white space on the line after the first
+	lexical element are ignored.
+								</DD><DT>
+    Continuation Lines						</DT><DD>
+	A line is continued onto the next line if it ends
+	in a punctuation character other than ']' or ')'.
+	Thus,
+								<Code><Pre>
+	    a := length@(a + b, # Comment ignored
+	    &nbsp;&nbsp;c - d)					</Pre></Code>
+
+	is the same as:
+								<Code><Pre>
+	    a := length@(a + b, c - d)				</Pre></Code>
+
+	The example above shows that comments are allowed
+	at the end of a continuation line.
+								</DD></DL>
+								</BlockQuote>
+								</P><P>
+Below are some examples of each of the visible lexical
+components:
+								<BlockQuote>
+								<DL><DT>
+    Symbols							</DT><DD>
+	a, b, abc, a1, z123, Point, stop_point
+								</DD><DT>
+    Decimal Numbers						</DD><DD>
+	0, 1, 9, 123, 1234567
+								</DD><DT>
+    Hexadecimal Numbers						</DT><DD>
+	0x0, 0x1, 0x9, 0xa, 0xf, 0xA, 0xF, 0xabcdef,
+	0xABCDEF
+								</DD><DT>
+    Floating Point Numbers					</DT><DD>
+	0., 1., 9., 0.0, 1.0, 9.0, .0, .1, .9,
+	12.34, .1234, 1234., 1.2e0, 1.2e10,
+	1.2e-10, 1.2e+10
+								</DD><DT>
+    Character Strings						</DT><DD>
+	'a', 'b', ' ', ':', '\n\', '\r\',
+	'\sq\', '\bsl\', '\1\', '\123'
+								</DD><DT>
+    Full Strings						</DT><DD>
+	"", "a", "z", "abc", "a test",
+	"\sq\a test\sq,n\", "null-terminated\0\"
+								</DD><DT>
+    Comments							</DT><DD>
+	# A comment
+								</DD></DL>
+								</BlockQuote>
+								</P><P>
+Unlike C, Easy-C does not have reserved words such as
+<Em>if</Em>, <Em>return</Em>, etc.
+								</P>
+								<H2>
+    <A Name="Object_Model">
+3. Object Model</A>
+								</H2>
+								<P>
+Every variable, argument, and record field has a
+type.  There are three kinds of types in Easy-C:
+								<BlockQuote>
+								<DL><DT>
+    Simple Type							</DT><DD>
+	A simple type is just a symbol, which by
+	convention starts with a capital letter
+	(e.g. Unsigned, Integer, Vector3, etc.)
+								</DD><DT>
+    Parameterized Type						</DT><DD>
+	A parameterized type is a symbol followed
+	by one or more comma separated types
+	enclosed in square brackets (e.g.
+	Array[Integer], Array[Array[Integer]],
+	Hash_Table[Unsigned, String], etc.)
+								</DD><DT>
+    Routine Type						</DT><DD>
+	A routine type is a type that points to
+	a routine (i.e. function.)  The syntax
+	is an open square bracket followed by
+	zero or more return types, followed by
+	'<=', followed by zero or more argument
+	types.  For example,
+	"[Integer <= Integer, Integer]",
+	"[<= Unsigned, Integer]", "[Vector3 <=]", ...
+								</DD></DL>
+								</BlockQuote>
+Two types are equal if and only if they exactly match;
+otherwise they are different.
+								</P><P>
+In Easy-C, arguments, variables, and record fields
+are strongly typed.  A variable of a given type always
+contains a pointer to an object of the correct type.
+For example, it is possible to have variable "a"
+of type "Apple" and a variable "o" of type "Orange".
+The variable "a" will only point to "Apple" objects
+and the variable "o" will only point to "Orange"
+objects.  There is absolutely no mixing between
+"Apple" and "Orange" objects.
+								</P><P>
+The Easy-C assignment operators are ":=" and ":@=".
+":@=" is used to assign to variable for the first
+time and ":=" is used to assign for the second
+and subsequent times.  The assignment operator is
+a simple pointer replacement.  If both "a1" and "a2"
+are variables of type "Apple", they both point to
+"Apple" objects,  For the piece of code below:
+								<Code><Pre>
+    <Code>a1 := a2</Code>					</Pre></Code>
+
+After this statement, both "a1" and "a2" point to
+the exact same "Apple" object.  In other words,
+the pointer in "a1" has been replaced by the pointer
+in "a2".
+								</P><P>
+In Easy-C there is a concept of mutable and immutable
+objects.  A mutable object is like box whose contents
+can be changed whereas an immutable object is a box
+whose contents is frozen in place and can not be changed.
+Some types in Easy-C are mutable and others are immutable.
+The basic types in Easy-C are Logical, Unsigned, Integer,
+Character, Float, and Double and all of these types are
+immutable.  Other types like records and arrays are mutable
+in that their contents can be changed.  It turns out
+that some Easy-C strings are mutable and some are immutable.
+								</P><P>
+In Easy-C, if there are variables "a", "b", and "c"
+of type "Unsigned", the code below:
+								<Code><Pre>
+    a := b + c							</Pre></Code>
+
+is really a short hand for:
+								<Code><Pre>
+    <Code>a := add@Unsigned(b, c)</Code>			</Pre></Code>
+
+"add@Unsigned" refers to the "add" routine associated
+with type "Unsigned".  In Easy-C, all routines are
+associated with a Type.  "a := add@Unsigned(b, c)" means
+invoke the "add@Unsigned" routine with two arguments, "b"
+and "c" and store the back into the variable "a".  In
+even finer detail, the "add@Unsigned" routine does the
+following:
+								<OL><LI>
+    the value of the object pointed to by "b" is obtained,
+								</LI><LI>
+    the value of the object pointed to by "c" is obtained,
+								</LI><LI>
+    the sum of those two values is computed,
+								</LI><LI>
+    an object that contains the sum value is created,
+								</LI><LI>
+    a pointer to the new sum object is returned.
+								</LI></OL>
+While that seems a bit convoluted for doing simple math,
+it works just as well for more complicated types.  For,
+example, if "a", "b", and "c" are variables of type
+"Vector3" (i.e. 3-dimensional vectors), the code above
+still works, except that "add@Vector3" is called instead.
+								</P><P>
+In short, there are no special language semantics
+associated with the basic types, they are treated
+like all others.  This is stark contrast to most
+other languages (including ANSI-C) which make special
+allowances for the basic types by calling them scalar
+types.
+								</P><P>
+Most languages that have pointers also have the concept
+of an empty pointer.  In Easy-C, the empty pointer
+concept is replaced with a very similar concept of
+pointing to a Null object.  Every type has one (and only one)
+null object named "Null".  Thus, "Null@Unsigned" is the
+null object for the type "Unsigned" and "Null@Vector3"
+is the null object for the type "Vector3".
+								</P><P>
+In Easy-C all variables, arguments and record fields
+are initialized to point to the null object of the
+appropriate type.  Complex, types like records have
+each of their individual field values initialized to
+point to the appropriate null object.  This is in stark
+contrast to other languages that leave variables and
+records uninitialized.
+								</P><P>
+In short, 1) everything in Easy-C is a strongly
+typed object, 2) variables, arguments, and record
+fields are strongly typed, 3) variables, arguments
+and record fields always point to an object of the
+same strong type, and 4) assignment overwrites the
+previous object pointer value with a new object
+pointer.
+								</P><P>
+The object model presented here is substantially
+simpler than most other programming languages.
+								</P>
+								<H2>
+    <A Name="Declarations">
+4. Declarations</A>
+								</H2>
+								<P>
+Declarations always start at the beginning of line
+with no preceding white-space.  In general, an Easy-C
+is broken into four sections:
+								<OL><LI>
+    import declarations
+								</LI><LI>
+    new type definitions
+								</LI><LI>
+    object definitions
+								</LI><LI>
+    routine definitions
+								</LI></OL>
+The more important import declaration is the "library"
+declaration, although there are a few extra import
+declarations used to interface to ANSI-C code.  The
+"define" declarations is used to define a new type.
+The "global" and "constant" declarations are used to
+define new globally accessible objects.  And a "routine"
+declaration is used to define a new routine.
+								</P>
+								<H3>
+4.1 <Code>library</Code> Declaration
+								</H3>
+								<P>
+The syntax of the library declaration is:
+								<Code><Pre>
+    library <Em>library_name</Em>				</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>library_name</Em></Code>				</DT><DD>
+	is the name of the library to access.
+								</DD></DL>
+								</BlockQuote>
+The routine causes all of the types and routines defined
+in <Em>library_name</Em> to become available for use
+in the current Easy-C file.  In general, this means that
+the types and routines defined in the file
+<Em>library_name</Em><Code>.ezc</Code> are made available
+for use.
+								</P>
+								<H3>
+4.2 <Code>define</Code> Declaration
+								</H3>
+								<P>
+There are two basic flavors of the "define" declaration
+1) record/variant definition, and 2) enumeration definition.
+								</P><P>
+The syntax for the enumeration define is:
+								<Code><Pre>
+    define <Em>enumeration_type_name</Em>
+	enumeration
+	    <Em>item_1</Em>
+	    <Em>item_2</Em>
+	    ...
+	    <Em>item_n</Em>
+	generate <Em>routine_names</Em>				</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>enumeration_type_name</Em></Code>			</DT><DD>
+	is the name of the new Enumeration type,
+								</DD><DT>
+    <Code><Em>item_1, item_2, ..., item_n</Em></Code>		</DT><DD>
+	are the names of new constants,
+								</DD><DT>
+    <Code><Em>routine_names</Em></Code>				</DT><DD>
+	is a comma separated list of routine names.
+	{Currently, this list is empty.}
+	The <Code>generate</Code> line is optional.
+								</DD></DL>
+								</BlockQuote>
+								</P><P>
+The enumeration define declaration defines a new
+simple type named <Em>enumeration_type_name</Em>.
+By convention, the first letter of the new type name
+is capitalized.  Each of the listed items is defined
+as a global constant
+<Em>item_1</Em>@<Em>enumeration_type_name</Em>, ...,
+<Em>item_n</Em>@<Em>enumeration_type_name</Em>.
+								</P><P>
+The syntax for the record/variant define is fairly
+complicated.  The syntax is presented first and
+then is subsequently explained.
+								</P><P>
+The syntax for the top level record/variant define
+declaration is:
+								<Code><Pre>
+    define <Em>record_type_name</Em>
+	<Em>record_variant_clause_1</Em>
+	<Em>record_variant_clause_2</Em>
+	...
+	<Em>record_variant_clause_n</Em>
+	generate <Em>routine_names</Em>				</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>record_type_name</Em></Code>			</DT><DD>
+	is the name of the new record/variant type.
+	This type can be either simple or parameterized.
+								</DD><DT>
+    <Code><Em>record_variant_clause_1,
+      ..., record_variant_clause_n</Em></Code>			</DT><DD>
+	are described below,
+								</DD><DT>
+    <Code><Em>routine_names</Em></Code>				</DT><DD>
+	is a comma separated list of routine names.
+	Currently, only <Code>parse</Code> and
+	<Code>traverse</Code> supported as routine names.
+	The <Code>generate</Code> line is optional.
+								</DD></DL>
+								</BlockQuote>
+								</P><P>
+The syntax for a record clause is:
+								<Code><Pre>
+	record
+	    <Em>field_name_1</Em> <Em>type_1</Em>
+	    <Em>field_name_2</Em> <Em>type_2</Em>
+	    ...
+	    <Em>field_name_n</Em> <Em>type_n</Em>		</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>field_name_1</Em>,
+      ..., <Em>field_name_n</Em></Code>				</DT><DD>
+	are unique symbols that name each field
+	in the record, and
+								</DD><DT>
+    <Code><Em>type_1</Em>, ..., <Em>type_n</Em></Code>		</DT><DD>
+	are the types associated with each field.
+	Each type can be either, simple, parameterized,
+	or a routine type.
+								</DT></DL>
+								</BlockQuote>
+								</P><P>
+The syntax for a variant clause is:
+								<Code><Pre>
+	variant <Em>select_name select_type_name</Em>
+	    <Em>field_name_1</Em> <Em>type_1</Em>
+	    <Em>field_name_2</Em> <Em>type_2</Em>
+	    ...
+	    <Em>field_name_n</Em> <Em>type_n</Em>		</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>select_name</Em></Code>				</DT><DD>
+	is a symbol that is used to access the type
+	selector,
+								</DD><DT>
+    <Code><Em>select_type_name</Em></Code>			</DT><DD>
+	is a simple type that is defined for the type selector,
+								</DD><DT>
+    <Code><Em>field_name_1</Em>,
+      ..., <Em>field_name_n</Em></Code>				</DT><DD>
+	are unique symbols that name each field
+	in the record, and
+								</DD><DT>
+    <Code><Em>type_1</Em>, ..., <Em>type_n</Em></Code>		</DT><DD>
+	are the types associated with each field.
+	Each type can be either, simple, parameterized,
+	or a routine type.
+								</DT></DL>
+								</BlockQuote>
+								</P><P>
+The following example shows a simple record declaration:
+								<Code><Pre>
+    define Point3 # Point in 3-space
+        record
+        x Double # X coordinate
+        y Double # Y coordinate
+        z Double # Z coordinate					</Pre></Code>
+
+This defines a new type named <Code>Point3</Code>.
+This new type is a record with three fields named
+<Code>x</Code>, <Code>y</Code>, and <Code>z</Code>,
+all of type <Code>Double</Code>.  This declaration
+also defines the routine <Code>New@Point3</Code> and
+the global object <Code>Null@Point3</Code>.  The following
+code shows this type being used:
+								<Code><Pre>
+    p1 :@= New@Point3()	# Create and return a new point
+    p1.x := 1.0		# Initialize x field
+    p1.y := 2.0		# Initialize y field
+    p1.z := p1.x + p1.y	# Initialize z field
+    p2 :@= Null@Point3	# Initialize p2 to a Null@Point3	</Pre></Code>
+`
+								</P><P>
+The following example shows a variant declaration:
+								<Code><Pre>
+    define Number 		# General purpose number
+        variant kind Number_Kind
+        double Double 		# Double precision float
+        float Float		# Single precision float
+        integer Integer 	# Signed 32-bit number
+        unsigned Unsigned 	# Unsigned 32-bit number	</Pre></Code>
+
+This declaration defines a new type named
+<Code>Number</Code> that has 5 fields named,
+<Code>kind</Code>, <Code>double</Code>, <Code>float</Code>,
+<Code>integer</Code>, and <Code>unsigned</Code>.
+It also defines a new enumeration type named
+<Code>Number_Kind</Code>.
+								</P>
+								<H3>
+4.3 Object Declarations (<Code>global, constant, external</Code>
+								</H3>
+								<P>
+There are three kinds of object declarations --
+global, constant, and external declarations.
+								</P><P>
+The syntax of a <Code>global</Code> declaration is:
+								<Code><Pre>
+    global <Em>variable_name</Em>@<Em>type</Em>			</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>variable_name</Em></Code>				</DT><DD>
+	xxx
+								</DD><DT>
+    <Code><Em>type</Em></Code>					</DT><DD>
+	xxx
+								</DD></DL>
+								</BlockQuote>
+xxx
+								</P><P>
+The syntax of the <Code>constant<Code> declaration is:
+								<Code><Pre>
+    constant <Em>name</Em>@<Em>type</Em> = <Em>expression</Em>	</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>name</Em></Code>					</DT><DD>
+	xxx
+								</DD><DT>
+    <Code><Em>type</Em></Code>					</DT><DD>
+	xxx
+								</DD></DL>
+								</BlockQuote>
+xxx
+								</P><P>
+The syntax of the <Code>external<Code> Declaration is:
+								<Code><Pre>
+    external <Em>variable_name</Em>@<Em>type</Em>		</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>variable_name</Em></Code>				</DT><DD>
+	xxx
+								</DD><DT>
+    <Code><Em>type</Em></Code>					</DT><DD>
+	xxx
+								</DD></DL>
+								</BlockQuote>
+xxx
+								</P>
+								<H3>
+4.4 <Code>routine</Code> Declaration
+								</H3>
+								<P>
+The <Code>routine</Code> declaration is the work
+horse of Easy-C.  Most Easy-C programs are dominated
+by <Code>routine</Code> declarations.
+								</P><P>
+The syntax of the <Code>routine</Code> declaration is:
+								<Code><Pre>
+    routine <Em>routine_name</Em>@<Em>routine_type</Em>
+	takes <Em>argument_name_1</Em> <Em>argument_type_1</Em>
+	...
+	takes <Em>argument_name_N</Em> <Em>argument_type_N</Em>
+	takes_nothing
+	returns <Em>return_type</Em>
+	returns_nothing
+
+	<Em>nested_statements</Em>				</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>routine_name</Em></Code>				</DT><DD>
+	is the routine name.  By convention the
+	routine name is in all lower case.
+								</DD><DT>
+    <Code><Em>routine_type</Em></Code>				</DT><DD>
+	is the routine type.  It can be either
+	a simple type, or a parameterized type.
+	If it is a parameterized type, each of
+	the parameters, must be a simple type
+	name.  By convention, the first letter
+	of a type is capitalized.
+								</DD><DT>
+    <Code><Em>argument_name_1</Em></Code>, ...,
+      <Code><Em>argument_name_N</Em></Code>			</DT><DD>
+	is an argument name.  The argument name
+	becomes a local variable that is accessible
+	throughout the entire routine body.
+								</DD><DT>
+    <Code><Em>argument_type_1</Em></Code>, ...,
+      <Code><Em>argument_type_N</Em></Code>			</DT><DD>
+	is the argument type.  The argument type
+	can be either a simple type, parameterized
+	type, or a routine type.  Nested parameter
+	types are permitted.
+								</DD><DT>
+    <Code><Em>return_type</Em></Code>				</DT><DD>
+	is the routine return type.  If the routine
+	does not return a type,
+	<Code>returns_nothing</Code> is specified
+	instead.
+								</DD><DT>
+    <Code><Em>nested_statements</Em></Code>			</DT><DD>
+	are the nested statements that are executed
+	when the routine is invoked.
+								</DD></DL>
+								</BlockQuote>
+A routine must have either one or more <Code>takes</Code>
+clauses or a single <Code>takes_nothing</Code> clause.
+A routine must have either a <Code>returns</Code> clause
+or a <Code>returns_nothing</Code> clause.  By convention,
+a short comment occurs after the <Code>returns</Code>
+or <Code>returns_nothing</Code> clause that describes
+what the routine does.
+								</P><P>
+The routine <Code>main@Easy_C</Code> is interesting
+in that it is the first routine in a program that is
+executed.
+								</P>
+								<H3>
+4.5 Miscellaneous Declarations
+								</H3>
+								<P>
+There are a few extra declarations that need
+additional documentation:
+								<BlockQuote>
+								<DL><DT>
+    <Code>include</Code> Declaration				</DT><DD>
+	includes a file, but not as a library
+								</DD><DT>
+    <Code>require</Code> Declaration				</DT><DD>
+	requires a file, but not as a library
+								</DD><DT>
+    <Code>defines_prefix</Code> Declaration			</DT><DD>
+	used for extracting macro values from
+	C header files.
+								</DD></DL>
+								</BlockQuote>
+								</P>
+
+								<H2>
+    <A Name="Statements">
+5. Statements</A>
+								</H2>
+With the exception of the assign statement, each
+statement starts with a keyword.  The assign
+statement is the only exception to this rule.
+								<H3>
+5.1 Assert Statement
+								</H3>
+								<P>
+The syntax of the <code>assert</Code> statement is:
+								<Code><Pre>
+    assert <Em>logical_expression</Em>				</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>logical_expression</Em></Code>			</DT><DD>
+	is an expression that returns type
+	<Code>Logical</Code> (i.e. <Code>true</Code>
+	or </Code>false</Code>).
+								</DD></DL>
+								</BlockQuote>
+If <Code><Em>logical_expression</Em></Code>
+evaluates to <Code>false<Code> the program
+execution is immediately terminated with a
+fatal run time error.  The purpose of this
+statement is for the programmer to inform
+anybody who reads the code about code
+invariants.
+								</P>
+								<H3>
+5.2 Assign Statement
+								</H3>
+								<P>
+The assign statement occurs whenever the statement
+has a <Code>:=</Code> or <Code>:@=</Code> on the line.
+When the compiler sees either of those two tokens,
+it inserts an invisible <Code>{assign}</Code> at
+the beginning of the line.
+								</P><P>
+The syntax of the assign statement is:
+								<Code><Pre>
+    <Em>left_expression</Em> := </Em>right_expression</Em>	</Pre></Code>
+
+or
+								<Code><Pre>
+    <Em>variable</Em> :@= </Em>right_expression</Em>		</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>left_expression</Em></Code>			</DT><DD>
+	Left expression is constrained to be one of
+	exactly three formats:					<BlockQuote>
+								<DL><DT>
+	    <Code><Em>variable</Em></Code>			</DT><DD>
+		yyy
+								</DD><DT>
+	    <Code><Em>expression.field_name</Em></Code>		</DT><DD>
+		yyy
+								</DD><DT>
+	    <Code><Em>expression1[expression1, ...]</Em></Code>	</DT><DD>
+		yyy
+								</DD></DL>
+								</BlockQuote>
+								</DD><DT>
+    <Code><Em>right_expression</Em></Code>			</DT><DD>
+	xxx
+								</DD><DT>
+    <Code><Em>variable</Em></Code>				</DT><DD>
+	xxx
+								</DD></DL>
+								</BlockQuote>
+								</P>
+								<H3>
+5.2 <Code>break</Code> Statement
+								</H3>
+								<P>
+The syntax of the <Code>break</Code> statement is:
+								<Code><Pre>
+    break <Em>number</Em>					</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>number</Em></Code>				</DT><DD>
+	is an option break level number.  This
+	number specifies how many levels of loops
+	to break out of.  If
+	<Code><Em>number</Em></Code> is not
+	specified, it defaults to 1, which breaks
+	out of one level of looping.
+								</DD></DL>
+								</BlockQuote>
+This statement is only legal when it occurs inside of
+a <Code>while</Code> statement.  A <Code>break</Code>
+statement outside of a <Code>while</Code> statement
+generates a compiler error.
+								</P>
+								<H3>
+5.3 <Code>call</Code> Statement
+								</H3>
+								<P>
+The syntax of the <Code>call</Code> statement is:
+								<Code><Pre>
+    call <Em>expression</Em>					</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>expression</Em></Code>				</DT><DD>
+	is an expression that is evaluated for its
+	side-effects only.  Most of the time this
+	means that <Code><Em>expression</Em></Code>
+	is a single routine invocation, but other
+	more complicated expressions are permitted.
+								</DD></DL>
+								</BlockQuote>
+Any return value is ignored.
+								</P>
+								<H3>
+5.4 <Code>continue</Code> Statement
+								</H3>
+								<P>
+The syntax of the <Code>continue</Code> statement is:
+								<Code><Pre>
+    continue <Em>number</Em>					</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>number</Em></Code>				</DT><DD>
+	is an option continue level number.  This
+	number specifies how many levels of loops
+	to continue to.  If
+	<Code><Em>number</Em></Code> is not
+	specified, it defaults to 1, which continues
+	the inner most loop level.
+								</DD></DL>
+								</BlockQuote>
+This statement is only legal when it occurs inside of
+a <Code>while</Code> statement.  A <Code>continue</Code>
+statement outside of a <Code>while</Code> statement
+generates a compiler error.
+
+								</P>
+								<H3>
+5.5 <Code>do_nothing</Code> Statement
+								</H3>
+								<P>
+The syntax of the <Code>do_nothing</Code> statement is:
+								<Code><Pre>
+    do_nothing							</Pre></Code>
+
+When executed, this statement does not do anything.
+The purpose is for the programmer to inform the reader
+that he or she that no code is needed at the specified
+location.  This happens pretty commonly after a
+<Code>case</Code> clause in a <Code>switch</Code>
+statement.
+								</P>
+								<H3>
+5.6 <Code>if</Code> Statement
+								</H3>
+								<P>
+The syntax of the <Code>if</Code> statement is:
+								<Code><Pre>
+    if <Em>logical_expression_1</Em>
+	<Em>nested_statements_1</Em>
+    else_if <Em>logical_Expression_2</Em>
+	<Em>nested_statements_2</Em>
+    ...
+    else_if <Em>Logical_expression_N</Em>
+	<Em>nested_statements_N</Em>
+    else
+	<Em>nested_statements_last</Em>				</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>logical_expression_1</Em>, ...,
+      <Em>logical_Expression_N</Em></Code>			</DT><DD>
+	are expressions that evaluate to a value
+	of type <Code>Logical</Code>.
+								</DD><DT>
+    <Code><Em>nested_statements_1</Em>, ...,
+      <Em>nested_statements_N</Em></Code>			</DT><DD>
+	are the one or more nested statements
+	that are executed when the logical
+	expression immediately above returns
+	<Code>true</Code>.
+								</DD><DT>
+    <Code><Em>nested_statements_last</Em></Code>		</DT><DD>
+	are the one or more nested statements
+	that are executed if none of the logical
+	expressions return <Code>true</Code>.
+								</DD></DL>
+								</BlockQuote>
+
+Basically, each of the logical expressions is evaluated
+in sequence until the first expression returns
+<Code>true</Code>.  For the first expression that
+evaluates to <Code>true</Code> the nested statements
+immediately under the expression are executed.
+After the nested statements are executed, the
+statement is finished and code execution resumes
+immediately after the <Code>if</Code> statement.
+In the case, where none of the expressions evaluates
+to <Code>true</Code>, the nested statements under
+the <Code>else</Code> clause are executed instead.
+Finally, the <Code>else_if</Code> and <Code>else</Code>
+clauses are optional.  The only required portion of
+an <Code>if</Code> statement is the first expression
+(i.e. <Code><Em>expression_1</Em></Code>) and the
+nested statements immediately following it.
+
+								</P>
+								<H3>
+5.7 <Code>return</Code> Statement
+								</H3>
+								<P>
+The syntax of the <Code>return</Code> statement is:
+								<Code><Pre>
+    return <Em>expression</Em>					</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>expression</Em></Code>				</DT><DD>
+	is an expression that is evaluated for the
+	routine return value.
+								</DD></DL>
+								</BlockQuote>
+A <Code>return</Code> statement can occur anywhere
+in a nested statements that make up the routine body.
+Upon execution, the routine immediately terminates
+execution and returns to the routine caller.  If the
+routine is supposed to return a value,
+<Code><Em>expression</Em></Code> must be present
+and evaluate to a type that matches the
+<Code>returns</Code> clause in the routine header.
+If the routine header specifies
+<Code>returns_nothing</Code>,
+<Code><Em>expression</Em></Code> must not be present.
+								</P>
+								<H3>
+5.8 <Code>switch</Code> Statement
+								</H3>
+								<P>
+The syntax of the <Code>switch</Code> statement is:
+								<Code><Pre>
+    switch <Em>enumerate_expression</Em>
+      all_cases_required
+      case <Em>item_1a</Em>, ..., <Em>item_1n</Em>
+	<Em>nested_statements_1</Em>
+      ...
+      case <Em>item_1a</Em>, ..., <Em>item_1m</Em>
+	<Em>nested_statements_M</Em>
+      default
+	<Em>nested_statements_default</Em>			</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>enumerate_expression</Em></Code>			</DT><DD>
+	is an expression that evaluates to a type
+	that is an enumeration type,
+								</DD><DT>
+    <Code><Em>item_1a</Em>, ..., <Em>item_1n</Em></Code>	</DT><DD>
+	are members of the enumeration type.
+	There must be at least enumeration item
+	after the <Code>case</Code>; all others
+	are optional.
+								</DD><DT>
+    <Code><Em>nested_statements_1</Em>, ...,
+      <Em>nested_statements_M</Em></Code>			</DT><DD>
+	are the nested statements that are executed when
+	the <Code><Em>enumerate_expression</Em></Code>
+	evaluates to an item that is in the preceding
+	enumeration item.
+								</DD><DT>
+    <Code><Em>nested_statements_last</Em></Code>		</DT><DD>
+	are the nested statements that are executed
+	if <Code><Em>enumerate_expression</Em></Code>
+	does not match any <Code>case</Code> items.
+								</DD></DL>
+								</BlockQuote>
+The <Code>switch</Code> statement must have at least
+one <Code>case</Code> or one </Code>default</Code>
+clause.  If <Code>all_cases_required</Code> is present,
+absolutely every possible enumeration item must be
+listed in one or more <Code>case</Code> clauses;
+in addition, <Code>all_cases_required</Code> and
+<Code>default</Code> make no sense in the same
+<Code>switch</Code> statement.  If there is no
+<Code>default</Code> clause present, and the
+<Code><Em>enumerate</Em></Code> does not evaluate
+to a matching enumerate item in a <Code>case</Code>
+clause, then no nested statements are executed at
+all; otherwise, exactly one block of nested statements
+will be executed depending upon the value of
+<Code><Em>enumerate_expression</Em></Code>.
+    								</P>
+								<H3>
+5.9 <Code>while</Code> Statement
+								</H3>
+								<P>
+The syntax of the <Code>while</Code> statement is:
+								<Code><Pre>
+    while <Em>logical_expression</Em>
+	<Em>nested_statements</Em>				</Pre></Code>
+
+where								<BlockQuote>
+								<DL><DT>
+    <Code><Em>logical_expression</Em></Code>			</DT><DD>
+	is an expression that evaluates to
+	type <Code>Logical</Code> (i.e. it
+	returns <Code>true</Code> or
+	<Code>false</Code>.
+								</DD><DT>
+    <Code><Em>nested_statements</Em></Code>			</DT><DD>
+	are the nested statement that are
+	executed each time
+	<Code><Em>logical_expression</Em></Code>
+	evaluates to <Code>true</Code>.
+								</DD></DL>
+								</BlockQuote>
+This statement will repeatably evaluate
+<Code><Em>logical_expression</Em></Code> until
+the first time it returns <Code>false</Code>.
+Each time <Code><Em>logical_expression</Em></Code>
+returns <Code>true</Code>,
+<Code><Em>nested_statements</Em></Code> are evaluated.
+								</P></P>
+The <Code>break</Code>, <Code>continue</Code> and
+<Code>return</Code> statements can all be used to
+break out of <Code>while</Code> statement loop.
+								</P>
+								<H2>
+    <A Name="Expressions">
+6. Expressions</A>
+								</H2>
+								<P>
+The table below expresses the precedence of operators
+in Easy-C:
+								<BlockQuote>
+    <Table Border>
+      <TR>
+	<TH>Prec.</TH>
+	<TH>Operators</TH>
+	<TH>Assoc.</TH>
+	<TH>Routines</TH>
+      </TR><TR>
+	<TD>14</TD>
+	<TD>t[ t]</TD>
+	<TD>left</TD> 
+	<TD></TD>
+      </TR><TR>
+	<TD>13</TD>
+	<TD>( @( ) i[ i] @ .</TD>
+	<TD>left</TD>
+ 	<TD>fetch_#(), store_#(), field_set(), field_get()</TD>
+      </TR><TR>
+	<TD>12</TD>
+	<TD>u- u! u+ u~</TD>
+	<TD>right</TD>
+	<TD>negate(), not()</TD>
+      </TR><TR>
+	<TD>11</TD>
+	<TD>* / %</TD>
+	<TD>left</TD>
+	<TD>multiply(), divide(), remainder()</TD>
+      </TR><TR>
+	<TD>10</TD>
+	<TD>+ -</TD>
+	<TD>left</TD>
+	<TD>add, minus</TD>
+      </TR><TR>
+	<TD>9</TD>
+	<TD>&lt;&lt; &gt;&gt;</TD>
+	<TD>left</TD>
+	<TD>left_shift(), right_shift()</TD>
+      </TR><TR>
+	<TD>8</TD>
+	<TD>&amp;</TD>
+	<TD>left</TD>
+	<TD>and()</TD>
+      </TR><TR>
+	<TD>7</TD>
+	<TD>^</TD>
+	<TD>left</TD>
+	<TD>xor()</TD>
+      </TR><TR>
+	<TD>6</TD>
+	<TD>|</TD>
+	<TD>left</TD>
+	<TD>or()</TD>
+      </TR><TR>
+	<TD>5</TD>
+	<TD>&lt; &gt; &lt;= &gt;= != = == !==</TD>
+	<TD>left</TD>
+	<TD>equal(), less_than(), greater_than(), identical()</TD>
+      </TR><TR>
+	<TD>4</TD>
+	<TD>&amp;&amp;</TD>
+	<TD>left</TD>
+	<TD></TD>
+      </TR><TR>
+	<TD>3</TD>
+	<TD>||</TD>
+	<TD>left</TD>
+	<TD></TD>
+      </TR><TR>
+	<TD>2</TD>
+	<TD>,</TD>
+	<TD>left</TD>
+	<TD></TD>
+      </TR><TR>
+	<TD>1</TD>
+	<TD>:= :@=</TD>
+	<TD>left</TD>
+	<TD></TD>
+      </TR>
+    </Table>
+								</BlockQuote>
+The operators that are preceded by a letter need a little
+more discussion.  The 't[' and 't]' refer to when a square
+brackets are used for type parameters.  Conversely, 'i['
+and 'i]', refer to when square brackets are used as an
+indexing operator (e.g. <Code>Array</Code> fetch and
+store.)  Finally, the 'u-', 'u!', 'u+', and 'u~' refer
+to unary operators.  Unary operators are the only ones
+that group right to left in their associativity (e.g. ---a
+is the same a -(-(-a)).)   All other operators are left
+to right associativity.
+								</P><P>
+For those of you that are familiar with the operator
+precedence of ANSI-C, you should be warned that there
+are a few differences between Easy-C and ANSI-C
+precedence.  In particular, the relational operators
+in Easy-C have a lower precedence than in ANSI-C.
+In addition, the precedence of comma and assignment
+are swapped.
+								</P><P>
+In ANSI-C, the evaluation order for routine arguments
+undefined.  In Easy-C, left to right evaluation
+is strictly enforced.
+								</P>
+								<HR>
+								<Address>
+    <A HRef="../../copyright.html">
+Copyright</A> &copy; 2007 by
+    <A HRef="../../gramlich.html">
+Wayne C. Gramlich</A>.
+All rights reserved.
+								</Address>
+								</Body>
+								</HTML>

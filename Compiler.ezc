@@ -1,0 +1,2502 @@
+easy_c 1.0
+
+# Copyright (c) 2004-2010 by Wayne C. Gramlich.
+# All rights reserved.
+
+# This is compiler type:
+library Easy_C
+library EZCC
+library Declaration
+library Parse
+library Token
+library Unix
+
+define Collection			# Collection information
+    record
+	name String			# Collection name
+	sources Array[Source]		# Sources that make up collection
+	version_major Unsigned		# Major version number
+	version_minor Unsigned		# Minor version number
+
+define Compile_Phase			# Keep track of compiler phase
+    enumeration
+	ezc_read_library_type_find	# Read in .ezc file
+	ezc_read
+	ezg_read			# Read in definitions form .ezg file
+	h_generate			# Generate .h file
+	c_generate			# Generate .c file
+	c_compile			# Compile .c file
+	link				# Link everything together
+
+define Compiler				# Compiler data structures:
+    record
+	break_labels Array[Unsigned]	# Loop break labels (non-zero)
+	buffer String			# Buffer in {traverser}
+	c_indent Unsigned		# Amount to indent
+	collections Array[Collection]	# All {Collection} objects
+	collection_table Hash_Table[String, Collection] # {Collection} table
+	continue_labels Array[Unsigned]	# Loop continue labels (non-zero)
+	current_routine Routine_Declaration # Current routine
+	cast_suppress Logical		# Suppress routine cast
+	define_table Hash_Table[String, Define_Declaration] # Define table
+	defines Array[Define_Declaration] # All {Define_Declaration} objects
+	defines_prefixes Array[Defines_Prefix_Declaration] # define prefixes
+	define_datas Array[Define_Data]	# #define information
+	error_kinds Array[String]	# Error kinds
+	error_tokens Array[Token]	# Error locations
+ 	enumeration_prefixes Array[Enumeration_Prefix_Clause] # enum. prefixes
+	file File			# Current {file}
+	file_table Hash_Table[String, File] # File table
+	files Array[File]		# Files for program
+	global_libraries Array[Source]	# Global library list
+	includes Array[Include_String_Declaration] # Includes
+	interface_bases Array[String]	# Interface bases
+	label_count Unsigned		# Label count
+	level Unsigned			# Current indentation level
+	library_bases Array[String]	# Library bases
+	loads Array[String]		# Load requests
+	loop_levels Array[Unsigned]	# Levels at which loops occur
+	messages Messages		# Error Messages
+	middlefix String		# File name "middle" for bootstrapping
+	options Options			# Options used
+	parser Parser			# Parser object
+	phase Phase			# Compiler phase
+	scalar_table Hash_Table[String, Type] # Scalar table
+	scanned_types Array[Type]	# Scanned types
+	searches Array[String]		# Directories to search
+	search_options String		# Directory list in "-I... " format
+	other_typedefs String		# Other typedefs
+	simple_table Hash_Table[String, Type] # Simple type table
+	simple_typedefs String		# Simple type definitions
+	source Source			# Current {source} being 
+	sources Array[Source]		# All source files
+	source_table Hash_Table[String, Source] # base name => {Source} table
+	statements Array[Statement]	# Temporary statements
+	switch_levels Array[Unsigned]	# Levels at which switches occur
+	temporaries Array[Variable]	# Temporary variables
+	temporary String		# Temporary buffer
+	temporary2 String		# 2nd temporary buffer
+	token Token			# Temporary token
+	tokenizer Tokenizer		# Tokenizer
+	trace_line Unsigned		# Line to trace
+	tracing Logical			# {true}=>tracing C code emit
+	traverser Traverser		# Traverser object
+	type_byte Type			# Byte type
+	type_character Type		# Character type
+	type_double Type		# Double type
+	type_easy_c Type		# Easy_C type
+	type_float Type			# Float type
+	type_integer Type		# Integer type
+	type_long_integer Type		# Long_Integer type
+	type_long_unsigned Type		# Long_Integer type
+	type_logical Type		# Logical type
+	type_quad Type			# Quad type
+	type_pointer_pointer Type	# Pointer__Pointer type
+	type_short Type			# Short type
+	type_string Type		# String type
+	type_unsigned Type		# Unsigned type
+	typed_name Typed_Name		# Temporary {Typed_Name} object
+	xtyped_name_object_table Hash_Table[Typed_Name, Typed_Name_Object]
+	variables Array[Variable]	# Variables
+	variable_table Hash_Table[String, Variable] # Variable table
+	undefs_generated Logical	# {true}=> #undef's generated
+
+define Phase
+    enumeration
+	#library_type_find		# Find libraries and associated types
+	prefix_scan			# Find prefix declarations
+	ezh_emit			# Emit a .ezh file
+	h_includes_emit			# Emit #includes for .h file
+	h_typedefs_emit			# Emit typedefs for .h file
+	h_structs_emit			# Emit structs for .h file
+	h_externs_emit			# Emit externs for .h file
+	c_emit				# Emit a C (.c) file
+	c_defines_emit			# Emit define code for .c file
+	link_emit			# Emit C code for top .c file
+	link_scan			# Link scan
+	ezh_scan			# Scan .ezh file
+	generate_emit			# Emit generate code
+	source_find			# Find source files
+
+
+define Variable
+    record
+	name String			# Variable name
+	type Type			# Variable type
+	level Unsigned			# First use level (0xffffffff=>unused)
+
+define Source					# Source file
+    record
+	base_name String			# Base name of source file
+	collection Collection		 	# {Collection} (null for none)
+	collection_declaration Collection_Declaration # {Collection_Declaration}
+	defines Array[Define_Declaration]	# Type definitions in {Source}
+	ezc File				# .ezc {File} object
+	ezg File				# .ezg {File} object
+	global_libraries Array[Global_Library_Declaration] # Global libraries
+	interfaces Array[Interface_Declaration]	# Requested interfaces
+	libraries Array[Library_Declaration]	# Requested libraries
+	requires Array[Require_Declaration]	# Requested requires
+
+# {Array} routines:
+
+routine visit@Array[Sub_Type]
+    takes array Array[Sub_Type]
+    takes buffer String
+    takes compiler Compiler
+    takes visit_routine [ <= Sub_Type, String, Compiler]
+    returns_nothing
+
+    # This routine will visit each item in {items} using {compiler}.
+
+    #call put@(form@("visit@Array[]: size=%d%\n\") / f@(array.size)),
+    # error@Out_Stream)
+
+    size :@= array.size
+    index :@= 0
+    while index < size
+	sub_type :@= array[index]
+	call visit_routine(sub_type, buffer, compiler)
+	index := index + 1
+
+
+# {Collection} routines:
+
+routine create@Collection
+    takes name String
+    takes source Source
+    returns Collection
+
+    # This routine will create and return a new {Collection} object that
+    # contains {name} and a list of sources that start with {source}.
+
+    sources :@= new@Array[Source]()
+    call append@(sources, source)
+
+    collection :@= new@Collection()
+    collection.name := name
+    collection.sources := sources
+    collection.version_major := 0xffffffff
+    collection.version_minor := 0xffffffff
+    return collection
+
+
+routine buffer_append@Collection
+    takes collection Collection
+    takes buffer String
+    returns_nothing
+
+    # This routine will append {collection} to {buffer}.
+
+    assert 0f
+
+
+# {Compile_Phase} routines:
+
+routine f@Compile_Phase
+    takes compile_phase Compile_Phase
+    returns String
+
+    # This routine will format {compile_phase} using the control string
+    # obtained from {filed_next@Format}().
+
+    value :@= field_next@Format()
+    call trim@(value, 0)
+    text :@= null@String
+    switch compile_phase
+      all_cases_required
+      case ezc_read_library_type_find
+	text := "ezc_read_library_type_find"
+      case ezc_read
+	text := "ezc_read"
+      case ezg_read
+	text := "ezg_read"
+      case h_generate
+	text := "h_generate"
+      case c_generate
+	text := "c_generate"
+      case c_compile
+	text := "c_compile"
+      case link
+	text := "link"
+    call string_append@(value, text)
+    return value
+
+
+# {Compiler} routines:
+
+routine collection_register@Compiler
+    takes compiler Compiler
+    takes collection_declaration Collection_Declaration
+    takes source Source
+    returns Collection
+
+    # This routine will return the {Collection} object associated with {name}.
+    # If there is no such {Collection} object, one is created.
+    # No matter what, {source} is added to the returned {Collection}.
+
+    name :@= collection_declaration.name.value
+    collection :@= lookup@(compiler.collection_table, name)
+    if collection == null@Collection
+	collection := create@Collection(name, source)
+	call append@(compiler.collections, collection)
+    else
+	call append@(collection.sources, source)
+
+    # See about extracting major and minor versions:
+    if equal@(name, collection.name)
+	float_number :@= collection_declaration.float_number
+	version :@= float_number.value
+	size :@= version.size
+	number :@= 0
+	index :@= 0
+	while index < size
+	    character :@= version[index]
+	    if character = '.'
+		# We are done with major version:
+		collection.version_major := number
+		number := 0
+	    else_if is_decimal_digit@(character)
+		number := number * 10 + decimal_convert@(character)
+	    else
+		call log@(compiler, float_number,
+		  form@("Version number (%v%) is not in major.minor form") /
+		  f@(version))
+		break
+	    index := index + 1
+	collection.version_minor := number
+
+    return collection
+
+
+routine define_register@Compiler
+    takes compiler Compiler
+    takes define Define_Declaration
+    returns_nothing
+
+    # This routine will register {define} with {compiler}.
+
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+
+    #call d@(form@("=>define_register@Compiler(): %t%\n\") / f@(define_type))
+
+    type_name :@= base_name@(define_type)
+    define_table :@= compiler.define_table
+    previous_define :@= lookup@(define_table, type_name)
+    if previous_define == null@Define_Declaration
+	# First (and hopefully) only declaration:
+	assert !insert@(define_table, type_name, define)
+	define_clauses :@= define.define_clauses
+	size :@= define_clauses.size
+	index :@= 0
+	while index < size
+	    define_clause :@= define_clauses[index]
+	    switch define_clause.kind
+	      all_cases_required
+	      case base_type
+		# Add to the scalar table:
+
+		base_type :@= define_clause.base_type
+		new_type :@= simple_create@Type(define_name)
+		call scalar_insert@(compiler,
+		  define_name, new_type, base_type.end_of_line)
+	      case simple
+		simple :@= define_clause.simple
+		simple_type :@= simple.type
+		if is_scalar@Type(simple_type)
+		    new_type :@= simple_create@Type(define_name)
+		    call scalar_insert@(compiler,
+		      define_name, new_type, simple.end_of_line)
+	      case simple_numeric
+		simple_numeric :@= define_clause.simple_numeric
+		call scalar_insert@(compiler,
+		  define_name, simple_numeric.type, simple_numeric.end_of_line)
+	      case end_of_line, enumeration, enumeration_prefix, error,
+	       external, generate, note, record, record_import, registers,
+	       variant
+		do_nothing
+	    index := index + 1
+    else
+	# Duplicate declaration:
+	call log2@(compiler.messages,
+	  define.end_of_line, previous_define.end_of_line, 
+	  form@("%t% is defined in multiple locations\n\") / f@(define_type))
+
+
+#routine compile@Compiler
+#    takes compiler Compiler
+#    takes source_base String
+#    takes options Options
+#    takes compile_phase Compile_Phase
+#    returns Unsigned
+#
+#    # This routine will compile the code specified by options at phase
+#    #, level {phase}.
+#    #,  {phase}=1 => .ezg, .ezh, .h generation,
+#    #,  {phase}=2 => .c genaration,
+#    #,  {phase}=3 => .o generation.
+#
+#    includes :@= compiler.includes
+#    defines_prefixes :@= compiler.defines_prefixes
+#    enumeration_prefixes :@= compiler.enumeration_prefixes
+#    call trim@(includes, 0)
+#    call trim@(defines_prefixes, 0)
+#    call trim@(enumeration_prefixes, 0)
+#
+#    middlefix :@= compiler.middlefix
+#    c_suffix :@= new@String()
+#    ezg_suffix :@= new@String()
+#    ezh_suffix :@= new@String()
+#    h_suffix :@= new@String()
+#    call string_append@(c_suffix, middlefix)
+#    call string_append@(ezg_suffix, middlefix)
+#    call string_append@(ezh_suffix, middlefix)
+#    call string_append@(h_suffix, middlefix)
+#
+#    call string_append@(c_suffix, ".c")
+#    call string_append@(ezg_suffix, ".ezg")
+#    call string_append@(ezh_suffix, ".ezh")
+#    call string_append@(h_suffix, ".h")
+#
+#    temporary :@= compiler.temporary
+#    phase_trace :@= options.verbose
+#    trace :@= false@Logical
+#    #trace := true@Logical
+#    if trace
+#        call put@(form@("=>compile@Compiler(*, %qv%, *, %d%)\n\") % 
+#	  f@(source_base) / f@(0), error@Out_Stream)
+#
+#    # Get some basic resources:
+#    buffer :@= compiler.buffer
+#    messages :@= compiler.messages
+#    parser :@= compiler.parser
+#    result :@= 0
+#    tokenizer :@= compiler.tokenizer
+#
+#    # Extract options:
+#    verbose :@= options.verbose
+#
+#    switch compile_phase
+#      all_cases_required
+#      case ezc_read_library_type_find
+#	assert false@Logical	
+#      case ezg_read
+#	assert false@Logical	
+#      case h_generate
+#	assert false@Logical	
+#      case ezc_read
+#	if phase_trace
+#	    call put@(form@("Phase 1: %qv%\n\") / f@(source_base),
+#	      error@Out_Stream)
+#
+#	ezc_file :@= read@File(source_base, "", ".ezc", compiler)
+#	define_datas :@= ezc_file.define_datas
+#	compiler.define_datas := define_datas
+#	if ezc_file !== null@File
+#	    ezc_tokens :@= ezc_file.tokens
+#	    root :@= parse@(parser, ezc_tokens)
+#	    ezc_file.root := root
+#
+#	    # Figure out the various prefix commands:
+#	    call visit@(root, buffer, compiler, prefix_scan@Phase)
+#
+#	    zero :@= 0i
+#	    defines_size :@= defines_prefixes.size
+#	    enumerations_size :@= enumeration_prefixes.size
+#	    if defines_size != 0 || enumerations_size != 0
+#		# We've got some work to do:
+#
+#		#call d@(form@("defines_size=%d%\n\") / f@(defines_size))
+#		#call d@(form@("enumerations_size=%d%\n\") /
+#		#  f@(enumerations_size))
+#
+#		includes := compiler.includes
+#		size :@= includes.size
+#		if size = 0
+#		    defines_prefix :@= defines_prefixes[0]
+#		    call log@(compiler, defines_prefix.defines_prefix.keyword,
+#		      "There are no 'include' declarations to fetch from")
+#		else
+#		    # Construct an file containing the #includes:
+#		    include_stream :@= open@Out_Stream("/tmp/includes.c")
+#		    assert include_stream !== null@Out_Stream
+#		    index :@= 0
+#		    while index < size
+#			include :@= includes[index]
+#			call put@(form@("#include \dq\%s%\dq\//C1./\n\") /
+#			  f@(string_convert@(include.string)), include_stream)
+#			index := index + 1
+#		    call close@(include_stream)
+#
+#		    compiler_name :@= options.compiler_executable
+#		    if compiler_name == null@String
+#			compiler_name := "gcc"
+#		    command :@= new@String()
+#		    call string_append@(command,
+#		      form@("%s% -E %s% -I. -dM /tmp/includes.c | sed s,#,,g | sed /[0-9]EE/d | sed /[0-9]D[DLF]/d") %
+#		      f@(compiler_name) / f@(compiler.search_options))
+#		    #call d@(form@("Command: %v%\n\") / f@(command))
+#
+#		    define_stream :@= pipe_read@In_Stream(command)
+#		    define_contents :@= all_read@(define_stream, null@String)
+#		    call close@(define_stream)
+#		    #call put@(define_contents, error@Out_Stream)
+#
+#		    define_tokens :@= new@Array[Token]()
+#		    indents :@= new@Array[Unsigned]()
+#		    call append@(indents, 0)
+#
+#		    tokenizer.contents := define_contents
+#		    tokenizer.tokens := define_tokens
+#		    tokenizer.index := 0
+#		    tokenizer.indents := indents
+#	
+#		    lexeme :@= at_sign@Lexeme
+#		    while lexeme != end_of_file@Lexeme
+#			token :@= next@(tokenizer)
+#			lexeme := token.lexeme
+#			call append@(define_tokens, token)
+#
+#		    parser := create@Parser(define_tokens, new@Messages())
+#		    define_root :@= parse@Define_Root(parser)
+#
+#		    # Now output the defines:
+#		    defines :@= define_root.defines
+#		    define_lines :@= new@Array[Define_Line]()
+#		    size := defines.size
+#		    index := 0
+#		    while index < size
+#			define :@= defines[index]
+#			switch define.kind
+#			  case define_line
+#			    call append@(define_lines, define.define_line)
+#			index := index + 1
+#
+#		    call sort@(define_lines, compare@Define_Line)
+#
+#		    size := define_lines.size
+#		    lower_case :@= new@String()
+#		    index := 0
+#		    while index < size
+#			define_line :@= define_lines[index]
+#			define_name :@= define_line.name.value
+#			define_name_size :@= define_name.size
+#			define_value :@= define_line.number.value
+#
+#			#call put@(form@(define[%d%] %qv% %qv%\n\") %
+#			#  f@(index) % f@(define_name) / f@(define_value),
+#			#  error@Out_Stream)
+#
+#			defines_index :@= 0
+#			while defines_index < defines_size
+#			    defines_prefix :@= defines_prefixes[defines_index]
+#			    prefix :@= defines_prefix.prefix.value
+#			    match :@= defines_prefix.match.value
+#
+#			    #call put@(form@(
+#			    #  "    prefix[%d%] %qv% match %qv%\n\") %
+#			    #  f@(prefixes_index) % f(prefix) / f@(match),
+#			    #  error@Out_Stream)
+#
+#			    match_size :@= match.size
+#			    if define_name_size >= match_size &&
+#			      range_compare@(define_name, 0, match_size,
+#			      match, 0, match_size) = zero
+#				# We have a match:
+#				#call put@("*************************Match\n\",
+#				#  error@Out_Stream)
+#				new_name :@= new@String()
+#				call string_append@(new_name, prefix)
+#				call range_append@(new_name, define_name,
+#				  match_size, define_name_size - match_size)
+#				call lower_case@(new_name)
+#
+#				define_data :@= new@Define_Data()
+#				define_data.old_name := define_name
+#				define_data.new_name := new_name
+#				define_data.value := define_value
+#				define_data.type_name :=
+#				  defines_prefix.type_name.value
+#				call append@(define_datas, define_data)
+#			    defines_index := defines_index + 1
+#
+#			enumerations_index :@= 0
+#			while enumerations_index < enumerations_size
+#			    enumeration_prefix :@=
+#			      enumeration_prefixes[enumerations_index]
+#			    prefix :@= enumeration_prefix.prefix.value
+#			    match :@= enumeration_prefix.prefix.value
+#			    match_size :@= match.size
+#			    if define_name_size >= match_size &&
+#			      range_compare@(define_name, 0, match_size,
+#			      match, 0, match_size) = 0i
+#				# We have a match:
+#				new_name :@= new@String()
+#				call string_append@(new_name, define_name)
+#				call lower_case@(new_name)
+#
+#				#call d@(form@("enum_def match:%v%=%v%\n\") %
+#				#  f@(define_name) / f@(define_value))
+#
+#				if !enumeration_prefix.define_datas_initialized
+#				    enumeration_prefix.define_datas :=
+#				      new@Array[Define_Data]()
+#				    enumeration_prefix.
+#				      define_datas_initialized := true@Logical
+#				define_data :@= new@Define_Data()
+#				define_data.old_name := define_name
+#				define_data.new_name := new_name
+#				define_data.value := define_value
+#				define_data.type_name := ""
+#				call append@(enumeration_prefix.define_datas,
+#				  define_data)
+#			    enumerations_index := enumerations_index + 1
+#			index := index + 1
+#
+#	    # Generate .ezg file:
+#	    call trim@(buffer, 0)
+#	    call visit@(root, buffer, compiler, generate_emit@Phase)
+#	    ezg_file_name :@= new@String()
+#	    call string_append@(ezg_file_name, source_base)
+#	    call string_append@(ezg_file_name, ezg_suffix)
+#	    ezg_stream :@= open@Out_Stream(ezg_file_name)
+#	    assert ezg_stream !== null@Out_Stream
+#	    call put@(buffer, ezg_stream)
+#	    call close@(ezg_stream)
+#
+#	    if buffer.size != 0
+#		# There is stuff in the .ezg file that needs to be processed:
+#		ezg_file :@= read@File(source_base,
+#		  middlefix, ".ezg", compiler)
+#		assert ezg_file !== null@File
+#		call parse_append@(parser, root, ezg_file.tokens)
+#
+#	    # Generate the .h file:
+#	    upper_source_base :@= new@String()
+#	    call upper_case_append@(upper_source_base, source_base)
+#
+#	    call trim@(buffer, 0)
+#
+#	    call string_append@(buffer,
+#	      form@("#ifndef %s%_INCLUDED\n\") / f@(upper_source_base))
+#	    call string_append@(buffer,
+#	      form@("#define %s%_INCLUDED 1\n,n\") / f@(upper_source_base))
+#	    call string_append@(buffer,
+#	      "// Declare all enum's and typedef's first: ./\n\")
+#
+#	    call visit@(root, buffer, compiler, h_typedefs_emit@Phase)
+#
+#	    simple_typedefs :@= compiler.simple_typedefs
+#	    if simple_typedefs.size != 0
+#		#call string_append@(buffer,
+#		#  "\n\ Simple typedefs are stuffed into a macro: \n\")
+#		call string_append@(buffer, simple_typedefs)
+#		call trim@(simple_typedefs, 0)
+#		#call string_append@(buffer, "\n\")
+#		#call string_append@(buffer, "#ifdef SCALARS___DEFINED\n\")
+#		#call string_append@(buffer, "SIMPLE___TYPEDEFS\n\")
+#		#call string_append@(buffer, "#endif\n,n\")
+#
+#	    call string_append@(buffer,
+#	      "\n\// Include other libraries exactly once: ./\n\")
+#
+#	    call visit@Root(root, buffer, compiler, h_includes_emit@Phase)
+#
+#	    call string_append@(buffer, "\n\// Define the structures: ./\n\")
+#
+#	    call visit@Root(root, buffer, compiler, h_structs_emit@Phase)
+#
+#	    call string_append@(buffer,
+#	      "\n\// Declare the routine prototypes: ./\n\")
+#
+#	    call visit@(root, buffer, compiler, h_externs_emit@Phase)
+#
+#	    size := define_datas.size
+#	    if size != 0
+#		call string_append@(buffer,
+#		  "\n\// Declare extracted #define values: ./\n\")
+#
+#		index := 0
+#		while index < size
+#		    define_data :@= define_datas[index]
+#		    call string_append@(buffer,
+#		      read_only_copy@(form@("extern %s% %s%__%s%;\n\") %
+#		      f@(define_data.type_name) % f@(define_data.type_name) /
+#		      f@(define_data.new_name)))
+#		    index := index + 1
+#
+#	    call string_append@(buffer,
+#	      form@("#endif // %s%_INCLUDED ./\n\") / f@(upper_source_base))
+#
+#	    header_file_name :@= new@String()
+#	    call string_append@(header_file_name, source_base)
+#	    call string_append@(header_file_name, h_suffix)
+#	    header_stream :@= open@Out_Stream(header_file_name)
+#	    assert header_stream !== null@Out_Stream
+#	    call put@(buffer, header_stream)
+#	    call close@(header_stream)
+#
+#	    # Generate .ezh file:
+#	    call trim@(buffer, 0)
+#	    traverser :@= compiler.traverser
+#	    traverser.buffer := buffer
+#	    call trim@(traverser.tokens, 0)
+#	    call visit@(root, buffer, compiler, ezh_emit@Phase)
+#
+#	    header_file_name := new@String()
+#	    call string_append@(header_file_name, source_base)
+#	    call string_append@(header_file_name, ezh_suffix)
+#	    header_stream := open@Out_Stream(header_file_name)
+#	    assert header_stream !== null@Out_Stream
+#
+#	    # Output the #define "external" declarations:
+#	    size := define_datas.size
+#	    if size != 0
+#		call buffer_append@("\n\# Extracted #define externals:\n\",
+#		  buffer)
+#		index := 0
+#		while index < size
+#		    define_data := define_datas[index]
+#		    call string_append@(buffer,
+#		      form@("external %s%@%s% %s%\t\# =%s%\n\") %
+#		      f@(define_data.new_name) %
+#		      f@(define_data.type_name) %
+#		      f@(define_data.type_name) /
+#		      f@(define_data.value))
+#		    index := index + 1
+#		call string_append@(buffer, "\n\")
+#
+#	    call put@(buffer, header_stream)
+#	    call close@(header_stream)
+#      case c_generate
+#	if phase_trace
+#	    call put@(form@("Phase 2: %qv%\n\") / f@(source_base),
+#	      error@Out_Stream)
+#	ezc_file := read@File(source_base, "", ".ezc", compiler)
+#	#ezg_file := read@File(source_base, middlefix, ".ezg", compiler)
+#
+#	compiler.undefs_generated := false@Logical
+#	define_datas := ezc_file.define_datas
+#	compiler.define_datas := define_datas
+#
+#	#root := null@Root
+#	#if ezc_file !== null@File
+#	#    if ezg_file == null@File
+#	#	root := parse@(parser, ezc_file.tokens)
+#	#    else
+#	#	root := two_parse@(parser, ezc_file.tokens, ezg_file.tokens)
+#	#else
+#	#    call put@("empty .ezc file\n\", error@Out_Stream)
+#
+#	root := ezc_file.root
+#	if root == null@Root
+#	    call put@("Empty root\n\", error@Out_Stream)
+#	else
+#	    # Scan everything into the symbol table:
+#	    call visit@(root, buffer, compiler, ezh_scan@Phase)
+#
+#	    # Now spit out the .c file:
+#	    c_file_name :@= new@String()
+#	    call string_append@(c_file_name, source_base)
+#	    call string_append@(c_file_name, c_suffix)
+#
+#	    c_stream :@= open@Out_Stream(c_file_name)
+#	    if c_stream == null@Out_Stream
+#	        assert false@Logical
+#	        result := result + 1
+#	    else
+#	        call trim@(buffer, 0)
+#
+#		# Force "library {source_base}":
+#		call string_append@(buffer,
+#		  form@("#include \dq\%s%%s%.h\dq\//c2./\n\") %
+#		  f@(source_base) / f@(compiler.middlefix))
+#		ezh_file :@=
+#		  read@File(source_base, compiler.middlefix, ".ezh", compiler)
+#		if ezh_file !== null@File
+#		    ezh_tokens :@= ezh_file.tokens
+#		    ezh_parser :@= create@Parser(ezh_tokens, messages)
+#		    ezh_root :@= parse@Root(ezh_parser)
+#		    call visit@(ezh_root, "", compiler, ezh_scan@Phase)
+#
+#	        call visit@(root, buffer, compiler, c_emit@Phase)
+#
+#		xsize :@= define_datas.size
+#		
+#		if xsize != 0
+#		    call buffer_append@("\n\", buffer)
+#		    call buffer_append@("// #define values: ./\n\", buffer)
+#		    xindex :@= 0
+#		    while xindex < xsize
+#			define_data :@= define_datas[xindex]
+#			call string_append@(buffer, 
+#			  form@("%s% %s%__%s% = %s%;\t\// =%s% ./\n\") %
+#			  f@(define_data.type_name) %
+#			  f@(define_data.type_name) %
+#			  f@(define_data.new_name) %
+#			  f@(define_data.old_name) /
+#			  f@(define_data.value))
+#			xindex := xindex + 1
+#		    call buffer_append@("\n\", buffer)
+#
+#	        call visit@(root, buffer, compiler, c_defines_emit@Phase)
+#	        call buffer_append@("\n\", buffer)
+#	        call put@(buffer, c_stream)
+#	        call close@(c_stream)
+#	call dump@(messages, error@Out_Stream)
+#      case c_compile
+#	command :@= new@String()
+#	compiler_executable :@= options.compiler_executable
+#	call string_append@(command, compiler_executable)
+#	call string_append@(command, " -c ")
+#	if options.debug
+#	    call string_append@(command, "-g ")
+#	if options.profile
+#	    call string_append@(command, "-pg ")
+#	if options.optimize
+#	    call string_append@(command, "-O ")
+#	call string_append@(command, compiler.search_options)
+#	call string_append@(command, " ")
+#	call string_append@(command, source_base)
+#	call string_append@(command, compiler.middlefix)
+#	call string_append@(command, ".c")
+#
+#	if phase_trace
+#	    call put@(form@("Phase 3:: %v%: %s%\n\") %
+#	      f@(source_base) / f@(command), error@Out_Stream)
+#	call execute@System(command)
+#
+#      case link
+#	if phase_trace
+#	    call put@(form@("Phase 4: %qv%\n\") / f@(source_base),
+#	      error@Out_Stream)
+#
+#	ezc_file := read@File(source_base, "", ".ezc", compiler)
+#	ezg_file := read@File(source_base, middlefix, ".ezg", compiler)
+#
+#	root := null@Root
+#	if ezc_file !== null@File
+#	    if ezg_file == null@File
+#		root := parse@(parser, ezc_file.tokens)
+#	    else
+#		root := two_parse@(parser, ezc_file.tokens, ezg_file.tokens)
+#	else
+#	    call put@("empty .ezc file\n\", error@Out_Stream)
+#
+#	call trim@(buffer, 0)
+#	#call visit@(root, buffer, compiler, link_emit@Phase)
+#	call visit@(root, buffer, compiler, link_scan@Phase)
+#
+#    if messages.size != 0
+#	call dump@(messages, error@Out_Stream)
+#	return 1
+#
+#    if trace
+#        call put@(form@("<=compile@Compiler(*, %qv%, *, %d%)=>%d%\n\") %
+#	  f@(source_base) % f@(0) / f@(result), error@Out_Stream)
+#    return result
+
+
+routine defines_check@Compiler
+    takes compiler Compiler
+    returns Unsigned
+
+    # This routine will detect any multiple definitions of types.
+
+    # Now enter the {defines} into the appropriate tables:
+    errors :@= 0
+    define_table :@= compiler.define_table
+    defines :@= compiler.defines
+    size :@= defines.size
+    index :@= 0
+    while index < size
+	define :@= defines[index]
+	call define_register@(compiler, define)
+	index := index + 1
+    return errors
+
+
+routine location_push@Compiler
+    takes compiler Compiler
+    takes kind String
+    takes location Token
+    returns_nothing
+
+    # This routine will push the current {kind} and {location} onto
+    # the errors stack in {compiler}.
+
+    call append@(compiler.error_kinds, kind)
+    call append@(compiler.error_tokens, location)
+
+
+routine location_pop@Compiler
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will pop the current {kind} and {location} from
+    # the errors stack in {compiler}.
+
+    call pop@(compiler.error_kinds)
+    call pop@(compiler.error_tokens)
+
+
+routine messages_dump@Compiler
+    takes compiler Compiler
+    returns Logical
+
+    # This routine will dump out any pending error messages in {compiler}.
+    # {true@Logical} is returned if one or more messages are dumped and
+    # {false@Logical} otherwise.
+
+    return dump@(compiler.messages, error@Out_Stream)
+
+
+routine phase@Compiler
+    takes compiler Compiler
+    takes phase String
+    takes phase_routine [Unsigned <= Source, Compiler]
+    returns Logical
+
+    # This routine will iterate over each source file in {compiler}
+    # using {routine}.
+
+    errors :@= 0
+    sources :@= compiler.sources
+    index :@= 0
+    while index < sources.size
+	source :@= sources[index]
+	errors := errors + phase_routine(source, compiler)
+	index := index + 1
+    errors := errors + compiler.messages.size
+    call messages_dump@(compiler)
+    return errors != 0
+
+
+routine simple_type_insert@Compiler
+    takes compiler Compiler
+    takes simple_name String
+    takes actual_type Type
+    returns_nothing
+
+    #call d@(form@("simple_type_insert@Comiler(*, %v%, %t%)\n\") %
+    #  f@(simple_name) / f@(actual_type))
+    call insert@(compiler.simple_table, simple_name, actual_type)
+
+
+routine simple_type_lookup@Compiler
+    takes compiler Compiler
+    takes simple_name String
+    returns Type
+
+    return lookup@(compiler.simple_table, simple_name)
+
+
+routine source_register@Compiler
+    takes compiler Compiler
+    takes base_name String
+    takes token Token
+    returns Unsigned
+
+    # This routine will ensure that there is a {Source} object associated
+    # {base_name} in {compiler}.  If {base_name} is new, it is read in,
+    # tokenized, and parsed.  Each library, interface, and require
+    # is recursively added as well.   The total number of errors is
+    # returned.
+
+    # First figure out if we have seen {base_name} before:
+    base_name := read_only_copy@(base_name)
+    source_table :@= compiler.source_table
+    sources :@= compiler.sources
+    source :@= lookup@(source_table, base_name)
+
+    errors :@= 0
+    if source == null@Source
+	# {base_name} is new, create {Source} object and register it:
+	source := create@Source(base_name, compiler)
+	assert !insert@(source_table, base_name, source)
+	call append@(sources, source)
+
+	# Now read in the .ezc file and parse it:
+	ezc :@= read@File(source.base_name, "", ".ezc", compiler)
+	if ezc == null@File
+	    call log@(compiler, token,
+	      form@("Unable to find library/interface/require %v%\n\") /
+		f@(base_name))
+	    errors := errors + 1
+	else
+	    source.ezc := ezc
+	    ezc_root :@= parse@(compiler.parser, ezc.tokens)
+	    ezc.root := ezc_root
+	    parse_errors :@= compiler.messages.errors.size
+	    errors := errors + parse_errors
+	    if parse_errors = 0
+		previous_source :@= compiler.source
+		compiler.source := source
+		call visit@(ezc_root,
+		  "Source Find", compiler, source_find@Phase)
+		compiler.source := previous_source
+
+    errors := errors + compiler.messages.size
+    return errors
+
+
+routine type_name_lookup@Compiler
+    takes compiler Compiler
+    takes name String
+    takes type Type
+    takes error_location Token
+    returns Typed_Name_Object
+
+    # This procedure will lookup {name}@{type} in {compiler} and return
+    # the resulting {Typed_Name_Object}.  If {name}@{type} can not be
+    # found, {Null}@{Typed_Name_OBject} is returned.  In addition,
+    # if {error_location} is not {Null}@{Token}, an error message is
+    # generated using {error_location}.
+
+    #call d@(form@("=>type_name_lookup@Compiler(*,%v%,%t%,*)\n\") %
+    #  f@(name) / f@(type))
+    assert type !== null@Type
+
+    name_token :@= create@Token(error_location.file,
+      error_location.position, symbol@Lexeme, name)
+    typed_name :@= compiler.typed_name
+    typed_name.name := name_token
+    typed_name.type := type
+    result :@= typed_name_lookup@(compiler, typed_name, error_location)
+
+    #if result == null@Typed_Name_Object
+    #	call d@(" => null@Typed_Name_Object\n\")
+    #call d@(form@("<=type_name_lookup@Compiler(*,%v%,%t%,*)\n\") %
+    #  f@(name) / f@(type))
+
+    return result
+
+
+routine type_name_routine_lookup@Compiler
+    takes compiler Compiler
+    takes name String
+    takes type Type
+    takes error_location Token
+    returns Typed_Name_Object
+
+    # This procedure will lookup {name}@{type} in {compiler} and return
+    # the resulting {Typed_Name_Object}.  If {name}@{type} can not be
+    # found, {Null}@{Typed_Name_OBject} is returned.  In addition,
+    # if {error_location} is not {Null}@{Token}, an error message is
+    # generated using {error_location}.
+
+    assert type !== null@Type
+    typed_name_object :@= type_name_lookup@(compiler,
+      name, type, error_location)
+    if typed_name_object !== null@Typed_Name_Object &&
+      typed_name_object.kind != routine@Typed_Name_Object_Kind &&
+      error_location !== null@Token
+	call log@(compiler, error_location,
+	  form@("%s%@%t% already exists") % f@(name) / f@(type))
+	call log@(compiler, typed_name_object.location,
+	  form@("%s%@%t% previously defined here") % f@(name) / f@(type))
+	typed_name_object := null@Typed_Name_Object
+    return typed_name_object
+
+
+routine typed_name_lookup@Compiler
+    takes compiler Compiler
+    takes typed_name Typed_Name
+    takes error_location Token
+    returns Typed_Name_Object
+
+    # This procedure will lookup {name}@{type} in {compiler} and return
+    # the resulting {Typed_Name_Object}.  If {name}@{type} can not be
+    # found, {Null}@{Typed_Name_OBject} is returned.  In addition,
+    # if {error_location} is not {Null}@{Token}, an error message is
+    # generated using {error_location}.
+
+    typed_name_object :@= lookup@(compiler.xtyped_name_object_table, typed_name)
+    if error_location !== null@Token &&
+      typed_name_object == null@Typed_Name_Object
+	call log@(compiler, error_location,
+	  form@("Routine/global/external/constant %t% does not exist") /
+	  f@(typed_name))
+    return typed_name_object
+
+
+routine typed_name_insert@Compiler
+    takes compiler Compiler
+    takes typed_name Typed_Name
+    takes typed_name_object Typed_Name_Object
+    takes error_location Token
+    takes from String
+    returns Logical
+
+    # This procedure will insert {typed_named_object} into {compiler}
+    # under the key {typed_name}.  If the key {typed_name} already
+    # exists, {true}@{Logical} is returned; otherwise {false}@{Logical}
+    # is returned.  If {true} is returned and {error_location}@{Token}
+    # is not equal to {Null}@{Token} an error message is generated
+    # as well.
+
+    #trace :@= equal@(from, "visit@External_Declaration")
+    trace :@= false@Logical
+    #trace := true@Logical
+    if trace
+	call d@(form@("=>typed_name_insert@(*, %t%, %v%)\n\") %
+	  f@(typed_name) / f@(from))
+
+    assert typed_name_object !== null@Typed_Name_Object
+
+    result :@= false@Logical
+    table :@= compiler.xtyped_name_object_table
+
+    previous_typed_name_object :@= lookup@(table, typed_name)
+    if previous_typed_name_object == null@Typed_Name_Object
+	# Does not previously exist:
+	call insert@(table, typed_name, typed_name_object)
+    else
+	# Previously exists:
+	if equal@(typed_name_object, previous_typed_name_object)
+	    # They are the same:
+	    do_nothing
+	else
+	    # They are different:
+	    call log@(compiler, error_location,
+	      form@("Routine/global/ext/const %t% already exists (from: %s%") %
+	      f@(typed_name) / f@(from))
+	    call log@(compiler, previous_typed_name_object.location,
+	      form@("Previous %t% defined here") / f@(typed_name))
+    table.trace_level := 0
+
+    if trace
+	call d@(form@("<=typed_name_insert@(*, %t%, %v%) => %l%\n\") %
+	  f@(typed_name) % f@(from) / f@(result))
+
+    return result
+
+
+routine trace@Compiler
+    takes compiler Compiler
+    takes location Token
+    returns_nothing
+
+    # This routine will set tracing if {position} corresponds to the
+    #, trace line (set by -T option).
+
+    file :@= location.file
+    line_number :@= line_number@(file, location.position)
+
+    compiler.tracing := line_number = compiler.trace_line
+
+
+routine one_and_only@Compiler
+    takes_nothing
+    returns Compiler
+
+    # This routine will return the one and only {compiler} object.
+
+    return null@Compiler
+
+
+routine create@Compiler
+    takes options Options
+    takes messages Messages
+    returns Compiler
+
+    # This routine will create and return an empty {Compiler} object.
+
+    compiler :@= one_and_only@Compiler()
+    if 1t
+	compiler.break_labels := new@Array[Unsigned]()
+	compiler.buffer := new@String()
+        compiler.c_indent := 0
+	compiler.cast_suppress := false@Logical
+	compiler.collections := new@Array[Collection]()
+	compiler.collection_table :=
+	  create@Hash_Table[String, Collection](null@Collection, hash@String,
+	  equal@String, buffer_append@String, buffer_append@Collection)
+	compiler.continue_labels := new@Array[Unsigned]()
+	compiler.current_routine := null@Routine_Declaration
+	compiler.defines_prefixes := new@Array[Defines_Prefix_Declaration]()
+	compiler.define_datas := new@Array[Define_Data]()
+	compiler.define_table := create@Hash_Table[String,
+	  Define_Declaration](null@Define_Declaration,
+	  hash@String, equal@String,
+          buffer_append@String, show@Define_Declaration)
+	compiler.defines := new@Array[Define_Declaration]()
+	compiler.error_kinds := new@Array[String]()
+	compiler.error_tokens := new@Array[Token]()
+	compiler.enumeration_prefixes := new@Array[Enumeration_Prefix_Clause]()
+	compiler.file := null@File
+	compiler.file_table := create@Hash_Table[String,
+	  File](null@File, hash@String, equal@String,
+	  buffer_append@String, show@File)
+	compiler.files := new@Array[File]()
+	compiler.includes := new@Array[Include_String_Declaration]()
+	compiler.interface_bases := new@Array[String]()
+	compiler.global_libraries := new@Array[Source]()
+	compiler.label_count := 0xffff0000
+	compiler.level := 0
+	compiler.library_bases := new@Array[String]()
+	compiler.loads := new@Array[String]()
+	compiler.loop_levels := new@Array[Unsigned]()
+	compiler.messages := messages
+	compiler.middlefix := options.suffix
+	compiler.other_typedefs := new@String()
+	compiler.options := options
+	compiler.parser := create@Parser(new@Array[Token](), messages)
+	compiler.phase := c_emit@Phase
+	compiler.scalar_table := create@Hash_Table[String, Type](null@Type,
+	  hash@String, equal@String, buffer_append@String, buffer_append@Type)
+	compiler.scanned_types := new@Array[Type]()
+	compiler.search_options := options.search_options
+	compiler.searches := options.searches
+	compiler.simple_table := create@Hash_Table[String, Type](null@Type,
+	  hash@String, equal@String, buffer_append@String, buffer_append@Type)
+	compiler.simple_typedefs := new@String()
+	compiler.sources := new@Array[Source]()
+	compiler.source_table := create@Hash_Table[String, Source](null@Source,
+	  hash@String, equal@String, buffer_append@String, buffer_append@Source)
+	compiler.switch_levels := new@Array[Unsigned]()
+	compiler.temporaries := new@Array[Variable]()
+	compiler.temporary := new@String()
+	compiler.temporary2 := new@String()
+	compiler.token := create@Token(null@File, 0, symbol@Lexeme, "")
+	compiler.tokenizer := create@Tokenizer(messages)
+	compiler.traverser :=
+	  create@Traverser(compiler.buffer, new@Array[Token]())
+	compiler.trace_line := options.trace_line
+	compiler.tracing := false@Logical
+	compiler.type_byte := simple_create@Type("Byte")
+	compiler.type_character := simple_create@Type("Character")
+	compiler.type_double := simple_create@Type("Double")
+	compiler.type_easy_c := simple_create@Type("Easy_C")
+	compiler.type_float := simple_create@Type("Float")
+	compiler.type_integer := simple_create@Type("Integer")
+	compiler.type_long_integer := simple_create@Type("Long_Integer")
+	compiler.type_long_unsigned := simple_create@Type("Long_Unsigned")
+	compiler.type_logical := simple_create@Type("Logical")
+	compiler.type_pointer_pointer := simple_create@Type("Pointer_Pointer")
+	compiler.type_quad := simple_create@Type("Quad")
+	compiler.type_short := simple_create@Type("Short")
+	compiler.type_string := simple_create@Type("String")
+	compiler.type_unsigned := simple_create@Type("Unsigned")
+	compiler.typed_name := new@Typed_Name()
+	compiler.xtyped_name_object_table :=
+	  create@Hash_Table[Typed_Name,
+	  Typed_Name_Object](null@Typed_Name_Object,
+	  hash@Typed_Name, equal@Typed_Name,
+	  show@Typed_Name, show@Typed_Name_Object)
+	compiler.variables := new@Array[Variable]()
+	compiler.variable_table := create@Hash_Table[String,
+	  Variable](null@Variable, hash@String, equal@String,
+	  buffer_append@String, show@Variable)
+	compiler.undefs_generated := false@Logical
+
+    null :@= null@Token
+    call scalar_insert@(compiler, "Byte", compiler.type_byte, null)
+    call scalar_insert@(compiler, "Character", compiler.type_character, null)
+    call scalar_insert@(compiler, "Double", compiler.type_double, null)
+    call scalar_insert@(compiler, "Float", compiler.type_float, null)
+    call scalar_insert@(compiler, "Integer", compiler.type_integer, null)
+    call scalar_insert@(compiler, "Logical", compiler.type_logical, null)
+    call scalar_insert@(compiler,
+      "Long_Integer", compiler.type_long_integer, null)
+    call scalar_insert@(compiler,
+      "Long_Unsigned", compiler.type_long_unsigned, null)
+    call scalar_insert@(compiler, "Quad", compiler.type_quad, null)
+    call scalar_insert@(compiler, "Short", compiler.type_short, null)
+    call scalar_insert@(compiler, "Unsigned", compiler.type_unsigned, null)
+
+    return compiler
+
+
+routine enter@Compiler
+    takes compiler Compiler
+    takes routine_name String
+    takes more Logical
+    returns Logical
+
+    # If tracing is enabled in {compiler}, this routine will output
+    #, a trace line containing {routine_name} and push it onto
+    #, an internal tracing stack.  If {more} is {true}, the new line
+    #, is supressed, so that additional information can be appended.
+    #, In all cases, the value of the tracing flag is returned.
+
+    return false@Logical
+
+
+routine c_pad_get@Compiler
+    takes compiler Compiler
+    returns Unsigned
+
+    return compiler.c_indent * 4
+
+routine pad_append@Compiler
+    takes compiler Compiler
+    takes text String
+    returns_nothing
+
+    # This routine appends the current indentation level in {compiler}
+    #, to {text}.
+
+    c_indent :@= compiler.c_indent
+    while c_indent != 0
+	call string_append@(text, "    ")
+	c_indent := c_indent - 1
+
+
+routine leave@Compiler
+    takes compiler Compiler
+    takes routine_name String
+    takes more Logical
+    returns Logical
+
+    # If tracing is enabled in {compiler}, this routine will output
+    #, a trace record using the routine name that was previously
+    #, pushed onto the the internal tracing stack.  If {more} is
+    #, {true}, the new-line is supressed so that additional tracing
+    #, information can be appended to the line.  The value of
+    #, the tracing flag is returned.
+
+    return false@Logical
+
+
+routine log@Compiler
+    takes compiler Compiler
+    takes location Token
+    takes text String
+    returns_nothing
+
+    # This routine will cause message to be entered into the
+    # compiler error messages.  A copy of {message} made so that
+    # {text} can be a temporary {String} buffer.
+
+    call log@(compiler.messages, location, text)
+
+    if compiler.tracing
+	call put@(text, error@Out_Stream)
+	call put@("\n\", error@Out_Stream)
+
+
+routine type_lookup@Compiler
+    takes compiler Compiler
+    takes name String
+    takes location Token
+    returns Type
+
+    # This routine will return the type associated with {type_name}
+    #, or emit an error using {location}.
+
+    define :@= lookup@(compiler.define_table, name)
+    type :@= define.type
+    if define == null@Define_Declaration
+	call log@(compiler, location,
+	  form@("Type %qv% is not defined") / f@(name))
+	type := null@Type
+    return type
+
+
+routine level_begin@Compiler
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will start a new level of C indentation:
+
+    compiler.level := compiler.level + 1
+    compiler.c_indent := compiler.c_indent + 1
+
+
+routine level_end@Compiler
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will end the current level of C indentation:
+
+    level :@= compiler.level
+
+    assert level != 0
+    assert compiler.c_indent != 0
+
+    # When we leave a level, mark any variables that were first
+    # assigned in this level as being unassigned:
+    variables :@= compiler.variables
+    size :@= variables.size
+    index :@= 0
+    while index < size
+	variable :@= variables[index]
+	if variable.level = level
+	    variable.level := 0xffffffff
+	index := index + 1
+
+    compiler.level := level - 1
+    compiler.c_indent := compiler.c_indent - 1
+
+
+routine scalar_insert@Compiler
+    takes compiler Compiler
+    takes name String
+    takes type Type
+    takes location Token
+    returns_nothing
+
+    # This will insert {type} into the scalar table inside of {compiler}.
+
+    #if location !== null@Token
+    #	call d@(form@("scalar_insert@Compiler(*, %v%, %t%, *)\n\") %
+    #	  f@(name) / f@(type))
+
+    scalar_table :@= compiler.scalar_table
+    previous_type :@= scalar_lookup@(compiler, name)
+    if previous_type == null@Type
+	assert !insert@(scalar_table, read_only_copy@(name), type)
+    else
+	call log@(compiler, location,
+	  "Duplicate scalar %t% being defined")
+
+    # What the heck is this?
+    #temporary :@= compiler.temporary
+    #call trim@(temporary, 0)
+    #call string_append@(temporary, name)
+    #call lower_case@(temporary)
+    #call insert@(scalar_table, read_only_copy@(temporary), type)
+
+
+routine scalar_lookup@Compiler
+    takes compiler Compiler
+    takes name String
+    returns Type
+
+    # This routine will lookup {name} in the scalar table inside of {compiler}
+    # return the associate {Type}.  If {name} is not a scalar, {null@Type} is
+    # returned.
+
+    return lookup@(compiler.scalar_table, name)
+
+
+routine undefs_append@Compiler
+    takes compiler Compiler
+    takes buffer String
+    returns_nothing
+
+    # This routine will append the #undef's for lower case macros to {buffer}
+    # using {compiler}.
+
+    if !compiler.undefs_generated
+	compiler.undefs_generated := true@Logical
+
+	call buffer_append@("/* #undef lower case macros */\n\",
+	  buffer)
+	call buffer_append@("#undef i386\n\", buffer)
+	call buffer_append@("#undef linux\n\", buffer)
+	call buffer_append@("#undef unix\n\", buffer)
+	# For now; squish errno here:
+	call buffer_append@("#undef errno\n\", buffer)
+	call buffer_append@("#undef makedev\n\", buffer)
+	call buffer_append@("#undef major\n\", buffer)
+	call buffer_append@("#undef minor\n\", buffer)
+	call buffer_append@("#undef alloca\n\", buffer)
+	call buffer_append@("\n\", buffer)
+
+
+routine variable_temporary@Compiler
+    takes compiler Compiler
+    takes type Type
+    returns String
+
+    # This routine will create and return a temporary variable name.
+
+    temporaries :@= compiler.temporaries
+    size :@= temporaries.size
+    name :@= read_only_copy@(form@("t__%d%") / f@(size))
+    variable :@= create@Variable(name, type)
+    call append@(temporaries, variable)
+    return name
+
+
+routine variable_insert@Compiler
+    takes compiler Compiler
+    takes name String
+    takes type Type
+    takes is_argument Logical
+    returns Variable
+
+    # This routine will record a local variable with a name of {name}
+    # and type of {type}.  Duplicates cause an error message using
+    # {location}.
+
+    variable_table :@= compiler.variable_table
+    variable :@= lookup@(variable_table, name)
+    if variable !== null@Variable
+	call log@(compiler, type.location,
+	  form@("Variable/argument %vq% is already defined") / f@(name))
+	call log@(compiler, variable.type.location,
+	  form@("Variable/argument %vq% previously defined here") / f@(name))
+    else
+	#call d@(form@("Var:%v% hash:%x% mask:%x%\n\") %
+	#  f@(name) % f@(hash@(name)) / f@(variable_table.mask))
+	variable := create@Variable(name, type)
+	call append@(compiler.variables, variable)
+	call insert@(variable_table, name, variable)
+	if is_argument
+	    variable.level := 0
+    return variable
+
+
+routine variable_lookup@Compiler
+    takes compiler Compiler
+    takes name String
+    returns Variable
+
+    # This routine will return the {Variable} associated with {name}
+    # for the current routine in {compiler}.  If no variable exists,
+    # {Null}@{Variable} is returned.
+
+    variable :@= lookup@(compiler.variable_table, name)
+    return variable
+
+
+routine variables_clear@Compiler
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will delete all of the variables from {compiler}.
+
+    variable_table :@= compiler.variable_table
+    variables :@= compiler.variables
+    size :@= variables.size
+    index :@= 0
+    while index < size
+	variable :@= variables[index]
+	if !delete@(variable_table, variable.name)
+	    call d@(form@("Unable to delete variable %s%\n\") /
+	      f@(variable.name))
+	index := index + 1
+
+
+# {Phase} routines:
+
+routine f@Phase
+    takes phase Phase
+    returns String
+
+    # This routine will format {phase} and return it as a {String}.
+
+    value :@= field_next@Format()
+    call trim@(value, 0)
+    call string_append@(value, string_convert@(phase))
+    return value
+
+
+routine xxxformat@Phase
+    takes phase Phase
+    takes buffer String
+    returns_nothing
+
+    # This routine will format {phase} to {buffer}.
+
+    text :@= string_convert@(phase)
+    anchor :@= format_begin@String(buffer)
+    call string_gap_insert@String(buffer, text)
+    call format_end@String(buffer, anchor)
+
+
+# {Source} routines:
+
+#routine all_needed_clear@Source
+#    takes source Source
+#    returns_nothing
+#
+#    # This routine will unmark all of the {Source} objects in
+#    # {source}.{all_needed}:
+#
+#    all_needed :@= source.all_needed
+#    size :@= all_needed.size
+#    index :@= 0
+#    while index < size
+#	sub_source :@= all_needed[index]
+#	sub_source.mark := false@Logical
+#	index := index + 1
+
+
+#routine all_needed_find@Source
+#    takes source Source
+#    takes all_needed Array[Source]
+#    returns_nothing
+#
+#    # This routine will recursively iterate over {source} filling in
+#    # the {all_needed} array.
+#
+#    if source.mark
+#	# We have been visited before:
+#	do_nothing
+#    else
+#	# We have not been visited before:
+#	call append@(all_needed, source)
+#	source.mark := true@Logical
+#
+#	# Scan the children:
+#	needed :@= source.needed
+#	size :@= needed.size
+#	index :@= 0
+#	while index < size
+#	    needed_source :@= needed[index]
+#	    call all_needed_find@(needed_source, all_needed)
+#	    index := index + 1
+
+
+routine buffer_append@Source
+    takes source Source
+    takes buffer String
+    returns_nothing
+
+    # This routine will append {source} to {buffer}.
+
+    call string_append@(buffer, source.base_name)
+
+
+routine c_compile@Source
+    takes source Source
+    takes compiler Compiler
+    returns Unsigned
+
+    # This routine will compile the .c file associate with {source} using
+    # {compiler}.
+
+    errors :@= 0
+    if should_compile@(source, compiler)
+	base_name :@= source.base_name
+	trace :@= false@Logical
+	#trace := true@Logical
+	#if trace
+	#    call d@(form@("=>c_compile@Source(%v%)\n\") / f@(base_name))
+
+	compile_command :@= new@String()
+
+	options :@= compiler.options
+	verbose :@= options.verbose
+
+	call string_append@(compile_command, options.compiler_executable)
+	call string_append@(compile_command, " -c")
+	if options.debug
+	    call string_append@(compile_command, " -g")
+	if source.collection !== null@Collection
+	    call string_append@(compile_command, " -fPIC")
+	if options.optimize
+	    call string_append@(compile_command, " -O2")
+	if options.profile
+	    call string_append@(compile_command, " -pg")
+	call string_append@(compile_command,
+	    form@(" %s%") / f@(options.search_options))
+
+	call string_append@(compile_command,
+	  form@(" %s%%s%.c") % f@(base_name) / f@(compiler.middlefix))
+	call d@(form@("%s%\n\") / f@(compile_command))
+	#call d@("*********************************************************\n\")
+	call execute@System(compile_command)
+
+	#if trace
+	#    call d@(form@("=>c_compile@Source(%v%)\n\") / f@(source.base_name))
+
+    return errors
+
+
+routine c_emit@Source
+    takes source Source
+    takes compiler Compiler
+    returns Unsigned
+
+    base_name :@= source.base_name
+    #trace :@= true@Logical
+    #if trace
+    #	call d@(form@("=>c_emit@Source(%v%)\n\") / f@(base_name))
+
+    if should_compile@(source, compiler)
+
+	ezc_file :@= source.ezc
+	ezg_file :@= source.ezg
+
+	compiler.undefs_generated := false@Logical
+	#define_datas := ezc_file.define_datas
+	#compiler.define_datas := define_datas
+
+	ezc_root :@= ezc_file.root
+	if ezc_root == null@Root
+	    # No file to process:
+	    return 1
+
+	buffer :@= compiler.buffer
+	call trim@(buffer, 0)
+
+	# Scan everything into the symbol table:
+	#call visit@(root, buffer, compiler, ezh_scan@Phase)
+
+	# Force "library {base_name}":
+	call string_append@(buffer,
+	  form@("#include \dq\%s%%s%.h\dq\/*cc2*/\n\") %
+	  f@(base_name) / f@(compiler.middlefix))
+
+	#if trace
+	#    call d@("  c_emit@Source(): 1\n\")
+
+	call visit@(ezc_root, buffer, compiler, c_emit@Phase)
+	if ezg_file !== null@File
+	    call visit@(ezg_file.root, buffer, compiler, c_emit@Phase)
+
+	# Output data defines:
+	define_datas :@= ezc_file.define_datas
+	size :@= define_datas.size
+	if size != 0
+	    call buffer_append@("\n\", buffer)
+	    call buffer_append@("/* #define values: */\n\", buffer)
+	    index :@= 0
+	    while index < size
+		define_data :@= define_datas[index]
+		call string_append@(buffer, 
+		  form@("%s% %s%__%s% = %s%;\t\/* =%s% */\n\") %
+		  f@(define_data.type_name) %
+		  f@(define_data.type_name) %
+		  f@(define_data.new_name) %
+		  f@(define_data.old_name) /
+		  f@(define_data.value))
+		index := index + 1
+	    call buffer_append@("\n\", buffer)
+
+	#if trace
+	#	call d@("  c_emit@Source(): 2\n\")
+
+	call visit@(ezc_root, buffer, compiler, c_defines_emit@Phase)
+	call buffer_append@("\n\", buffer)
+
+	# Write out the .c file:
+	file_name :@= read_only_copy@(form@("%s%%s%.c") %
+	  f@(base_name) / f@(compiler.middlefix))
+	c_stream :@= open@Out_Stream(file_name)
+	if c_stream == null@Out_Stream
+	    assert false@Logical
+	else
+	    call put@(buffer, c_stream)
+	    call close@(c_stream)
+
+	#if trace
+	#	call d@(form@("<=c_emit@Source(%v%) => %d%\n\") %
+	#	  f@(base_name) / f@(errors))
+
+    errors :@= compiler.messages.size
+    call messages_dump@(compiler)
+    return errors
+
+
+routine create@Source
+    takes base_name String
+    takes compiler Compiler
+    returns Source
+
+    # This routine will create and return a new {Source} object with
+    # a base name of {base_name}.  {token} marks the line where the
+    # the library is requested.
+
+    #call d@(form@("=>create@Source(%v%)\n\") / f@(base_name))
+
+    source :@= new@Source()
+    source.base_name := base_name
+    source.collection := null@Collection
+    source.collection_declaration := null@Collection_Declaration
+    source.defines := new@Array[Define_Declaration]()
+    source.ezc := null@File
+    source.ezg := null@File
+    source.global_libraries := new@Array[Global_Library_Declaration]()
+    source.interfaces := new@Array[Interface_Declaration]()
+    source.libraries := new@Array[Library_Declaration]()
+    source.requires := new@Array[Require_Declaration]()
+    return source
+
+
+#routine defines_needed_find@Source
+#    takes source Source
+#    takes compiler Compiler
+#    returns Unsigned
+#
+#    # This routine will fill in the {needed} list for {source} using {compiler}.
+#
+#    errors :@= 0
+#    defines :@= source.defines
+#    needed :@= source.needed
+#    source_table :@= compiler.source_table
+#
+#    # Step 1: scan across the declarations looking for library, interface,
+#    # and define declarations:
+#    declarations :@= source.ezc.root.declarations
+#    size :@= declarations.size
+#    index :@= 0
+#    while index < size
+#	declaration :@= declarations[index]
+#	name :@= null@Token
+#	switch declaration.kind
+#	  all_cases_required
+#	  case global_library
+#	    global_library :@= declaration.global_library
+#	    name := global_library.name
+#	  case library
+#	    library :@= declaration.library
+#	    name := library.name
+#	  case interface
+#	    interface :@= declaration.interface
+#	    name := interface.name
+#	  case define
+#	    define :@= declaration.define
+#	    call append@(defines, define)
+#	    define_clauses :@= define.define_clauses
+#	    define_clauses_size :@= define_clauses.size
+#	    define_clauses_index :@= 0
+#	    while define_clauses_index < define_clauses_size
+#		define_clause :@= define_clauses[define_clauses_index]
+#		switch define_clause.kind
+#		  case simple
+#		    simple :@= define_clause.simple
+#		    call simple_type_insert@(compiler,
+#		      base_name@(define.type), simple.type)
+#		define_clauses_index := define_clauses_index + 1
+#	  case easy_c, end_of_line, note, routine, defines_prefix,
+#	   external_named, external, global, load, include_string, constant,
+#	   require, error, collection
+#	    do_nothing
+#	if name !== null@Token
+#	    needed_source :@= lookup@(source_table, name.value)
+#	    assert needed_source !== null@Source
+#	    call append@(needed, needed_source)
+#	index := index + 1
+#
+#    # Step 2: Look for duplicates:
+#
+#    # Step 2a: Mark all {Source} objects in {needed} as {false@Logical}:
+#    size := needed.size
+#    index := 0
+#    while index < size
+#	needed_source :@= needed[index]
+#	needed_source.mark := false@Logical
+#	index := index + 1
+#
+#    # Step 2b: Iterate through {needed} setting mark to {true@Logical}:
+#    index := 0
+#    while index < size
+#	needed_source :@= needed[index]
+#	if needed_source.mark
+#	    # We have a duplicate!  Generate a nice error message:
+#	    base_name :@= needed_source.base_name
+#	    messages :@= compiler.messages
+#	    name_token1 :@= null@Token
+#	    name_token2 :@= null@Token
+#	    declaration2 :@= null@Declaration
+#	    declarations_size :@= declarations.size
+#	    declarations_index :@= 0
+#	    while declarations_index < declarations_size
+#		declaration :@= declarations[declarations_index]
+#		name_token :@= null@Token
+#		switch declaration.kind
+#		  case library
+#		    library :@= declaration.library
+#		    name_token := library.name
+#		  case interface
+#		    interface :@= declaration.interface
+#		    name_token := interface.name
+#		if equal@(name_token.value, base_name)
+#		    # We found one that matches {base_name}:
+#		    name_token1 := name_token2
+#		    name_token2 := name_token
+#		    if name_token1 !== null@Token
+#			# We have two that match, let's blast out an error:
+#			call log2@(messages, name_token1, name_token2,
+#			  form@("Duplicate library/interface request for %v%") /
+#			  f@(base_name))
+#		declarations_index := declarations_index + 1
+#	else
+#	    needed_source.mark := true@Logical
+#	index := index + 1
+#
+#    # Step 2c: Clear all of the mark bits:
+#    index := 0
+#    while index < size
+#	needed_source :@= needed[index]
+#	needed_source.mark := false@Logical
+#	index := index + 1
+#
+#    return errors
+
+
+#routine ezc_read@Source
+#    takes source Source
+#    takes compiler Compiler
+#    returns Unsigned
+#
+#    # This routine will read in the .ezc file associated with {source}
+#    # using {compiler}.  An error count is returned.
+#
+#    errors :@= 0
+#    base_name :@= source.base_name
+#    file :@= read@File(source.base_name, "", ".ezc", compiler)
+#    if file == null@File
+#	errors := errors + 1
+#    else
+#	source.ezc := file
+#    return errors
+
+
+#routine ezg_defines_find@Source
+#    takes source Source
+#    takes compiler Compiler
+#    returns Unsigned
+#
+#    # This routine will fill in the {needed} list for {source} using {compiler}.
+#
+#    defines :@= source.defines
+#    needed :@= source.needed
+#    source_table :@= compiler.source_table
+#
+#    # Step 1: scan across the declarations looking for library, interface,
+#    # and define declarations:
+#    declarations :@= source.ezg.root.declarations
+#    size :@= declarations.size
+#    index :@= 0
+#    while index < size
+#	declaration :@= declarations[index]
+#	name :@= null@Token
+#	switch declaration.kind
+#	  all_cases_required
+#	  case define
+#	    define :@= declaration.define
+#	    call append@(defines, define)
+#	  case easy_c, end_of_line, note, routine, defines_prefix,
+#	   external_named, external, global, load, include_string, constant,
+#	   require, error, library, interface, global_library, collection
+#	    do_nothing
+#	index := index + 1
+#    return 0
+
+
+routine ezg_generate@Source
+    takes source Source
+    takes compiler Compiler
+    returns Unsigned
+
+    # This routine will generate a .ezg file for {source} using {compiler}.
+
+    base_name :@= source.base_name
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call d@(form@("=>ezg_generate@Source(%v%)\n\") / f@(base_name))
+
+    call type_arm@(source)
+    errors :@= 0
+    buffer :@= compiler.buffer
+    call trim@(buffer, 0)
+    call visit@(source.ezc.root, buffer, compiler, generate_emit@Phase)
+
+    define_datas :@= source.ezc.define_datas
+    size :@= define_datas.size
+    #if trace && size != 0
+    #	call d@(form@("We have %d% define datas to deal with\n\") / f@(size))
+    index :@= 0
+    while index < size
+	define_data :@= define_datas[index]
+	type_name :@= define_data.type_name
+	call string_append@(buffer,
+	  form@("external %s%@%s% %s%\n\") % f@(define_data.new_name) %
+	  f@(type_name) / f@(type_name))
+	index := index + 1
+
+    if buffer.size != 0
+	file_name :@= read_only_copy@(form@("%s%%s%.ezg") %
+	  f@(base_name) / f@(compiler.middlefix))
+	out_stream :@= open@Out_Stream(file_name)
+	if out_stream == null@Out_Stream
+	    call d@(form@("Can not write %v% file\n\") / f@(file_name))
+	    #FIXME: we can't write out the .ezg file!!!
+	    assert false@Logical
+	else
+	    call put@(buffer, out_stream)
+	    call close@(out_stream)
+	    ezg_tokens :@= new@Array[Token]()
+	    ezg_file :@= create@File(file_name,
+	      read_only_copy@(buffer), ezg_tokens)
+	    source.ezg := ezg_file
+	    call tokenize@(compiler.tokenizer, ezg_file)
+	    source.ezg.root := parse@(compiler.parser, ezg_tokens)
+	    #call d@(form@("Generated %v%\n\") / f@(file_name))
+    call type_disarm@(source)
+
+    #if trace
+    #	call d@(form@("<=ezg_generate@Source(%v%) => %d%\n\") %
+    #	  f@(source.base_name) / f@(errors))
+
+    return errors
+
+
+routine h_emit@Source
+    takes source Source
+    takes compiler Compiler
+    returns Unsigned
+
+    # This routine will generate the .h file for {source} using {compiler}
+    # if appropiate.
+
+    base_name :@= source.base_name
+    trace :@= 0f
+    if trace
+	call d@(form@("=>h_emit@Source(%v%)\n\") / f@(base_name))
+
+    errors :@= 0
+    if should_compile@(source, compiler)
+	if trace
+	    call d@(form@("  generate %v%\n\") / f@(base_name))
+
+	call type_arm@(source)
+
+	buffer :@= compiler.buffer
+	call trim@(buffer, 0)
+
+	call string_append@(buffer,
+	  form@("#ifndef %u%_INCLUDED\n\") / f@(base_name))
+	call string_append@(buffer,
+	  form@("#define %u%_INCLUDED 1\n,n\") / f@(base_name))
+	call string_append@(buffer,
+	  "/* Declare all enum's and typedef's first: */\n\")
+
+	call string_append@(buffer, "/* h_emit1 */\n\")
+	ezc_root :@= source.ezc.root
+	if ezc_root == null@Root
+	    # No file to process:
+	    return 1
+
+	call visit@(ezc_root, buffer, compiler, h_typedefs_emit@Phase)
+	ezg_file :@= source.ezg
+	ezg_root :@= null@Root
+	call string_append@(buffer, "/* h_emit2 */\n\")
+	if ezg_file !== null@File
+	    ezg_root := ezg_file.root
+	    call visit@(ezg_root, buffer, compiler, h_typedefs_emit@Phase)
+	call string_append@(buffer, "/* h_emit3 */\n\")
+
+	simple_typedefs :@= compiler.simple_typedefs
+	if simple_typedefs.size != 0
+	    #call string_append@(buffer,
+	    #  "\n\ Simple typedefs are stuffed into a macro: \n\")
+	    call string_append@(buffer, simple_typedefs)
+	    call trim@(simple_typedefs, 0)
+	    #call string_append@(buffer, "\n\")
+	    #call string_append@(buffer, "#ifdef SCALARS___DEFINED\n\")
+	    #call string_append@(buffer, "SIMPLE___TYPEDEFS\n\")
+	    #call string_append@(buffer, "#endif\n,n\")
+
+	call string_append@(buffer,
+          "\n\/* Include other libraries exactly once: */\n\")
+
+	global_libraries :@= compiler.global_libraries
+	size :@= global_libraries.size
+	index :@= 0
+	while index < size
+	    global_library :@= global_libraries[index]
+	    global_base_name :@= global_library.base_name
+	    call string_append@(buffer,
+	      form@("#ifndef %u%_INCLUDED\n\") / f@(global_base_name))
+	    call string_append@(buffer,
+	      form@("#include \dq\%s%.h\dq,n\") / f@(global_base_name))
+	    call string_append@(buffer,
+	      form@("#endif /* %u%_INCLUDED */\n\") / f@(global_base_name))
+	    index := index + 1
+
+	call visit@Root(ezc_root, buffer, compiler, h_includes_emit@Phase)
+	if ezg_root !== null@Root
+	    call visit@Root(ezg_root, buffer, compiler, h_includes_emit@Phase)
+
+	other_typedefs :@= compiler.other_typedefs
+	if other_typedefs.size != 0
+	    call string_append@(buffer, "\n\/* Other typedefs: */\n\")
+	    call string_append@(buffer, other_typedefs)
+	    call trim@(other_typedefs, 0)				
+
+	call string_append@(buffer, "\n\/* Define the structures: */\n\")
+
+	call visit@Root(ezc_root, buffer, compiler, h_structs_emit@Phase)
+	if ezg_root !== null@Root
+	    call visit@Root(ezg_root, buffer, compiler, h_structs_emit@Phase)
+
+	call string_append@(buffer,
+	  "\n\/* Declare the routine prototypes: */\n\")
+
+	call visit@(ezc_root, buffer, compiler, h_externs_emit@Phase)
+	if ezg_root !== null@Root
+	    call visit@(ezg_root, buffer, compiler, h_externs_emit@Phase)
+
+	define_datas :@= compiler.define_datas
+	size := define_datas.size
+	if size != 0
+	    call string_append@(buffer,
+	      "\n\/* Declare extracted #define values: */\n\")
+
+	    index := 0
+	    while index < size
+		define_data :@= define_datas[index]
+		call string_append@(buffer,
+		  read_only_copy@(form@("extern %s% %s%__%s%;\n\") %
+		  f@(define_data.type_name) % f@(define_data.type_name) /
+		  f@(define_data.new_name)))
+		index := index + 1
+
+	call string_append@(buffer,
+	  form@("#endif /* %u%_INCLUDED */\n\") / f@(base_name))
+
+	# Write out the .h file:
+	file_name :@= read_only_copy@(form@("%s%%s%.h") %
+	  f@(base_name) / f@(compiler.middlefix))
+	out_stream :@= open@Out_Stream(file_name)
+	if out_stream == null@Out_Stream
+	    assert false@Logical
+	else
+	    call put@(buffer, out_stream)
+	    call close@(out_stream)
+
+	call type_disarm@(source)
+
+    if trace
+    	call d@(form@("<=h_emit@Source(%v%) => %d%\n\") %
+	  f@(base_name) / f@(errors))
+
+    return errors
+
+
+routine link_scan@Source
+    takes source Source
+    takes compiler Compiler
+    returns Unsigned
+
+    call visit@(source.ezc.root, compiler.buffer, compiler, link_scan@Phase)
+    return 0
+
+
+routine prefix_scan@Source
+    takes source Source
+    takes compiler Compiler
+    returns Unsigned
+
+    # This routine will perform prefix scanning.
+
+    errors :@= 0
+    base_name :@= source.base_name
+    #trace :@= true@Logical
+    #if trace
+    #	call d@(form@("=>prefix_scan@Source(%v%)\n\") / f@(base_name))
+
+    # Grab some stuff out of {compiler}:
+    includes :@= compiler.includes
+    defines_prefixes :@= compiler.defines_prefixes
+    enumeration_prefixes :@= compiler.enumeration_prefixes
+    call trim@(includes, 0)
+    call trim@(defines_prefixes, 0)
+    call trim@(enumeration_prefixes, 0)
+    options :@= compiler.options
+    tokenizer :@= compiler.tokenizer
+
+    ezc :@= source.ezc
+    if ezc == null@File
+	# We can not scan a source file that does not exist:
+	return 1
+
+    define_datas :@= ezc.define_datas
+    compiler.define_datas := define_datas
+
+    # Figure out the various prefix commands:
+    call visit@(ezc.root, compiler.buffer, compiler, prefix_scan@Phase)
+
+    defines_size :@= defines_prefixes.size
+    enumerations_size :@= enumeration_prefixes.size
+    if defines_size != 0 || enumerations_size != 0
+	# We've got some work to do:
+
+	#call d@(form@("defines_size=%d%\n\") / f@(defines_size))
+	#call d@(form@("enumerations_size=%d%\n\") /
+	#  f@(enumerations_size))
+
+	includes := compiler.includes
+	size :@= includes.size
+	if size = 0
+	    defines_prefix :@= defines_prefixes[0]
+	    call log@(compiler, defines_prefix.defines_prefix.keyword,
+	      "There are no 'include' declarations to fetch from")
+	else
+	    # Construct an file containing the #includes:
+	    #if trace
+	    #	call d@("We have some #includes\n\")
+
+	    include_stream :@= open@Out_Stream("/tmp/includes.c")
+	    assert include_stream !== null@Out_Stream
+	    index :@= 0
+	    while index < size
+		include :@= includes[index]
+		call put@(form@("#include \dq\%s%\dq\/*C1*/\n\") /
+		  f@(string_convert@(include.string)), include_stream)
+		index := index + 1
+	    call close@(include_stream)
+
+	    compiler_name :@= options.compiler_executable
+	    if compiler_name == null@String
+		compiler_name := "gcc"
+	    command :@= new@String()
+	    call string_append@(command,
+	      form@("%s% -E %s% -I. -dM /tmp/includes.c | sed s,#,,g | sed /[0-9]EE/d | sed /[0-9]D[DLF]/d") %
+	      f@(compiler_name) / f@(compiler.search_options))
+	    #call d@(form@("Command: %v%\n\") / f@(command))
+
+	    define_stream :@= pipe_read@In_Stream(command)
+	    define_contents :@= all_read@(define_stream, null@String)
+	    call close@(define_stream)
+	    #call put@(define_contents, error@Out_Stream)
+
+	    define_tokens :@= new@Array[Token]()
+	    indents :@= new@Array[Unsigned]()
+	    call append@(indents, 0)
+
+	    tokenizer.contents := define_contents
+	    tokenizer.tokens := define_tokens
+	    tokenizer.index := 0
+	    tokenizer.indents := indents
+	
+	    lexeme :@= at_sign@Lexeme
+	    while lexeme != end_of_file@Lexeme
+		token :@= next@(tokenizer)
+		lexeme := token.lexeme
+		call append@(define_tokens, token)
+
+	    parser :@= create@Parser(define_tokens, new@Messages())
+	    define_root :@= parse@Define_Root(parser)
+
+	    # Now output the defines:
+	    defines :@= define_root.defines
+	    define_lines :@= new@Array[Define_Line]()
+	    size := defines.size
+	    index := 0
+	    while index < size
+		define :@= defines[index]
+		switch define.kind
+		  case define_line
+		    call append@(define_lines, define.define_line)
+		index := index + 1
+
+	    call sort@(define_lines, compare@Define_Line)
+	    size := define_lines.size
+
+	    #if trace
+	    #	call d@(form@("We have %d% define lines\n\") / f@(size))
+
+	    lower_case :@= new@String()
+	    index := 0
+	    while index < size
+		define_line :@= define_lines[index]
+		define_name :@= define_line.name.value
+		define_name_size :@= define_name.size
+		define_value :@= define_line.number.value
+
+		#call put@(form@(define[%d%] %qv% %qv%\n\") %
+		#  f@(index) % f@(define_name) / f@(define_value),
+		#  error@Out_Stream)
+
+		defines_index :@= 0
+		while defines_index < defines_size
+		    defines_prefix :@= defines_prefixes[defines_index]
+		    prefix :@= defines_prefix.prefix.value
+		    match :@= defines_prefix.match.value
+
+		    #call put@(form@(
+		    #  "    prefix[%d%] %qv% match %qv%\n\") %
+		    #  f@(prefixes_index) % f(prefix) / f@(match),
+		    #  error@Out_Stream)
+
+		    match_size :@= match.size
+		    if define_name_size >= match_size &&
+		      range_compare@(define_name, 0, match_size,
+		      match, 0, match_size) = 0i
+			# We have a match:
+			#if trace
+			#    call d@("*************************Match\n\")
+			new_name :@= new@String()
+			call string_append@(new_name, prefix)
+			call range_append@(new_name, define_name,
+			  match_size, define_name_size - match_size)
+			call lower_case@(new_name)
+
+			define_data :@= new@Define_Data()
+			define_data.old_name := define_name
+			define_data.new_name := new_name
+			define_data.value := define_value
+			define_data.type_name :=
+			  defines_prefix.type_name.value
+			call append@(define_datas, define_data)
+		    defines_index := defines_index + 1
+
+		enumerations_index :@= 0
+		while enumerations_index < enumerations_size
+		    enumeration_prefix :@=
+		      enumeration_prefixes[enumerations_index]
+		    prefix :@= enumeration_prefix.prefix.value
+		    match :@= enumeration_prefix.prefix.value
+		    match_size :@= match.size
+		    if define_name_size >= match_size &&
+		      range_compare@(define_name, 0, match_size,
+		      match, 0, match_size) = 0i
+			# We have a match:
+			new_name :@= new@String()
+			call string_append@(new_name, define_name)
+			call lower_case@(new_name)
+
+			#call d@(form@("enum_def match:%v%=%v%\n\") %
+			#  f@(define_name) / f@(define_value))
+
+			if !enumeration_prefix.define_datas_initialized
+			    enumeration_prefix.define_datas :=
+			      new@Array[Define_Data]()
+			    enumeration_prefix.
+			      define_datas_initialized := true@Logical
+			define_data :@= new@Define_Data()
+			define_data.old_name := define_name
+			define_data.new_name := new_name
+			define_data.value := define_value
+			define_data.type_name := ""
+			call append@(enumeration_prefix.define_datas,
+			  define_data)
+
+		    enumerations_index := enumerations_index + 1
+		index := index + 1
+
+	    #if trace
+	    #	call d@(form@("We have %d% define_datas\n\") /
+	    #	  f@(define_datas.size))
+
+    #if trace
+    #	call d@(form@("<=prefix_scan@Source(%v%) => %d%\n\") %
+    #	  f@(base_name) / f@(errors))
+
+    return errors
+
+
+#routine read_library_find_type@Source
+#    takes source Source
+#    takes compiler Compiler
+#    returns Unsigned
+#
+#    # This routine will run the {compile_phase} of the compiler on {source}
+#    # using {compiler} and return the number of errors.
+#
+#    base_name :@= source.base_name
+#    #trace :@= false@Logical
+#    #if trace
+#    #	call d@(form@("=>read_library_find_type@Source(v%)\n\") % f@(base_name))
+#
+#    errors :@= 0
+#    if ezc_read@(source, compiler)
+#	token :@= source.token
+#	if token == null@Token
+#	    call d@(form@("Unable to find library/interface %v%\n\") /
+#	      f@(base_name))
+#	else
+#	    call log@(compiler, token,
+#	      form@("Unable to find library/interface %v%") / f@(base_name))
+#	errors := errors + 1
+#    else
+#	source.ezc.root := parse@(compiler.parser, source.ezc.tokens)
+#
+#	buffer :@= compiler.buffer
+#	call trim@(buffer, 0)
+#	compiler.source := source
+#	call visit@(source.ezc.root,
+#	  buffer, compiler, library_type_find@Phase)
+#	call trim@(buffer, 0)
+#	compiler.source := null@Source
+#
+#    #if trace
+#    #	call d@(form@("<=read_library_find_type@Source(v%)\n\") % f@(base_name))
+#
+#    return errors
+
+
+routine should_compile@Source
+    takes source Source
+    takes compiler Compiler
+    returns Logical
+
+    # This routine will return {true@Logical} if {source} should be compiled
+    # using {compiler}.
+
+    source0 :@= compiler.sources[0]
+    source_collection :@= source.collection
+    result :@= 0f
+    if source_collection == null@Collection
+	# {source} is not part of {collection}:
+	if source0.collection == null@Collection
+	    # We are not compiling a collection, so {source} should be compiled:
+	    result := 1t
+	else
+	    # We are compiling a collection, and {source} is not a collection,
+	    # so it should not be compiled:
+	    result := 0f
+    else
+	# {source} is part of a collection:
+	if equal@(source0.base_name, source_collection.name)
+	    # We are compiling {collection}, so we should compile {source}:
+	    result := 1t
+	else
+	    # {source} should not be compiled since it is part of a collection:
+	    result := 0f
+    return result
+
+
+routine show@Source
+    takes source Source
+    returns_nothing
+
+    # This routine will show the contents of {source}:
+
+    # Show {base_name}:
+    index :@= 0
+    size :@= 0
+    call d@(form@("  Base_Name: %v%\n\") / f@(source.base_name))
+
+    # Show {collection}:
+    collection :@= source.collection
+    if collection !== null@Collection
+	call d@(form@("    Collection: %v%\n\") / f@(collection.name))
+	collection_sources :@= collection.sources
+	size := collection_sources.size
+	index := 0
+	while index < size
+	    collection_source :@= collection_sources[index]
+	    call d@(form@("      Collection_Source[%d%]: %v%\n\") %
+	      f@(index) / f@(collection_source.base_name))
+	    index := index + 1
+
+    # Show {libraries}:
+    libraries :@= source.libraries
+    size := libraries.size
+    index := 0
+    while index < size
+	call d@(form@("    Library[%d%]: %v%\n\") %
+	  f@(index) / f@(libraries[index].name.value))
+	index := index + 1
+
+    # Show {requires}:
+    requires :@= source.requires
+    size := requires.size
+    index := 0
+    while index < size
+	call d@(form@("    Requires[%d%]: %v%\n\") %
+	  f@(index) / f@(requires[index].name.value))
+	index := index + 1
+
+    # Show {interfaces}:
+    interfaces :@= source.interfaces
+    size := interfaces.size
+    index := 0
+    while index < size
+	call d@(form@("    Interfaces[%d%]: %v%\n\") %
+	  f@(index) / f@(requires[index].name.value))
+	index := index + 1
+
+    # Show {global_libraries}:
+    global_libraries :@= source.global_libraries
+    size := global_libraries.size
+    index := 0
+    while index < size
+	call d@(form@("    Global_Library[%d%]: %v%\n\") %
+	  f@(index) / f@(global_libraries[index].name.value))
+	index := index + 1
+
+    # Show {defines}:
+    defines :@= source.defines
+    size := defines.size
+    while index < size
+	call d@(form@("    Defines[%d%]: %t%\n\") %
+	  f@(index) / f@(defines[index].type))
+	index := index + 1
+
+
+
+routine type_arm@Source
+    takes source Source
+    returns_nothing
+
+    # This routine will mark all of the type accessible from {source}
+    # as available:
+
+    do_nothing
+
+
+routine type_disarm@Source
+    takes source Source
+    returns_nothing
+
+    # This routine will mark all of the type accessible from {source}
+    # as available:
+
+    do_nothing
+
+
+routine typed_name_object_find@Source
+    takes source Source
+    takes compiler Compiler
+    returns Unsigned
+
+    # This routine will scan over {source} looking for {Typed_Name_Object}'s:
+
+    base_name :@= source.base_name
+    #trace :@= true@Logical
+    #if trace
+    #	call d@(form@("=>typed_name_object_find@Source(%v%)\n\") /
+    #	  f@(base_name))
+
+    call type_arm@(source)
+    errors :@= 0
+    buffer :@= compiler.buffer
+    call trim@(buffer, 0)
+    call visit@(source.ezc.root, buffer, compiler, ezh_scan@Phase)
+    ezg :@= source.ezg
+    if ezg !== null@File
+	#call d@("scanning .ezg\n\")
+	assert ezg.root !== null@Root
+	call visit@(ezg.root, buffer, compiler, ezh_scan@Phase)
+    call type_disarm@(source)
+
+    #if trace
+    #	call d@(form@("<=typed_name_object_find@Source(%v%) => %d%\n\") %
+    #	  f@(base_name) / f@(errors))
+
+    return errors
+
+
+# {Variable} routines:
+
+routine show@Variable
+    takes variable Variable
+    takes buffer String
+    returns_nothing
+
+    if variable == null@Variable
+	call buffer_append@("null@Variable", buffer)
+    else
+	call buffer_append@("'", buffer)
+	call buffer_append@(variable.name, buffer)
+	call buffer_append@("'", buffer)
+
+
+routine create@Variable
+    takes name String
+    takes type Type
+    returns Variable
+
+    # This procedure will create and return a new variable object
+    #, with a name of {name}, type of {type} and a position of {positoin}.
+
+    variable :@= new@Variable()
+    variable.name := name
+    variable.type := type
+    variable.level := 0xffffffff
+    return variable
+
+

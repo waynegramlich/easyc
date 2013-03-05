@@ -1,0 +1,3911 @@
+easy_c 1.0
+
+# Copyright (c) 2007-2009 by Wayne C. Gramlich.
+# All rights reserved.
+
+library Compiler
+library Easy_C
+library Expression
+library Token
+
+# This is the location where the Easy-C parsing strategy is
+# discussed.
+#
+# The parsing techniques taught in by most computer science
+# courses are based on the "Dragon Book" (named after
+# the dragon on its cover) "Compilers: Principles, Techniques,
+# and Tools" by Aho, Sethi, and Ullman.  The authors of this
+# book really push LALR(1) bottom-up parsing using a parser
+# generator such as YACC (Yet Another Compiler Compiler.)
+#
+# Unfortunately, I disagree with their thrust.  I think the
+# most important aspects of a parser are 1) correctness and
+# 2) quality error messages, 3) ease of understanding the
+# code and with 4) performance not being nearly as important.
+# Bottom-up parsers are notorious for having insufficient
+# information to provide decent error messages.  While it
+# is possible to coax a LALR(1) parser into generating some
+# reasonable error messages, it is not particularly easy.
+# The LALR(1) folks seem to concentrate on 1) and 4) and
+# pay little attention to 2) and 3).
+#
+# The Easy-C parser does not use a LALR(1) bottom-up parser.
+# Instead, it uses an easy to understand and reasonably
+# efficient recursive decent parser.  Reasonable error
+# message generation is quite straight forward using recursive
+# decent.   When it comes to expression parsing, a basic
+# operator precedence parser is used.  (The "Dragon Book"
+# does not even mention operator precedence grammars as such,
+# since precedence grammars are kind of built into LALR(1)
+# parsers.)  Operator precedence grammars are simple to implement
+# and understand whereas LALR(1) parsers are extremely difficult
+# to implement and understand.  The long out of print book
+# "Compiler Construction for Digital Computers" by David Gries
+# discusses both operator precedence grammars and recursive
+# decent parsing.  (Warning: the book typography is atrocious.)
+# Used copies of the book are available via <http://Amazon.Com/>
+# for way less than used copies of the "Dragon Book".
+#
+# The result of parsing an Easy-C program is a parse tree that is
+# stored in a strongly typed recursive data structure that is rooted
+# in the {Root} type.  The recursive data structures are defined
+# below.  The "magic" is that the Easy-C compiler implements
+# special code that generates most of the recursive decent
+# "parse" routines automatically; thereby saving a huge amount of
+# tedious code writing.  In addition, there is another
+# crop of "traverse" routines that are automatically generated
+# for visiting all of the nodes in a parse tree.
+#
+# The text below outlines how the compiler generates both
+# the parse and traverse routines.  Be sure to look at the
+# generated file Parse.ezg, to see all of these boring routines.
+# After you have read a few of them, you will be glad that the
+# compiler writes them rather than a human.
+#
+# The "generate parse" clause causes the compiler to generate
+# a parse routine for the type.  The parse routine for a record
+# node sequentially calls the parse fields for each field in the
+# record.  If any sub-parse fails, by returning Null, the entire
+# parse fails and returns Null.  The parse routine for a variant
+# node sequentially invokes the parse routine for each sub field
+# until the first one returns non-Null.  The last field of each
+# variant is "error Error" which always succeeds, but generates
+# an error message as a side effect and slurps through the tokens
+# until the "line" is at the same indentation level.
+#
+# The {Token} node is a special case.  If the name of the field
+# is a known lexeme, it must match the {Lexeme} name.  Thus
+# "end_of_line Token" will only match an {end_of_line} {Token}.
+# If the name does not match, a {symbol} token must be matched.
+#
+# The {Keyword} node is a special case.  It will only match a
+# symbol that has the exact spelling of the field name.  Thus,
+# "define Keyword" will only match a symbol token containing
+# "define".
+#
+# Parameterized types are a special case.  They must be followed
+# by a Token field.  Thus, "statements Array[Statement]"
+# followed by "close_indent Token" will match a sequence of
+# one or more {Statement} nodes and is terminated when a
+# {close_indent} {Token} is encountered.
+#
+# Lastly, if there is more than one record field, only the
+# first one is used for parsing.  The rest are extra fields
+# for later use by the compiler.
+#
+# The "generate traverse" clause causes the compiler to generate
+# a traverse routine that will perform an in order tree
+# traversal of the parse tree.  The {traverse}@{Token} routine
+# is responsible for doing anything interesting with each
+# leaf node.
+#
+# Any special case parsing routines are done by leaving off
+# the "generate parse" clause and are hand written.
+# Likewise, a special traverse routine can be provided by
+# leaving off the "generate traverse" clause and hand writing
+# it.
+
+# The following records are used to build up a parse tree:
+
+define Root
+    record
+	declarations Array[Declaration]
+	end_of_file Token
+    generate parse, traverse
+
+define Declaration
+    variant kind Declaration_Kind
+	easy_c Easy_C_Declaration
+	end_of_line Token
+	note Note
+	routine Routine_Declaration
+	define Define_Declaration
+	defines_prefix Defines_Prefix_Declaration
+	external_named External_Named_Declaration
+	external External_Declaration
+	global Global_Declaration
+	global_library Global_Library_Declaration
+	library Library_Declaration
+	interface Interface_Declaration
+	load Load_Declaration
+	include_string Include_String_Declaration
+	constant Constant_Declaration
+	require Require_Declaration
+	collection Collection_Declaration
+	error Error
+    generate parse, traverse
+
+# Define declaration:
+
+define Easy_C_Declaration
+    record
+	easy_c Keyword
+	float_number Token
+	end_of_line Token
+    generate parse, traverse
+
+define Define_Declaration
+    record
+	define Keyword
+	type Type
+	end_of_line Token
+	open_indent Token
+	define_clauses Array[Define_Clause]
+	close_indent Token
+    generate parse, traverse
+
+define Define_Clause
+    variant kind Define_Clause_Kind
+	end_of_line Token
+	note Note
+	enumeration Enumeration_Clause
+	enumeration_prefix Enumeration_Prefix_Clause
+	record Record_Clause
+	record_import Record_Import_Clause
+	registers Registers_Clause
+	variant Variant_Clause
+	generate Generate_Clause
+	simple Simple_Clause
+	simple_numeric Simple_Numeric_Clause
+	external External_Clause
+	base_type Base_Type_Clause
+	error Error
+    generate parse, traverse
+
+define Simple_Numeric_Clause
+    record
+	simple_numeric Keyword
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+define Base_Type_Clause
+    record
+	base_type Keyword
+	string Token
+	end_of_line Token
+    generate parse, traverse
+
+define Enumeration_Clause
+    record
+	enumeration Keyword
+	end_of_line Token
+	open_indent Token
+	item_clauses Array[Item_Clause]
+	close_indent Token
+    generate parse, traverse
+
+define Enumeration_Prefix_Clause
+    record
+	enumeration_prefix Keyword
+	prefix Token
+	end_of_line Token
+    record
+	define_datas Array[Define_Data]
+	define_datas_initialized Logical
+    generate parse, traverse
+
+define Item_Clause
+    variant kind Item_Clause_Kind
+	end_of_line Token
+	note Note
+	item Item
+	error Error
+    generate parse, traverse
+
+define Item
+    record
+	name Token
+	end_of_line Token
+    generate parse, traverse
+
+define Record_Clause
+    record
+	record Keyword
+	end_of_line Token
+	open_indent Token
+	field_clauses Array[Field_Clause]
+	close_indent Token
+    generate parse, traverse
+
+define Record_Import_Clause
+    record
+	record_import Keyword
+	string Token
+	end_of_line Token
+	open_indent Token
+	import_field_clauses Array[Import_Field_Clause]
+	close_indent Token
+    generate parse, traverse
+
+define Registers_Clause
+    record
+	registers Keyword
+	end_of_line Token
+	open_indent Token
+	register_clauses Array[Register_Clause]
+	close_indent Token
+    generate parse, traverse
+
+define Register_Clause
+    variant kind Register_Clause_Kind
+	end_of_line Token
+	note Note
+	bit Register_Bit
+	byte Register_Byte
+	error Error
+    generate parse, traverse
+
+define Register_Bit
+    record
+	bit Keyword
+	name Token
+	equals Token
+	string Token
+	end_of_line Token
+    generate parse, traverse
+
+define Register_Byte
+    record
+	byte Keyword
+	name Token
+	equals Token
+	string Token
+	end_of_line Token
+    generate parse, traverse
+
+define Field_Clause
+    variant kind Field_Clause_Kind
+	end_of_line Token
+	note Note
+	field Field
+	error Error
+    generate parse, traverse
+
+define Import_Field_Clause
+    variant kind Import_Field_Clause_Kind
+	end_of_line Token
+	note Note
+	import_field Import_Field
+	error Error
+    generate parse, traverse
+
+define Variant_Clause
+    record
+	variant Keyword
+	kind_name Token
+	kind_type Type
+	end_of_line Token
+	open_indent Token
+	field_clauses Array[Field_Clause]
+	close_indent Token
+    generate parse, traverse
+
+define Field
+    record
+	name Token
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+define Import_Field
+    record
+	c_name Token
+	equals Token
+	name Token
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+define Simple_Clause
+    record
+	simple Keyword
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+define Generate_Clause
+    record
+	generate Keyword
+	names Comma_Separated[Generate_Name]
+	end_of_line Token
+    generate parse, traverse
+
+define Generate_Name
+    record
+	name Token
+    generate parse, traverse
+
+define External_Clause
+    record
+	external Keyword
+	end_of_line Token
+    generate parse, traverse
+
+# Other one line declarations:
+
+define External_Declaration
+    record
+	external Keyword
+	typed_name Typed_Name
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+define External_Named_Declaration
+    record
+	external Keyword
+	typed_name Typed_Name
+	equals Token 
+	string Token
+	end_of_line Token
+    generate parse, traverse
+
+define Global_Declaration
+    record
+	global Keyword
+	typed_name Typed_Name
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+define Include_String_Declaration
+    record
+	include Keyword
+	string Token
+	end_of_line Token
+    generate parse, traverse
+
+define Global_Library_Declaration
+    record
+	global_library Keyword
+	name Token
+	end_of_line Token
+    generate parse, traverse
+
+define Library_Declaration
+    record
+	library Keyword
+	name Token
+	end_of_line Token
+    generate parse, traverse
+
+
+define Interface_Declaration
+    record
+	interface Keyword
+	name Token
+	end_of_line Token
+    generate parse, traverse
+
+
+define Load_Declaration
+    record
+	load Keyword
+	string Token
+	end_of_line Token
+    generate parse, traverse
+
+
+define Collection_Declaration
+    record
+	collection Keyword
+	name Token
+	float_number Token
+	end_of_line Token
+    generate parse, traverse
+
+define Require_Declaration
+    record
+	require Keyword
+	name Token
+	end_of_line Token
+    generate parse, traverse
+
+
+define Constant_Declaration
+    record
+	constant Keyword
+	typed_name Typed_Name
+	type Type
+	equals Token
+	expression Expression
+	end_of_line Token
+    generate parse, traverse
+
+define Defines_Prefix_Declaration
+    record
+	defines_prefix Keyword
+	prefix Token
+	equals Token
+	match Token
+	at_sign Token
+	type_name Token
+	end_of_line Token
+    generate parse, traverse
+
+
+# Routines go here:
+
+define Routine_Declaration
+    record
+	routine Keyword
+	typed_name Typed_Name
+	end_of_line Token
+	open_indent Token
+	routine_clauses Array[Routine_Clause]
+	close_indent Token
+    generate parse, traverse
+
+define Routine_Clause
+    variant kind Routine_Clause_Kind
+	end_of_line Token
+	note Note
+	takes_nothing Takes_Nothing_Clause
+	take_import Take_Import_Clause
+	take Take_Clause
+	interrupt Interrupt_Clause
+	returns_nothing Returns_Nothing_Clause
+	returns Returns_Clause
+	external External_Routine_Clause
+	c_array_access C_Array_Access_Clause
+	scalar_cast Scalar_Cast_Clause
+	local Local_Clause
+	assert Assert_Statement
+	call Call_Statement
+	do_nothing Do_Nothing_Statement
+	if If_Statement
+	return Return_Statement
+	fail Fail_Statement
+	set Set_Statement
+	switch Switch_Statement
+	while While_Statement
+	error Error
+    generate parse, traverse
+
+define Takes_Nothing_Clause
+    record
+	takes_nothing Keyword
+	end_of_line Token
+    generate parse, traverse
+
+define Take_Clause
+    record
+	takes Keyword
+	name Token
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+define Take_Import_Clause
+    record
+	takes_import Keyword
+	name Token
+	type Type
+	equals Token
+	string Token
+	end_of_line Token
+    generate parse, traverse
+
+define Returns_Nothing_Clause
+    record
+	returns_nothing Keyword
+	end_of_line Token
+    generate parse, traverse
+
+define Returns_Clause
+    record
+	returns Keyword
+	return_types Comma_Separated[Type]
+	end_of_line Token
+    generate parse, traverse
+
+define External_Routine_Clause
+    record
+	external Keyword
+	name Token
+	end_of_line Token
+    generate parse, traverse
+
+define Scalar_Cast_Clause
+    record
+	scalar_cast Keyword
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+define Interrupt_Clause
+    record
+	interrupt Keyword
+	name Token
+	end_of_line Token
+    generate parse, traverse
+
+define C_Array_Access_Clause
+    record
+	c_array_access Keyword
+	end_of_line Token
+    generate parse, traverse
+
+define Local_Clause
+    record
+	local Keyword
+	name Token
+	type Type
+	end_of_line Token
+    generate parse, traverse
+
+# Statements are listed here:
+define Statement
+    variant kind Statement_Kind
+	end_of_line Token
+	note Note
+	assert Assert_Statement
+	break_level Break_Level_Statement
+	break_empty Break_Empty_Statement
+	call Call_Statement
+	continue_level Continue_Level_Statement
+	continue_empty Continue_Empty_Statement
+	do_nothing Do_Nothing_Statement
+	if If_Statement
+	return Return_Statement
+	set Set_Statement
+	switch Switch_Statement
+	while While_Statement
+	error Error
+    generate parse, traverse
+
+define Assert_Statement
+    record
+	assert Keyword
+	expression Expression
+	end_of_line Token
+    generate parse, traverse
+
+define Break_Empty_Statement
+    record
+	break Keyword
+	end_of_line Token
+    generate parse, traverse
+
+define Break_Level_Statement
+    record
+	break Keyword
+	number Token
+	end_of_line Token
+    generate parse, traverse
+
+define Call_Statement
+    record
+	call Keyword
+	expression Expression
+	end_of_line Token
+    generate parse, traverse
+
+define Continue_Empty_Statement
+    record
+	continue Keyword
+	end_of_line Token
+    generate parse, traverse
+
+define Continue_Level_Statement
+    record
+	continue Keyword
+	number Token
+	end_of_line Token
+    generate parse, traverse
+
+define Do_Nothing_Statement
+    record
+	do_nothing Keyword
+	end_of_line Token
+    generate parse, traverse
+
+define Fail_Statement
+    record
+	fail Keyword
+	string Token
+	end_of_line Token
+    generate parse, traverse
+
+#FIXME: replace If_Statement data structures!!!
+define If_Statement
+    record
+	if_clauses Array[If_Clause]
+    generate traverse
+
+define If_Clause
+    variant kind If_Clause_Kind
+	if_part If_Part
+	else_if_part Else_If_Part
+	else_part Else_Part
+    generate traverse
+
+define If_Part
+    record
+	if Keyword
+	expression Expression
+	end_of_line Token
+	open_indent Token
+	statements Array[Statement]
+	close_indent Token
+    generate parse, traverse
+
+define Else_If_Part
+    record
+	else_if Keyword
+	expression Expression
+	end_of_line Token
+	open_indent Token
+	statements Array[Statement]
+	close_indent Token
+    generate parse, traverse
+
+define Else_Part
+    record
+	else Keyword
+	end_of_line Token
+	open_indent Token
+	statements Array[Statement]
+	close_indent Token
+    generate parse, traverse
+
+#FIXME: replace Return_Statement data structures!!!
+define Return_Statement
+    variant kind Return_Clause_Kind
+	expression Return_Clause_Expression
+	empty Return_Clause_Empty
+    generate parse, traverse
+
+define Return_Clause_Expression
+    record
+	return Keyword
+	expression Expression
+	end_of_line Token
+    generate parse, traverse
+
+define Return_Clause_Empty
+    record
+	return Keyword
+	end_of_line Token
+    generate parse, traverse
+
+define Set_Statement
+    record
+	set Token
+	expression Expression
+	end_of_line Token
+    generate parse, traverse
+
+define Switch_Statement
+    record
+	switch Keyword
+	expression Expression
+	end_of_line Token
+	open_indent Token
+	switch_clauses Array[Switch_Clause]
+	close_indent Token
+    generate parse, traverse
+
+define Switch_Clause
+    variant kind Switch_Clause_Kind
+	end_of_line Token
+	note Note
+	case Switch_Case
+	default Switch_Default
+	all_cases_required Switch_All_Cases_Required
+	error Error
+    generate parse, traverse
+
+define Switch_Case
+    record
+	case Keyword
+	cases Expression
+	end_of_line Token
+	open_indent Token
+	statements Array[Statement]
+	close_indent Token
+    generate parse, traverse
+
+define Switch_Default
+    record
+	default Keyword
+	end_of_line Token
+	open_indent Token
+	statements Array[Statement]
+	close_indent Token
+    generate parse, traverse
+
+define Switch_All_Cases_Required
+    record
+	all_cases_required Keyword
+	end_of_line Token
+    generate parse, traverse
+
+define Case_Name
+    record
+	name Token
+    generate parse, traverse
+
+define While_Statement
+    record
+	while Keyword
+	expression Expression
+	end_of_line Token
+	open_indent Token
+	statements Array[Statement]
+	close_indent Token
+    generate parse, traverse
+
+# Expressions are listed here:
+
+define Expression
+    variant kind Expression_Kind
+	binary Binary_Expression
+	bracket Bracket_Expression
+	character Token
+	float_number Token
+	list List_Expression
+	number Token
+	parenthesis Parenthesis_Expression
+	string Token
+	symbol Token
+	unary Unary_Expression
+	error Error
+    generate traverse
+	
+define Binary_Expression
+    record
+	left Expression
+	operator Token
+	right Expression
+    generate traverse
+
+define Bracket_Expression
+    record
+	expression1 Expression
+	open_bracket Token
+	expression2 Expression
+	close_bracket Token
+    generate traverse
+
+define List_Expression
+    record
+	operators Array[Token]
+	expressions Array[Expression]
+	location Token
+
+define Parenthesis_Expression
+    record
+	open_parenthesis Token
+	expression Expression
+	close_parenthesis Token
+    generate traverse
+
+define Unary_Expression
+    record
+	operator Token
+	expression Expression
+    generate traverse
+
+# Types are defined here:
+
+define Typed_Name
+    record
+	name Token
+	at_sign Token
+	type Type
+    generate parse, traverse
+
+define Type
+    variant kind Type_Kind
+	parameterized Parameterized_Type
+	simple Token
+	routine Routine_Type
+    record
+	replaced Logical
+    generate parse, traverse
+
+define Parameterized_Type
+    record
+	name Token
+	open_bracket Token
+	sub_types Comma_Separated[Type]
+	close_bracket Token
+    generate parse, traverse
+
+define Routine_Type
+    record
+	open_bracket Token
+	return_types Comma_Separated[Type]
+	less_than_or_equal Token
+	takes_types Comma_Separated[Type]
+	close_bracket Token
+    generate traverse
+
+# Shared stuff:
+
+define Note
+    record
+	comment Token
+	end_of_line Token
+    generate parse, traverse
+
+define Error
+    record
+	tokens Array[Token]
+
+define Keyword
+    record
+	keyword Token
+    generate traverse
+
+define Comma_Separated[Sub_Type]
+    record
+	commas Array[Token]
+	sub_types Array[Sub_Type]
+
+# That is it for the parse tree type definitions.
+
+# The remaining types and hand written parse routines are defined here:
+
+define Parser
+    record
+	c_typedefs Hash_Table[String, String] # C typedef mapping
+	expressions Array[Expression]	# {Expression} stack
+	index Unsigned			# Current index into {tokens}
+	messages Messages		# Error {Message} list
+	operators Array[Token]		# {Operator} stack
+	temporary String		# Temporary {String}
+	token_end Token			# End Token
+	token_start Token		# Start token
+	tokens Array[Token]		# {Token}'s to parse
+
+define Traverser
+    record
+	buffer String
+	no_errors Logical
+	tokens Array[Token]
+
+define Expression_State			# Expression state
+    enumeration
+	unary				# Waiting for unary op or leaf
+	leaf				# Just did leaf (sym., no., etc.)
+	binary				# Just did a binary op.
+	at_sign				# Just did a at sign ('@')
+	at_leaf				# Just at the leaf after an at sign
+
+
+# {Array} stuff:
+
+routine parse@Array[Sub_Type]
+    takes parser Parser
+    takes parse_sub_type [Sub_Type <= Parser]
+    takes null_sub_type Sub_Type
+    takes stop_lexeme Lexeme
+    returns Array[Sub_Type]
+
+    # This routine will parse a sequence of {Sub_Type} objects
+    # using the {sub_parse} routine and {parser}.  If no objects
+    # are parsed, an empty {Array[Sub_Type]} array is returned.
+
+    temporary :@= new@String()
+
+    #call put@("=====>parse@Array()\n\", error@Out_Stream)
+
+    tokens :@= parser.tokens
+    size :@= tokens.size
+    sub_types :@= new@Array[Sub_Type]()
+    index :@= parser.index
+    while index < size
+	token :@= parser.tokens[index]
+	#call put@(form@("parse@Array: [%s%] %t%\n\") %
+	#  f@(parser.index) / f@(token), error@Out_Stream)
+
+	if token.lexeme = stop_lexeme
+	    break
+	sub_type :@= parse_sub_type(parser)
+	if sub_type == null_sub_type
+	    break
+	call append@(sub_types, sub_type)
+	index := parser.index
+
+    #call put@("<======parse@Array()\n\", error@Out_Stream)
+    return sub_types
+
+
+routine traverse@Array[Sub_Type]
+    takes sub_types Array[Sub_Type]
+    takes traverser Traverser
+    takes traverse_proc [ <= Sub_Type, Traverser]
+    returns_nothing
+
+    # This routine will traverse each each instance of {Sub_Type} in
+    # {sub_types} using {traverser} and {traverse_proc}.
+
+    size :@= sub_types.size
+    index :@= 0
+    while index < size
+	sub_type :@= sub_types[index]
+	call traverse_proc(sub_type, traverser)
+	index := index + 1
+
+
+# {Comma_Separated} stuff:
+
+routine compare@Comma_Separated[Sub_Type]
+    takes comma_separated1 Comma_Separated[Sub_Type]
+    takes comma_separated2 Comma_Separated[Sub_Type]
+    takes compare_routine [Integer <= Sub_Type, Sub_Type]
+    returns Integer
+
+    # This routine will return -1, 0, 1 if each {Sub_Type} in
+    # {comma_separated1} is <, =, > to the correspponding one in
+    # {comma_separated2} using {compare_routine} to compare them.
+
+    zero :@= 0i
+    result :@= zero
+    sub_types1 :@= comma_separated1.sub_types
+    sub_types2 :@= comma_separated2.sub_types
+    size1 :@= sub_types1.size
+    size2 :@= sub_types2.size
+    size :@= size1
+    if size2 < size1
+	size := size2
+
+    index :@= 0
+    while index < size && result = zero
+	result :=
+	  compare_routine(comma_separated1[index], comma_separated2[index])
+	index := index + 1
+    if result = zero
+	result := compare@(size1, size2)
+    return result
+
+
+routine copy_to@Comma_Separated[Sub_Type]
+    takes to Comma_Separated[Sub_Type]
+    takes from Comma_Separated[Sub_Type]
+    takes copy_routine [Sub_Type <= Sub_Type]
+    returns_nothing
+
+    # This routine will copy {from} into {to}.
+
+    from_sub_types :@= from.sub_types
+    to_sub_types :@= to.sub_types
+    to_commas :@= to.commas
+    call trim@(to_sub_types, 0)
+    call trim@(to_commas, 0)
+    call array_append@(to_commas, from.commas)
+    size :@= from_sub_types.size
+    index :@= 0
+    while index < size
+	call append@(to_sub_types, copy_routine(from_sub_types[index]))
+	index := index + 1
+
+
+routine equal@Comma_Separated[Sub_Type]
+    takes comma_separated1 Comma_Separated[Sub_Type]
+    takes comma_separated2 Comma_Separated[Sub_Type]
+    takes equal_routine [Logical <= Sub_Type, Sub_Type]
+    returns Logical
+
+    # This routine will return {true}@{Logical} if each {Sub_Type} in
+    # {comma_separated1} is equal to the corresponding one in
+    # {comma_separated2} using {equal_routine} to determine if two
+    # {Sub_Type}'s are equal or not.
+
+    result :@= false@Logical
+    sub_types1 :@= comma_separated1.sub_types
+    sub_types2 :@= comma_separated2.sub_types
+    size1 :@= sub_types1.size
+    size2 :@= sub_types2.size
+    if size1 = size2
+	result := true@Logical
+	index :@= 0
+	while index < size1
+	    if !equal_routine(comma_separated1[index], comma_separated2[index])
+		result := false@Logical
+		break
+	    index := index + 1
+    return result
+
+
+routine f@Comma_Separated[Sub_Type]
+    takes comma_separated Comma_Separated[Sub_Type]
+    takes f_routine [String <= Sub_Type]
+    returns String
+
+    # This routine will format {comma_separated} into a string using
+    # {f_routine} and return the result:
+
+    value :@= field_next@Format()
+    control :@= read_only_copy@(value)
+    call trim@(value, 0)
+    sub_types :@= comma_separated.sub_types
+    size :@= sub_types.size
+    prefix :@= ""
+    index :@= 0
+    while index < size
+	call string_append@(value, prefix)
+	prefix := ", "
+	sub_type :@= sub_types[index]
+	form1 :@= form@(control)
+	form2 :@= f_routine(sub_type)
+	call string_append@(value, divide@(form1, form2))
+	index := index + 1
+    return value
+
+
+routine fetch1@Comma_Separated[Sub_Type]
+    takes comma_separated Comma_Separated[Sub_Type]
+    takes index Unsigned
+    returns Sub_Type
+
+    return comma_separated.sub_types[index]
+
+
+routine hash@Comma_Separated[Sub_Type]
+    takes comma_separated Comma_Separated[Sub_Type]
+    takes hash_routine [Unsigned <= Sub_Type]
+    returns Unsigned
+
+    # This routine will return a hash of {comma_separated} where the
+    # hash for each {Sub_Type} object is computed using {hash_routine}.
+
+
+    hash :@= 0
+    sub_types :@= comma_separated.sub_types
+    size :@= sub_types.size
+    index :@= 0
+    while index < size
+	hash := hash + hash_routine(sub_types[index])
+	index := index + 1
+    return hash
+
+
+routine parse@Comma_Separated[Sub_Type]
+    takes parser Parser
+    takes parse_sub_type [Sub_Type <= Parser]
+    takes null_sub_type Sub_Type
+    takes stop_lexeme Lexeme
+    returns Comma_Separated[Sub_Type]
+
+    # This routine will parse a sequence of {Sub_Type} objects
+    # using the {sub_parse} routine and {parser}.  If no objects
+    # are parsed, an empty {Comma_Separated[Sub_Type]} array is returned.
+
+    tokens :@= parser.tokens
+    comma_separated :@= new@Comma_Separated[Sub_Type]()
+    commas :@= comma_separated.commas
+    sub_types :@= comma_separated.sub_types
+
+    # Parse first {Sub_Type} object:
+    sub_type :@= parse_sub_type(parser)
+    if sub_type == null_sub_type
+	return comma_separated
+    call append@(sub_types, sub_type)
+
+    while tokens[parser.index].lexeme != stop_lexeme
+	# Parse a comma:
+	comma :@= parse@Token(parser, comma@Lexeme)
+	if comma == null@Token
+	    # No comma found; bail out:
+	    call trim@(sub_types, 0)
+	    call trim@(commas, 0)
+	    break
+
+	# Parse a {Sub_Type}:
+	sub_type := parse_sub_type(parser)
+	if sub_type == null_sub_type
+	    # No {Sub_Type} found:
+	    call trim@(sub_types, 0)
+	    call trim@(commas, 0)
+	    break
+
+	# Got them both; add them to {comma_separated}:
+	call append@(sub_types, sub_type)
+	call append@(commas, comma)
+
+    return comma_separated
+
+
+routine size_get@Comma_Separated[Sub_Type]
+    takes comma_separated Comma_Separated[Sub_Type]
+    returns Unsigned
+
+    return comma_separated.sub_types.size
+
+
+routine store1@Comma_Separated[Sub_Type]
+    takes comma_separated Comma_Separated[Sub_Type]
+    takes index Unsigned
+    takes sub_type Sub_Type
+    returns_nothing
+
+    comma_separated.sub_types[index] := sub_type
+
+
+routine string_gap_insert@Comma_Separated[Sub_Type]
+    takes comma_separated Comma_Separated[Sub_Type]
+    takes buffer String
+    takes gap_insert_routine [ <= Sub_Type, String]
+    returns_nothing
+
+    # This routine will insert {comma_separated} into {buffer}
+    # using {gap_insert_routine} to insert each {Sub_Type}.
+
+    sub_types :@= comma_separated.sub_types
+    size :@= sub_types.size
+    index :@= 0
+    while index < size
+	if index != 0
+	    call string_gap_insert@(buffer, ", ")
+	call gap_insert_routine(sub_types[index], buffer)
+	index := index + 1
+
+
+routine traverse@Comma_Separated[Sub_Type]
+    takes comma_separated Comma_Separated[Sub_Type]
+    takes traverser Traverser
+    takes traverse_proc [ <= Sub_Type, Traverser]
+    returns_nothing
+
+    # This routine will traverse each each instanceof {Sub_Type} in
+    # {sub_types} using {traverser} and {traverse_proc}.
+
+    commas :@= comma_separated.commas
+    sub_types :@= comma_separated.sub_types
+
+    size :@= sub_types.size
+    index :@= 0
+    while index < size
+	if index != 0
+	    call traverse@(commas[index - 1], traverser)
+	call traverse_proc(sub_types[index], traverser)
+	index := index + 1
+
+
+# {Define_Declaration} stuff:
+
+routine enumeration_get@Define_Declaration
+    takes define Define_Declaration
+    returns Enumeration_Clause
+
+    # This routine will return the enumeration clause associated with
+    # {define} or {Null}@{Enumeration_Clause}.
+
+    enumeration :@= null@Enumeration_Clause
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case enumeration
+	    enumeration := define_clause.enumeration
+	    break
+	index := index + 1
+    return enumeration
+
+
+routine enumeration_prefix_get@Define_Declaration
+    takes define Define_Declaration
+    returns Enumeration_Prefix_Clause
+
+    # This routine will return the enumeration prefix clause associated with
+    # {define} or {Null}@{Enumeration_Prefix-Clause}.
+
+    enumeration_prefix :@= null@Enumeration_Prefix_Clause
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case enumeration_prefix
+	    enumeration_prefix := define_clause.enumeration_prefix
+	    break
+	index := index + 1
+    return enumeration_prefix
+
+
+
+# {Enumeration_Clause} stuff:
+
+routine item_names@Enumeration_Clause
+    takes enumeration Enumeration_Clause
+    returns Array[String]
+
+    # This routine will return the item names for {enumeration}.
+
+    names :@= new@Array[String]()
+    item_clauses :@= enumeration.item_clauses
+    size :@= item_clauses.size
+    index :@= 0
+    while index < size
+	item_clause :@= item_clauses[index]
+	switch item_clause.kind
+	  case item
+	    call append@(names, item_clause.item.name.value)
+	index := index + 1
+    return names
+
+
+# {Enumeration_Prefix_Clause} stuff:
+
+routine item_names@Enumeration_Prefix_Clause
+    takes enumeration_prefix Enumeration_Prefix_Clause
+    returns Array[String]
+
+    # This routine will return the item names for {enumeration_prefix}.
+
+    names :@= new@Array[String]()
+    define_datas :@= enumeration_prefix.define_datas
+    size :@= define_datas.size
+    index :@= 0
+    while index < size
+	define_data :@= define_datas[index]
+	call append@(names, define_data.new_name)
+	index := index + 1
+    return names
+
+
+# {Error} stuff:
+
+routine parse@Error
+    takes parser Parser
+    returns Error
+
+    parser_tokens :@= parser.tokens
+    index :@= parser.index
+    tokens :@= new@Array[Token]()
+
+    while true@Logical
+	token :@= parser_tokens[index]
+	switch token.lexeme
+	  case end_of_line
+	    # Grunt out an error message:
+	    temporary :@= parser.temporary
+	    call trim@(temporary, 0)
+	    call buffer_append@("Could not parse '", temporary)
+	    tokens_size :@= tokens.size
+	    tokens_index :@= 0
+	    while tokens_index < tokens_size
+		token := tokens[tokens_index]
+		if token.white_space.size != 0
+		    call buffer_append@(' ', temporary)
+		call buffer_append@(token.value, temporary)
+		tokens_index := tokens_index + 1
+	    call buffer_append@("'", temporary)
+	    call log@(parser.messages, token, temporary)
+
+	    # Now look for a new indentation level:
+	    call append@(tokens, token)
+	    index := index + 1
+	
+	    # Check for a following indentation level:
+	    token := parser_tokens[index]
+	    if token.lexeme = open_indent@Lexeme
+		call append@(tokens, token)
+		index := index + 1
+		level :@= 1
+		while level != 0
+		    token := parser_tokens[index]
+		    switch token.lexeme
+		      case open_indent
+			level := level + 1
+		      case close_indent
+			level := level - 1
+		      case end_of_file
+			assert false@Logical
+		    call append@(tokens, token)
+		    index := index + 1
+	    break
+	  case end_of_file
+	    break
+	  default
+	    call append@(tokens, token)
+	    index := index + 1
+    parser.index := index	
+
+    error :@= new@Error()
+    error.tokens := tokens
+    return error
+
+
+routine traverse@Error
+    takes error Error
+    takes traverser Traverser
+    returns_nothing
+
+    # This routine will traverse {error} using {traverser}.
+
+    if !traverser.no_errors
+	call traverse@(error.tokens, traverser, traverse@Token)
+
+
+routine f@Expression
+    takes expression Expression
+    returns String
+
+    # This routine will insert {argument} into {buffer} at the
+    # next "%e%" location.
+
+    value :@= field_next@Format()
+    call trim@(value, 0)
+    traverser :@= create@Traverser(value, new@Array[Token]())
+    call traverse@(expression, traverser)
+    return value
+
+
+routine format@Expression
+    takes expression Expression
+    takes buffer String
+    returns_nothing
+
+    # This routine will insert {argument} into {buffer} at the
+    # next "%e%" location.
+
+    anchor :@= format_begin@(buffer)
+    size :@= buffer.size
+    index :@= anchor + 1
+    character :@= ' '
+    while index < size && character != '%'
+	character := buffer[index]
+	index := index + 1
+    traverser :@= create@Traverser(buffer, new@Array[Token]())
+    call traverse@(expression, traverser)
+    call format_end@(buffer, anchor)
+
+
+routine leaf_create@Expression
+    takes token Token
+    returns Expression
+
+    # This routine will create and return an {Expression} containing {token}.
+
+    expression :@= new@Expression()
+    switch token.lexeme
+      case character
+	expression.character := token
+      case float_number
+	expression.float_number := token
+      case number
+	expression.number := token
+      case string
+	expression.string := token
+      case symbol
+	expression.symbol := token
+    return expression
+
+
+# This is where expression parsing occurs.  A "standard" operator
+# precedence parser is used to parse expressions.  (The reason
+# why "standard" is in quotes is because most computer science classes
+# that teach compiler technology do not teach the operator precedence
+# parser anymore.  So even though a operator precedence parser is
+# quite simple to understand, it can hardly be called "standard"
+# anymore.)  An operator precedence parser has an expression stack
+# for holding expressions and an operator stack for holding operators.
+# While most precedence parsers operate in one pass, this compiler
+# uses a two pass strategy -- prescan and shift/reduce.  These two
+# passes can be combined into one, but the code is harder to understand
+# and the compiler error messages are not nearly as useful; hence,
+# two passes.
+#
+# The prescan pass scans over the entire expression performing two
+# basic tasks.  The first task is to transmute some operators
+# (e.g. binary operator to unary operator, etc.)  The second task
+# is to match up open parenthesises and brackets with their corresponding
+# close parenthesises and brackets.  There are three transmutations
+# that occur, 1) Binary to Unary, 2) Parentheses Grouping to Function
+# Invocation, and 3) Bracket to Type Bracket:
+#
+#  Binary to Unary:
+#    There are 4 unary oparators - '+', '-', '~', and '!'.  The
+#    first three are also binary operators.  Since binary operators
+#    have a different precedence (and associtivity) than binary
+#    operators it is important to distinguish them from one another
+#    This is done by the prescanner noticing when an operator is
+#    being used in a unary fashion and transmuting the {Token}
+#    {Lexeme}.  For example, the {Lexeme} for binary '-' is {minus}
+#    and the unary {Lexeme} is {negative}.  The way to identify a
+#    unary operator is that they can only occur immediately after
+#    another operator, except close parenthesis (')') or close
+#    bracket (']').  Some examples: "a := -b", "a := ~-b", and
+#    "a := (-b + c) - (-d - e)", where the first and third '-'
+#    are unary.  Notationally, 'u+', 'u-', 'u~', and 'u!' are
+#    used to represent tokens that have been transmuted to unary.
+#    Note that 'u!' and '!' are equivalent, since there is no binary
+#    operator '!'.
+# 
+#  Parenthesis Grouping to Function Invocation:
+#    The parenthesis operators can be used to group results
+#    (e.g. "(a + b) * c") or to provide function invocation
+#    (e.g. "a(b, c)".)  A function invocation occurs immeciately
+#    after a symbol, a close parenthesis (')'), or a close
+#    bracket (']').  Examples, "a(b)", "a[b](c)", "a(b)(c)".
+#    Notationally, 'i(' and 'i)' are used to represent parentheses
+#    that have been transmuted into invoke parentheses.
+#
+#  Bracket to Type Bracket:
+#    In order to compatible with ANSI-C syntax, the (...) [...]
+#    and dot ('.') operators need to be a the same precedence level.
+#    Thus, "a.b[c].d(e)" is grouped as "{{{{a.b} [c]} .d } (e)}".
+#    Alas, typed names in Easy-C look as follows:  "a@T[U](b)".
+#    Where "T[U]" is a parameterized type.  Using standard
+#    ANSI-C rules, it is grouped as follows "{{{a@T} [U]} (b)}"
+#    which is not what we want.  Instead, what we want is to
+#    group "T[U]" together.  This done by transmuting the '['
+#    after an occurance of an '@' from an {open_bracket}@{Lexeme}
+#    to {open_type}@{Lexeme}.  Notationally, 't[' and 't]'
+#    are used to represent transmuted type brackets.
+#
+# In addition, the parenthesis/bracket matcher ensures that
+# the (...) and [...] match up.  It also transmute the close
+# parenthesis (')') and close bracket (']') into matching
+# lexemes.  The matches are always as follows:
+#
+#    Open                         Close
+#   ======================================================
+#    open_parenthesis ('(')       close_parenthesis (')')
+#    open_invoke ('(')            close_invoke (')')
+#    open_bracket ('[')           close_parenthesis (']')
+#    open_type ('[')              close_type (']')
+#    type_invoke ('@(')           close_parenthesis (')')
+#
+# All of this transmutation and parenthesis/bracket matching is
+# done using a 5-state state machine.  This machine is drawn
+# below:
+#
+#      Start   +---+
+#        |     |   |! (           leaf = symbol, number, or
+#        V     V   |eops-u               charter/string literal
+#       *********  |
+# +---->*       *--+              eops = Either binary or unary
+# |     * Unary *     ! (                OPerationS '+' '-' '~'
+# |     *       *<-----------+    eops-u = Transmute to unary
+# |     *********    eops-u  |    eops-b = Leave as binary
+# |        ^ |               |
+# |    *   | |               |    bops = other Binary OPeratorS
+# | @( ( [ | | ) leaf        |           excluding '@'
+# |        | |               |           For now, * / % & ^ | < = > , .
+# |   ] )  | |               |           <= >= != << >> == !== := :@= && ||
+# |  +---+ | |               |    uops = Unary OPerators only '!'
+# |  |   | | |               |    eol = End Of line
+# |  |   V | V    eops-b     |
+# |  |  *********  bops  **********
+# |  +--*       *------->*        *
+# |     * Leaf  *        * Binary *
+# |  +->*       *<-------*        *
+# |  |  *********  leaf  **********
+# |  |       |   \         ^
+# |  | ] )   |    \leaf    |
+# |  |       |     \eof    |bops
+# |  |     @ |      \      |
+# |  |       |       V     |
+# |  |       V      Exit   |
+# |  |  *********        **********
+# |  |  *       *        *        * leaf
+# |  |  * @Sign *------->* @Leaf  *------->Exit
+# |  |  *       *  leaf  *        * eol
+# |  |  *********        **********
+# |  |                     |   |
+# |  +---------------------+   | * *
+# |                            | [ ( @(
+# |                            |
+# +----------------------------+
+#
+# The operators marked with (*) are transmuted to either a unary
+# operator or a function invocation open parenthesis or a type
+# open bracket.  The conversion from {close_parenthesis} to
+# {close_invoke} and from {close_bracket} to {close_type} is done
+# by the parenthesis/bracket matcher.
+#
+# Running through a few examples by hand should help clarify how
+# the state machine works:
+#
+#     1)   -a(-(b+c)*(d+e))
+#     2)   a[-b+c, d](e, f, g)
+#
+# The shift/reduce phase starts with the expression stack empty
+# and a fictitious {start} operator on the operator stack.  The
+# expression tokens are scanned from left to right with a fictitious
+# {end} operator is processed last to force algorithm finalization.
+#
+# The mechanics of an operator precedence grammar are simple, but
+# understandy why they work is a bit more involved.  We will start
+# with explaining the mechanics and then work towards explaining why.
+#
+# A leaf token is a symbol, number, or string/character literal.
+# If a leaf token is encounterd, it is immediatly converted
+# into a leaf {Expression} and pushed onto the expression stack.
+#
+# If an operator is encountered, two precedence functions f(top) and
+# g(current) are computed.  f(top) is computed on the top most function
+# of the operator stack.  g(current) is computed on the current token.
+# If f(top) < g(current), a reduction operation takes place that
+# takes one or more operators and one or more expressions, creates
+# new expression and pushes that back onto the stack.  This reduction
+# process continuses until f(top) > f(current) at which point the
+# current token is pushed onto the operator stack and the next
+# token is processes.  The trick to making all of this work is the
+# f(top) and g(current) functions, and the associated reductions.
+#
+# The following reductions are possible:
+#
+#    Unary Reduction
+#	A unary redcution combines the top operator and the top
+#	expression into a {Unary_Expression} that is pushed back
+#	onto the expression stack.  Example: '-' and 'a' => "-a"
+#
+#    Group Reduction
+#	A group redcution combines the top operator, current operator
+#	and the top expression into a {Parenthesis_Expression} that
+#       is pushed back onto the expression stack.  Example:
+#	'(', 'a', ') => "(a)"
+#
+#    Binary Reduction
+#	A binary reduction combines the top operator and the two
+#	top expressions into a {Binary_Expression} that is pushed
+#	back onto the expression stack.  Example '*', 'a', 'b' =>
+#	"a+b".
+#
+#    Bracket Reduction
+#	A bracket reduction combines the top operartors, the current
+#	operator, and the top two expressions into a
+#	{Bracket_Expression} that is pushed back onto the expression
+#	stack.  Example: '[', ']', 'a', 'b' => "a[b]".
+#
+#    List Reduction
+#	A list reduction combines the one or more operators of the
+#	same precedence on the operator stack with the same number
+#	of expressions (plus one) on the expression stack into a
+#	{List_Expression} that is pushed back onto the expression
+#	stack.  Example: '+', '-', 'a', 'b', 'c' => "a+b-c".
+#       There is some extra nonsense required to detect and deal
+#	with empty lists (e.g. "a()" or "b[]".)  This done by
+#	noticing when the two bracket/parenthesis tokens are
+#	next to one another in the token stream.
+#
+#    Final Reduction
+#	A final reduction notices that the last two operators
+#	are {start} and {end} and terminates the algorithm.
+#
+# Of these reductions, the List reduction is rather non-typical
+# for a "standard" operator precedence grammars.  In "standard"
+# operator precedence grammars, usually everthing is reduced into
+# unary and binary expressions.  Alas, for operators at the same
+# precedence, this causes grief later on in the compiler.  So,
+# the non-standard list reduction is used to keep then all the
+# operands at the same precedence level grouped together in one
+# big happy {List_Expression} expression.
+#
+# The table below is what makes the whole grammar "sing".
+# Explaining the table will take some doing though.
+#
+# Prec.  Operator               Assoc.   Reduction S/R  f(top) g(current)
+# =========================================================================
+#  16    t[                     left      Bracket   S      15      173
+#  16    t]                     left      Bracket   S     175       13
+#  15    i( @( [                left      Bracket   S      25      163
+#  15    i) ]                   left      Bracket   R     165       23
+#  15    (                      n/a       Group     S      25      163
+#  15    )                      n/a       Group     R     165       23
+#  15    @ .                    left      Binary    R     165      163
+#  14    u- u! u+ u~  (unary)   right     Unary     S     155      158
+#  14    ~                      left      LIst      S     145      148
+#  13    * / %                  left      List      S     135      138
+#  12    + -      (binary)      left      List      S     125      128
+#  11    << >>                  left      List      S     115      118
+#  10    &                      left      List      S     105      108
+#   9    ^                      left      List      S      95       98
+#   8    |                      left      List      S      85       88
+#   7    < > <= >= != = == !==  left      Binary    R      75       73
+#   6    &&                     left      List      S      65       68
+#   5    ||                     left      List      S      55       58
+#   4    ,                      left      List      S      45       48
+#   3    := :@= ;               right     Binary    S      35       38
+#   2    (used by brackets)                                 
+#   1    (used by brackets)
+#   0    {start}                n/a       Final             5      error
+#   0    {end}                  n/a       Final          error       3
+#
+# The first column is the operator precedence.  The higher the
+# precedence number, the tighter the precedence.  Notice that
+# the '(', 'i(', '@(', '[', ')', 'i)', ']', '.', and '@' are all marked
+# at the same precedence of 15.  The type square brackets, 't['
+# and 't]', are even higer # at 16.  Precedence 1 and 2 is actually
+# used by the bracket/parenthesis operators, so the lowest user visable
+# operator is ':=' at precedence 3.
+#
+# The operators are listed under the operator column.  The
+# unary 'u+' and 'u-' are in a separate row from the binary
+# '+' and '-'.
+#
+# Associativity is how operators at the same precedence level
+# are grouped.  In general all operators are left associative
+# except the unary operators.  Thus, "a+b-c" associates as
+# "(a+b)-c".  The unary operators are right associative,
+# so "~-a" is "~(-a)".
+#
+# The next column specifies the reduction that is performed
+# on the operator.  There six possible reductions, Final,
+# Unary, Binary, Bracket, List, and Group.  These reductions
+# are described above.
+#
+# The next column is S/R which is short for Shift/Reduce.
+# This column specifies what to do when the two operators
+# at the same precedence are encountered.  An "S" means
+# that the current token should be shifted to the operator
+# stack.  An "R" means that a reduction should be triggered.
+#
+# In a "standard" operator precedence grammar, left associative
+# operators are "Reduce" and right associative operators are
+# "Shift".  Alas, the List reduction does not work that way.
+# The List reduction wants all operators at the same precedence
+# level on the stack, so it requires a Shift.  The following
+# table summarizes what we want to happen based on associativity
+# and reduction.
+#
+#      Reduction   Associativity   S/R
+#      ====================================
+#      Group        n/a            Reduce
+#      Unary        Right          Shift
+#      Binary       Left           Reduce
+#      Binary       Right          Shift
+#      Bracket      Left           Reduce
+#      List         Left           Shift
+#
+# Once we have decided on the Shift and Reduce requirements for
+# a given precedence level, the f(top) and g(current) fucntions
+# are mechanically generated using the table:
+#
+#      S/R         f(top)          g(current)
+#      ==========================================
+#      Shift       P*10+5          P*10+8
+#      Reduce      P*10+5          P*10+3
+#
+# where P is the precedence.  In the algorithm f(top) < g(current)
+# causes a shift and f(top) > g(current) causes a reduce.
+# For operators at different precedence levels, the f(top) and
+# g(current) comparison causes the correct shift and reduce to occur.
+# The bracket operators are carefully chosen to cause the correct
+# grouping to occur.
+#
+# Working through a few examples are in order to get the hang
+# of what is going on.  First, a few comments on notation are
+# in order.  Spaces separate stack entries.  Braces ('{', '}')
+# enclose expressions.  We will forgo putting braces around
+# symbols (i.e. "a" instead of "{a}"), although in reality 
+# they are leaf expressions.  Also, it gets tedious to put
+# braces around bracketed expressions, so we will forgo those
+# braces as well (i.e. "{({a+b})}" = "(a+b)".
+# Unary operators are preceeded by 'u' as in 'u-', and the
+# invocation parenthesis as 'i('.  Lastly, the fictitious
+# {start} and end operators are represented by 'S' and 'E'
+# respectively.
+#
+# Example 1:  (a+b)*c-d
+#
+# Step Top:Cur f(t):g(c)  S/R             Exp. Stack           Op Stack
+# =====================================================================
+#  1     S (     5 < 153  Shift                                S (
+#  2     ( a      Leaf    Shift           a                    S (
+#  3     ( +    25 < 128  Shift           a                    S ( +
+#  4     + b      Leaf    Shift           a b                  S ( +
+#  5a    + )   125 > 13   List Reduce     {a+b}                S (
+#  5b    ( )    25 > 23   Bracket Reduce  (a+b)                S
+#  6     S *     5 < 138  Shift           (a+b)                S *
+#  7     * c      Leaf    Shift           (a+b) c              S *
+#  8a    * -   135 > 128  List Reduce     {(a+b)*c}            S
+#  8b    S -     5 < 128  Shift           {(a+b)*c}            S - 
+#  9     - d      Leaf    Shift           {(a+b)*c} d          S -
+# 10a    - E   125 > 3    List Reduce     {{(a+b)*c}-d}        S
+# 10b    S E     5 > 3    Final Reduce    {{(a+b)*c}-d}
+#
+# That was fun:
+#
+# Example 2: a[-b.c](d,e)
+#
+# Step Top:Cur f(t):g(c)  S/R             Exp. Stack           Op Stack
+# =====================================================================
+#  1     S a      Leaf    Shift           a                    S
+#  2     S [     5 < 153  Shift           a                    S [
+#  3     [ u-   25 < 138  Shift           a                    S [ u-
+#  4    u- b      Leaf    Shift           a b                  S [ u-
+#  5    u- .   145 < 153  Shift           a b                  S [ u- .
+#  6     . c      Leaf    Shift           a b c                S [ u- .
+#  7a    . ]   155 > 23   Binary Reduce   a {b.c}              S [ u- 
+#  7b   u- ]   145 > 23   Unary Reduce    a {-{b.c}}           S [ 
+#  7c    [ ]    25 > 23   Bracket Reduce  a[-{b.c}]            S
+#  8     S (     5 < 153  Shift           a[-{b.c}]            S (
+#  9    i( d      Leaf    Shift           a[-{b.c}] d          S (
+# 10    i( ,    25 < 38   Shift           a[-{b.c}] d          S ( ,
+# 11     , e      Leaf    Shift           a[-{b.c}] d e        S ( ,
+# 12     , i)   45 > 23   List Reduce     a[-{b.c}] {d,e}      S (
+# 13    i( i)   25 > 23   Bracket Reduce  a[-{b.c}](d,e)       S
+# 14     S E     5 > 3    Final Reduce    a[-{b.c}](d,e)
+#
+# Example : a@b[c[d,e]](f)
+#
+# Step Top:Cur f(t):g(c)  S/R             Exp. Stack           Op Stack
+# =====================================================================
+#  1     S a      Leaf    Shift           a                    S
+#  2     S @     5 < 153  Shift           a                    S @
+#  3     @ b      Leaf    Shift           a b                  S @
+#  4     @ t[  155 < 163  Shift           a b                  S @ t[
+#  5    t[ c      Leaf    Shift           a b c                S @ t[
+#  6    t[ [    15 < 153  Shift           a b c                S @ t[ [
+#  7     [ d      Leaf    Shift           a b c d              S @ t[ [
+#  8     [ ,    15 < 38   Shift           a b c d              S @ t[ [ ,
+#  9     , e      Leaf    Shift           a b c d e            S @ t[ [ ,
+# 10a    , ]    45 > 23   List Reduce     a b c {d,e}          S @ t[ [
+# 10b    [ ]    25 > 23   Bracket Reduce  a b {c[d,e]}         S @ t[
+# 11    t[ t]   15 > 13   Bracket Reduce  a {b[c[d,e]]}        S @
+# 12a    @ i(  155 > 153  Binary Reduce   {a@b[c[d,e]]}        S
+# 12b    S i(    5 < 153  Shift           {a@b[c[d,e]]}        S i(
+# 13    i( f      Leaf    Shift           {a@b[c[d,e]]} f      S i(
+# 14    i( i)   25 > 23   Bracket Reduce  {{a@b[c[d,e]]}(f)}   S
+# 15     S E     5 > 3    Final Reduce    {{a@b[c[d,e]]}(f)}
+#
+# OK, that should be enough examples to get the idea how this
+# all works.
+#
+# Just for laughs, the ANSI-C precedence table is listed below:
+#
+# ANSI-C precedence is:
+#
+# #  Class                     Assoc.  Operator
+#
+# 1  Select                     L->R   (...) [...] . ->
+# 2  Unary                      R->L   ! ~ ++ -- + - * & (type) sizeof
+# 3  Multiply, Divide, Modulus  L->R   * / %
+# 4  Add, Subtract              L->R   + -
+# 5  Shift Right, Left          L->R   >> <<
+# 6  Greater, Less Than         L->R   > < <= >=
+# 7  Equal, Not Equal           L->R   == !=
+# 8  Bitwise AND                L->R   &
+# 9  Bitwise XOR                L->R   ^
+# 10 Bitwise OR                 L->R   |
+# 11 Logical AND                L->R   &&
+# 12 Logical OR                 L->R   ||
+# 13 Conditional Expression     R->L   ? :
+# 14 Assignment                 R->L   = += -= *= /= &= |= ^= <<= >>=
+# 15 Comma                      L->R   ,
+
+routine parse@Expression
+    takes parser Parser
+    returns Expression
+
+    # This routine will parse and return an {expression} using {parser}.
+    # If no expression is successfully parsed, {Null}@{Expression} is returned.
+
+    trace :@= false@Logical
+    #trace := true@Logical
+
+    expression :@= null@Expression
+    end_index :@= prescan@Expression(parser, trace)
+    if end_index != 0
+	expression := shift_reduce@Expression(parser, end_index, trace)
+	if expression !== null@Expression
+	    parser.index := end_index + 1
+    return expression
+
+
+routine prescan@Expression
+    takes parser Parser
+    takes trace Logical
+    returns Unsigned
+
+    # This routine prescan an expression stream using {Parser}.  The
+    # index of the last scanned token is returned.  0 is returned if
+    # any errors occured.
+
+    temporary :@= parser.temporary
+    if trace
+	call put@("=>prescan@Expression()\n\", error@Out_Stream)
+
+    index :@= parser.index
+    tokens :@= parser.tokens
+    expressions :@= parser.expressions
+    operators :@= parser.operators
+    messages :@= parser.messages
+    compiler :@= one_and_only@Compiler()
+
+    call trim@(operators, 0)
+    call trim@(expressions, 0)
+
+    state :@= unary@Expression_State
+    error :@= false@Logical
+
+    while !error
+	token :@= tokens[index]
+	lexeme :@= token.lexeme
+
+	if trace
+	    #FIXME: Should call f@(Expression_State)!!!
+	    call put@(form@("Prescan[%d%]: %qv% %l% %s%\n\") %
+	      f@(index) % f@(token.value) % f@(lexeme) /
+	      f@(string_convert@Expression_State(state)), error@Out_Stream)
+
+	index := index + 1
+	switch state
+	  case unary
+	    switch lexeme
+	      case open_parenthesis, open_invoke
+		call append@(operators, token)
+		# State in {unary} state:
+	      case add, positive, minus, negative, concatenate, not,
+	       logical_not
+		token.lexeme := unary_transmute@Lexeme(lexeme)
+		# Stay in {unary} state:
+	      case character, float_number, number, string, symbol
+		# {unary} => {leaf} transition:
+		state := leaf@Expression_State
+	      case close_parenthesis, close_invoke
+		error := bracket_pop@Expression(parser, token, trace)
+		state := leaf@Expression_State
+	      case end_of_line
+		call log@(compiler, token,
+		  form@("Missing expression after %qv%") /
+		  f@(tokens[index-2].value))
+		error := true@Logical
+		if trace
+		    call put@("unary:end_of_line\n\", error@Out_Stream)
+	      default
+		call log@(compiler, token,
+		  form@("Expression error at %qv% (lexeme=%l%) (unary)") %
+		  f@(token.value) / f@(token.lexeme))
+		error := true@Logical
+		if trace
+		    call put@("unary:default\n\", error@Out_Stream)
+	  case leaf
+	    switch lexeme
+	      case close_parenthesis, close_invoke, close_bracket, close_type
+		error := bracket_pop@Expression(parser, token, trace)
+		# Stay in {leaf} state:
+	      case open_parenthesis, open_invoke, type_invoke
+		token.lexeme := invoke_transmute@(lexeme)
+		call append@(operators, token)
+		state := unary@Expression_State
+	      case open_bracket, open_type
+		call append@(operators, token)
+		state := unary@Expression_State
+	      case at_sign
+		state := at_sign@Expression_State
+	      case add, minus, multiply, divide, remainder, and, xor, or,
+	       comma, greater_than, less_than, equals, conditional_and,
+	       conditional_or, less_than_or_equal, greater_than_or_equal,
+	       not_equal, identical, not_identical, assign, dot, left_shift,
+	       right_shift, define_assign
+		# {leaf} => {binary} transition:	       
+		state := binary@Expression_State
+	      case end_of_line
+		# We are done:
+		break
+	      case symbol
+		# For now treat this as an error:
+		call log@(compiler, token,
+		  form@("Expression error at %qv% (leaf symbol)") /
+		  f@(token.value))
+		error := true@Logical
+		if trace
+		    call put@("leaf:symbol\n\", error@Out_Stream)
+	      default
+		call log@(compiler, token,
+		  form@("Expression error at %qv% (leaf other)") /
+		  f@(token.value))
+		error := true@Logical
+		if trace
+		    call put@("leaf:default\n\", error@Out_Stream)
+	  case binary
+	    switch lexeme
+	      case character, float_number, number, string, symbol
+		# {binary} => {leaf} transition:
+		state := leaf@Expression_State
+	      case open_parenthesis, open_invoke
+		# {binary} => {unary} transition:
+		call append@(operators, token)
+		state := unary@Expression_State
+	      case add, positive, minus, negative, concatenate, not,
+	       logical_not
+		token.lexeme := unary_transmute@(lexeme)
+		state := unary@Expression_State
+	      case end_of_line
+		call log@(messages, token,
+		  form@("Expression ends in %qv%") / f@(tokens[index-2].value))
+		error := true@Logical
+		if trace
+		    call put@("binary:end_of_line\n\", error@Out_Stream)
+	      default
+		call log@(compiler, token,
+		  form@("Expression error at %qv% (binary)") /
+		  f@(token.value))
+		error := true@Logical
+		if trace
+		    call put@("binary:default\n\", error@Out_Stream)
+	  case at_sign
+	    switch lexeme
+	      case symbol
+		state := at_leaf@Expression_State
+	      default
+		call log@(messages, token,
+		  form@("Expression error at %qv% (at_sign)") /
+		  f@(token.value))
+		error := true@Logical
+		if trace
+		    call put@("at_sign:default\n\", error@Out_Stream)
+	  case at_leaf
+	    switch lexeme
+	      case close_parenthesis, close_invoke, close_bracket, close_type
+		error := bracket_pop@Expression(parser, token, trace)
+		state := leaf@Expression_State
+	      case open_parenthesis, open_invoke, type_invoke
+		token.lexeme := invoke_transmute@Lexeme(lexeme)
+		call append@(operators, token)
+		state := unary@Expression_State
+	      case open_bracket, open_type
+		token.lexeme := type_transmute@Lexeme(lexeme)
+		call append@(operators, token)
+		state := unary@Expression_State
+	      case add, and, assign, comma, conditional_and, conditional_or,
+	       define_assign, divide, dot, equals, greater_than,
+	       greater_than_or_equal, identical, left_shift, less_than,
+	       less_than_or_equal, minus, multiply, not_equal, not_identical,
+	       or, remainder, right_shift, xor
+		# {at_leaf} => {binary} transition:	       
+		state := binary@Expression_State
+	      case end_of_line
+		# We are done:
+		break
+	      case symbol
+		# For now treat this as an error:
+		call log@(compiler, token,
+		  form@("Expression error at %qv% (at_leaf symbol)") /
+		  f@(token.value))
+		error := true@Logical
+		if trace
+		    call put@("at_leaf:symbol\n\", error@Out_Stream)
+	      default
+		call log@(compiler, token,
+		  form@("Expression error at %qv% (at leaf other)") /
+		  f@(token.value))
+		error := true@Logical
+		if trace
+		    call put@("at_leaf:default\n\", error@Out_Stream)
+    end_index :@= index - 2
+
+    # Finalize everything:
+    if error
+	end_index := 0
+    else
+	size :@= operators.size
+	if size != 0
+	    call trim@(temporary, 0)
+	    index := 0
+	    while index < size
+		call string_append@(temporary, " ")
+		call string_append@(temporary,
+		  string_convert@(operators[index].lexeme))
+		index := index + 1
+	    call log@(compiler, tokens[parser.index],
+	      form@("Unmatched parentheses and/or brackets (%qv%)") /
+	      f@(temporary))
+	    end_index := 0
+    if trace
+	call put@(form@("<=prescan@Expression() => %d%\n\") /
+	  f@(end_index), error@Out_Stream)
+    return end_index
+
+
+routine shift_reduce@Expression
+    takes parser Parser
+    takes end_index Unsigned
+    takes trace Logical
+    returns Expression
+
+    # This routine will return a parsed {Expression} object using {Parser}
+    # where {end_index} points at the last token to be parsed.  It is
+    # assumed that {prescan}@{Expression} was called to do required
+    # token lexeme transmutations and verify that parenthesis and
+    # brackets are properly nested and matched up.  This routine returns
+    # {Null}@{Expression} if no expression is successfully parsed.
+
+    temporary :@= parser.temporary
+    operators :@= parser.operators
+    expressions :@= parser.expressions
+    messages :@= parser.messages
+    tokens :@= parser.tokens
+    index :@= parser.index
+
+    trace := false@Logical
+    #trace := equal@(tokens[index].file.name, "Test.ezc")
+    if trace
+	call put@("=>shift_reduce@Expression()\n\", error@Out_Stream)
+
+    call trim@(operators, 0)
+    call trim@(expressions, 0)
+    call append@(operators, parser.token_start)
+    token_end :@= parser.token_end
+
+    # This is tricky, we set index to be 2 positions past the
+    # last one that we want scanned.  This will allow us to artificially
+    # insert {token_end} at the right place:
+    end_index := end_index + 2
+
+    # Scan over tokens from left to right
+    error :@= false@Logical
+    while index < end_index && !error
+	current_index :@= index
+	current_token :@= tokens[index]
+	index := index + 1
+	if index = end_index
+	    # Substitute in {token_end} for last token:
+	    current_token := token_end
+	current :@= current_token.lexeme
+
+	if trace
+	    call put@(form@("S/R[%d%]: %qv% %l%\n\") %
+	      f@(index) % f@(current_token.value) / f@(current),
+	      error@Out_Stream)
+
+	# Dispatch on leaf or operator tokens:
+	switch current
+	  case character
+	    expression :@= new@Expression()
+	    expression.character := current_token
+	    call append@(expressions, expression)
+	  case float_number
+	    expression := new@Expression()
+	    expression.float_number := current_token
+	    call append@(expressions, expression)
+	  case number
+	    expression := new@Expression()
+	    expression.number := current_token
+	    call append@(expressions, expression)
+	  case string
+	    expression := new@Expression()
+	    expression.string := current_token
+	    call append@(expressions, expression)
+	  case symbol
+	    expression := new@Expression()
+	    expression.symbol := current_token
+	    call append@(expressions, expression)
+	  default
+	    # Everthing else is an operator:
+
+	    # Perform as many reductions as possible
+	    top_token :@= operators[operators.size - 1]
+	    top :@= top_token.lexeme
+	    f_top :@= f_precedence@(top)
+	    g_current :@= g_precedence@(current)
+	    if trace
+		call put@(form@("f(%l%)=%d%  g(%l%)=%d%  => ") %
+		  f@(top) % f@(f_top) % f@(current) / f@(g_current),
+		  error@Out_Stream)
+
+	    while !error && current_token !== null@Token && f_top > g_current
+		if trace
+		    call put@("Reduce ", error@Out_Stream)
+
+		# Perform reductions based on {top}:
+		expression := null@Expression
+		switch top
+		  case positive, negative, not, logical_not
+		    # Unary reduction:
+		    error := unary_reduce@Expression(parser)
+		    if trace
+			call put@("Unary\n\", error@Out_Stream)
+		  case open_parenthesis
+		    error := group_reduce@Expression(parser,
+		      current_token, current_index)
+		    # A group reduction consumes {current_token}:
+		    current_token := null@Token
+		    if trace
+			call put@("Group\n\", error@Out_Stream)
+		  case open_invoke, open_bracket, open_type, type_invoke
+		    error := bracket_reduce@Expression(parser,
+		      current_token, current_index)
+		    # A bracket reduction consumes {current_token}:
+		    current_token := null@Token
+		    if trace
+			call put@("Bracket\n\", error@Out_Stream)
+		  case dot, at_sign, less_than, greater_than, equals,
+		   less_than_or_equal, greater_than_or_equal, identical,
+		   not_equal, not_identical, assign, define_assign
+		    error := binary_reduce@Expression(parser)
+		    if trace
+			call put@("Binary\n\", error@Out_Stream)
+		  case multiply, divide, remainder, add, minus, and, xor, or,
+		   conditional_and, conditional_or, comma, left_shift,
+		   right_shift
+		    error := list_reduce@Expression(parser)
+		    if trace
+			call put@("List\n\", error@Out_Stream)
+		  case start
+		    # Final reduction:
+		    current_token := null@Token
+		    if trace
+			call put@("Final\n\", error@Out_Stream)
+		  default
+		    call put@(string_convert@Lexeme(top), error@Out_Stream)
+		    assert false@Logical
+
+		if trace
+		    call stacks_show@(parser, index)
+
+		# Compute {f_top} and {g_current} for next iteration:
+		top_token := operators[operators.size - 1]
+		top := top_token.lexeme
+		f_top := f_precedence@(top)
+		g_current := g_precedence@(current)
+		if trace
+		    call put@(form@("f(%l%)=%d%  g(%l%)=%d% => ") %
+		      f@(top) % f@(f_top) % f@(current) / f@(g_current),
+		      error@Out_Stream)
+
+	    # Perform final shift of {current_token}:
+	    if current_token !== null@Token
+		call append@(operators, current_token)
+		if trace
+		    call put@("Shift\n\", error@Out_Stream)
+	    else
+		if trace
+		    call put@("Absorbed\n\", error@Out_Stream)
+
+	    if trace
+		call stacks_show@(parser, index)
+
+    # Return the result:
+    expression := null@Expression
+    if !error
+	if expressions.size = 1 && index = end_index
+	    # We seem to have terminated successfully:
+	    expression := expressions[0]
+	else
+	    call log@(messages, tokens[parser.index],
+	      "Unable to parse expression")
+
+    if trace
+	call put@(form@("=>shift_reduce@Expression()=>%e%\n\") /
+	  f@(expression), error@Out_Stream)
+
+    return expression
+
+
+routine stacks_show@Parser
+    takes parser Parser
+    takes index Unsigned
+    returns_nothing
+
+    temporary :@= parser.temporary
+    expressions :@= parser.expressions
+    operators :@= parser.operators
+    tokens :@= parser.tokens
+    token :@= tokens[index]
+
+    #call put@(form@("Tokens[%d%]=%qv% Lex:%l%") %
+    #  f@(index) % f@(token.value) / f@(token.lexeme), error@Out_Stream)
+
+    size :@= expressions.size
+    index := 0
+    while index < size
+	expression :@= expressions[index]
+	call put@(form@(" Exp[%d%]=(%e%)") %
+	  f@(index) / f@(expression), error@Out_Stream)
+	index := index + 1
+    call put@("\n\", error@Out_Stream)
+
+    size := operators.size
+    index := 0 
+    while index < size
+	operator :@= operators[index]
+	call put@(form@(" Op[%d%]=%qv%") %
+	  f@(index) / f@(operator.value), error@Out_Stream)
+	index := index + 1
+    call put@("\n\", error@Out_Stream)
+
+
+routine unary_reduce@Expression
+    takes parser Parser
+    returns Logical
+
+    # This routine will perform a unary reduction using {parser}.
+    # If any error occurs, {true}@{Logical} is returned.
+
+    result :@= false@Logical
+    expressions :@= parser.expressions
+    operators :@= parser.operators
+    if expressions.size >= 1 && operators.size >= 1
+	unary :@= new@Unary_Expression()
+	unary.operator := pop@(operators)
+	unary.expression := pop@Array[Expression](expressions)
+	expression :@= new@Expression()
+	expression.unary := unary
+	call append@(expressions, expression)
+    else
+	tokens :@= parser.tokens
+	call log@(parser.messages, tokens[parser.index],
+	  "Unable to parse expression (in unary reduce)")
+	result := true@Logical
+    return result
+
+
+routine bracket_reduce@Expression
+    takes parser Parser
+    takes close_bracket Token
+    takes close_index Unsigned
+    returns Logical
+
+    # This routine will perform a bracket reduction using {parser}
+    # and {current_token}.
+    
+    expression :@= null@Expression
+    tokens :@= parser.tokens
+    result :@= false@Logical
+    operators :@= parser.operators
+    expressions :@= parser.expressions
+    if operators.size >= 1
+	close_lexeme :@= close_bracket.lexeme
+	open_bracket :@= pop@(operators)
+	switch open_bracket.lexeme
+	  case open_bracket
+	    assert close_lexeme = close_bracket@Lexeme
+	  case open_invoke, type_invoke
+	    assert close_lexeme = close_invoke@Lexeme
+ 	  case open_type
+	    assert close_lexeme = close_type@Lexeme
+	  default
+	    assert false@Logical
+
+	expression1 :@= null@Expression
+	expression2 :@= null@Expression
+	if tokens[close_index - 1] == open_bracket
+	    # We have an empty list:
+	    if expressions.size >= 1
+		list :@= new@List_Expression()
+		list.location := open_bracket
+		expression2 := new@Expression()
+		expression2.list := list
+		expression1 := pop@(expressions)
+	else
+	    # It is already on the stack:
+	    if expressions.size >= 2
+		expression2 := pop@(expressions)
+		expression1 := pop@(expressions)
+
+	if expression1 !== null@Expression
+	    bracket :@= new@Bracket_Expression()
+	    bracket.close_bracket := close_bracket
+	    bracket.expression2 := expression2
+	    bracket.open_bracket := open_bracket
+	    bracket.expression1 := expression1
+	    expression := new@Expression()
+	    expression.bracket := bracket
+	    call append@(expressions, expression)
+    if expression == null@Expression
+	call log@(parser.messages, tokens[parser.index],
+	  "Unable to parse expression (in bracket reduce)")
+	result := true@Logical
+    return result
+
+
+routine group_reduce@Expression
+    takes parser Parser
+    takes close_parenthesis Token
+    takes close_index Unsigned
+    returns Logical
+
+    # This routine will perform a group reduction using {parser}
+    # and {current_token}.
+    
+    tokens :@= parser.tokens
+    result :@= false@Logical
+    operators :@= parser.operators
+    expression :@= null@Expression
+    expressions :@= parser.expressions
+    if expressions.size >= 1 && operators.size >= 2
+	close_lexeme :@= close_parenthesis.lexeme
+	open_parenthesis :@= pop@(operators)
+	switch open_parenthesis.lexeme
+	  case open_parenthesis
+	    assert close_lexeme = close_parenthesis@Lexeme
+	  default
+	    assert false@Logical
+	if tokens[close_index - 1] !== open_parenthesis
+	    parenthesis :@= new@Parenthesis_Expression()
+	    parenthesis.close_parenthesis := close_parenthesis
+	    parenthesis.expression := pop@(expressions)
+	    parenthesis.open_parenthesis := open_parenthesis
+	    expression := new@Expression()
+	    expression.parenthesis := parenthesis
+	    call append@(expressions, expression)
+	#else group is empty and hence illegal => generate error:
+
+    if expression == null@Expression
+	call log@(parser.messages, tokens[parser.index],
+	  "Unable to parse expression (in group reduce)")
+	result := true@Logical
+    return result
+
+
+routine binary_reduce@Expression
+    takes parser Parser
+    returns Logical
+
+    # This routine will perform a binary reduction using {parser}.
+
+    result :@= false@Logical
+    expressions :@= parser.expressions
+    operators :@= parser.operators
+    binary :@= new@Binary_Expression()
+    if expressions.size >= 2 && operators.size >= 1
+	binary.right := pop@(expressions)
+	binary.operator := pop@(operators)
+	binary.left := pop@(expressions)
+	expression :@= new@Expression()
+	expression.binary := binary
+	call append@(expressions, expression)
+    else
+	tokens :@= parser.tokens
+	call log@(parser.messages, tokens[parser.index],
+	  "Unable to parse expression (in bracket reduce)")
+	result := true@Logical
+    return result
+
+
+routine list_reduce@Expression
+    takes parser Parser
+    returns Logical
+
+    # This routine will perform a list reduction on {parser}.
+
+    result :@= false@Logical
+    expressions :@= parser.expressions
+    expressions_size :@= expressions.size
+    operators :@= parser.operators
+    operators_size :@= operators.size
+    expression :@= null@Expression
+    if expressions_size >= 2 && operators_size >= 1
+	# Compute {operators_first_index}, the index of first operator
+	# in {operators} that has the same precedence as the last operator
+	# in an unbroken sequence:
+	first_operator_index :@= operators_size - 1	
+	first_operator :@= operators[first_operator_index]
+	precedence :@= f_precedence@Lexeme(first_operator.lexeme)
+	index :@= first_operator_index
+	while index != 0
+	    index := index - 1
+	    operator :@= operators[index]
+	    if f_precedence@Lexeme(operator.lexeme) != precedence
+		break
+	    first_operator := operator
+	    first_operator_index := index
+	operators_count :@= operators_size - first_operator_index
+	if expressions_size >= operators_count + 1
+	    # We have enough expressions to slurp:
+	    first_expression_index :@= expressions_size - operators_count - 1
+	    list :@= new@List_Expression()
+	    list_operators :@= list.operators
+	    list_expressions :@= list.expressions
+
+	    # Load up {list_operators}:
+	    call append@Array[Token](list_operators, first_operator)
+	    index := first_operator_index
+	    while index < operators_size
+		call append@Array[Token](list_operators, operators[index])
+		index := index + 1
+	    call trim@Array[Token](operators, first_operator_index)
+
+	    # Load up {list_expressions}:
+	    index := first_expression_index
+	    while index < expressions_size
+		call append@Array[Expression](list_expressions,
+		  expressions[index])
+		index := index + 1
+	    call trim@Array[Expression](expressions, first_expression_index)
+
+	    # Make sure we got it right:
+	    assert list_operators.size = list_expressions.size
+
+	    # Construct the final {Expression} and push it back:
+	    list.location := list_expressions[0].location
+	    expression := new@Expression()
+	    expression.list := list
+	    call append@Array[Expression](expressions, expression)
+    if expression == null@Expression
+	tokens :@= parser.tokens
+	call log@Messages(parser.messages, tokens[parser.index],
+	  "Unable to parse expression (list reduce)")
+    return result
+
+
+routine bracket_pop@Expression
+    takes parser Parser
+    takes token Token
+    takes trace Logical
+    returns Logical
+
+    # This procedure will ensure that bracket {token} is matched on the
+    # operator stack in {parser}.  If not, an error message is
+    # generated and {true}@{Logical} is returned.
+
+    error :@= true@Logical
+    temporary :@= parser.temporary
+    operators :@= parser.operators
+    compiler :@= one_and_only@Compiler()
+    size :@= operators.size
+    if size = 0
+	call log@(parser.messages, token,
+	  form@("Extra unmatched %qv% encountered") / f@(token.value))
+	if trace
+	    call put@("Mismatched close bracket\n\", error@Out_Stream)
+    else
+	lexeme :@= token.lexeme
+	top_token :@= pop@(operators)
+	top_lexeme :@= top_token.lexeme
+	switch top_lexeme
+	  case open_parenthesis
+	    switch lexeme
+	      case close_parenthesis
+		error := false@Logical
+	  case open_invoke, type_invoke
+	    switch lexeme
+	      case close_parenthesis, close_invoke
+		token.lexeme := close_invoke@Lexeme
+		error := false@Logical
+	  case open_bracket
+	    switch lexeme
+	      case close_bracket
+		error := false@Logical
+	  case open_type
+	    switch lexeme
+	      case close_bracket, close_type
+		token.lexeme := close_type@Lexeme
+		error := false@Logical
+	if error
+	    call log@(compiler, token, form@("%qv% does not match %qv%") %
+	      f@(top_token.value) / f@(token.value))
+	    if trace
+		call put@("Paren/Bracket Mismatch\n\", error@Out_Stream)
+    return error
+
+
+# {Keyword} stuff:
+
+routine parse@Keyword
+    takes parser Parser
+    takes match String
+    returns Keyword
+
+    # This routine will return a Keyword object that matches {match}
+    # from {parser}.  If no parse succeeds, {Null}@{Keyword} is returned.
+
+    index :@= parser.index
+    token :@= parse@Token(parser, symbol@Lexeme)
+    if token == null@Token || !equal@String(token.value, match)
+	parser.index := index
+	return null@Keyword
+    keyword :@= new@Keyword()
+    keyword.keyword := token
+    return keyword
+
+
+# {Lexeme} stuff:
+
+routine f_precedence@Lexeme
+    takes lexeme Lexeme
+    returns Unsigned
+
+    # This is the f(top) routine as described in excruciating detail above.
+
+    result :@= 0
+    switch lexeme
+      all_cases_required
+      case open_type
+	result := 15
+      case close_type
+	result := 175
+      case open_bracket, open_parenthesis, open_invoke, type_invoke, open_brace
+	result := 25
+      case close_bracket, close_parenthesis, close_invoke, close_brace
+	result := 165
+      case at_sign, dot
+	result := 165
+      case logical_not, negative, not, positive
+	result := 155
+      case concatenate
+	result := 145
+      case divide, multiply, remainder
+	result := 135
+      case add, minus
+	result := 125
+      case left_shift, right_shift
+	result := 115
+      case and
+	result := 105
+      case xor
+	result := 95
+      case or
+	result := 85
+      case equals, identical, less_than, less_than_or_equal, greater_than,
+       greater_than_or_equal, not_equal, not_identical
+	result := 75
+      case conditional_and
+	result := 65
+      case conditional_or
+	result := 55
+      case comma
+	result := 45
+      case assign, define_assign, semicolon
+	result := 35
+      case start
+	result := 5
+      case end
+	assert false@Logical
+      case close_indent, colon, comment, end_of_file, error, end_of_line,
+       open_indent, question_mark, set
+	# Other obscure tokens that should not be present:
+	assert false@Logical
+      case character, float_number, number, string, symbol
+	# Leaf Token (should not be passed in)
+	assert false@Logical
+    return result
+
+routine g_precedence@Lexeme
+    takes lexeme Lexeme
+    returns Unsigned
+
+    # This is the g(current) routine as describe in excruciating detail above.
+
+    result :@= 0
+    switch lexeme
+      all_cases_required
+      case open_type
+	result := 173
+      case close_type
+	result := 13
+      case open_bracket, open_parenthesis, open_invoke, type_invoke, open_brace
+	result := 163
+      case close_bracket, close_parenthesis, close_invoke, close_brace
+	result := 23
+      case at_sign, dot
+	result := 163
+      case logical_not, negative, not, positive
+	result := 158
+      case concatenate
+	result := 148
+      case divide, multiply, remainder
+	result := 138
+      case add, minus
+	result := 128
+      case left_shift, right_shift
+	result := 118
+      case and
+	result := 108
+      case xor
+	result := 98
+      case or
+	result := 88
+      case equals, identical, less_than, less_than_or_equal, greater_than,
+       greater_than_or_equal, not_equal, not_identical
+	result := 73
+      case conditional_and
+	result := 68
+      case conditional_or
+	result := 58
+      case comma
+	result := 48
+      case assign, define_assign, semicolon
+	result := 38
+      case start
+	assert false@Logical
+      case end
+	result := 3
+      case close_indent, colon, comment, end_of_file, error, end_of_line,
+       open_indent, question_mark, set
+	# Other obscure tokens that should not be present:
+	temporary :@= new@String()
+	call put@(form@("Unexpected lexeme for g(%l%)\n\") /
+	  f@(lexeme), error@Out_Stream)
+	assert false@Logical
+      case character, float_number, number, string, symbol
+	# Leaf Token (should not be passed in)
+	assert false@Logical
+    return result
+
+
+routine invoke_transmute@Lexeme
+    takes lexeme Lexeme
+    returns Lexeme
+
+    # This routine will return a transmuted unary version of {lexeme}.
+
+    switch lexeme
+      case type_invoke
+	lexeme := type_invoke@Lexeme
+      case open_parenthesis
+	lexeme := open_invoke@Lexeme
+      case close_parenthesis
+	lexeme := close_invoke@Lexeme
+    return lexeme
+
+
+routine type_transmute@Lexeme
+    takes lexeme Lexeme
+    returns Lexeme
+
+    # This routine will return a transmuted unary version of {lexeme}.
+
+    switch lexeme
+      case open_bracket
+	lexeme := open_type@Lexeme
+      case close_bracket
+	lexeme := close_type@Lexeme
+    return lexeme
+
+
+routine unary_transmute@Lexeme
+    takes lexeme Lexeme
+    returns Lexeme
+
+    # This routine will return a transmuted unary version of {lexeme}.
+
+    switch lexeme
+      case add
+	lexeme := positive@Lexeme
+      case minus
+	lexeme := negative@Lexeme
+      case concatenate
+	lexeme := not@Lexeme
+    return lexeme
+
+
+# {List_Expression} stuff:
+
+routine traverse@List_Expression
+    takes list List_Expression
+    takes traverser Traverser
+    returns_nothing
+
+    # This routine will traverse {list} using {traverser}.
+
+    expressions :@= list.expressions
+    operators :@= list.operators
+    expressions_size :@= expressions.size
+    index :@= 0
+    while index < expressions_size
+	if index !=0
+	    call traverse@(operators[index], traverser)
+	call traverse@(expressions[index], traverser)
+	index := index + 1
+
+
+# {If_Statement} stuff:
+
+routine parse@If_Statement
+    takes parser Parser
+    returns If_Statement
+
+    tokens :@= parser.tokens
+    if_statement :@= new@If_Statement()
+    if_clauses :@= if_statement.if_clauses
+
+    have_if :@= false@Logical
+    have_else :@= false@Logical
+    while true@Logical
+	index :@= parser.index
+	token :@= tokens[index]
+	if token.lexeme != symbol@Lexeme
+	    break
+	value :@= token.value
+	if equal@String(value, "if")
+	    if have_if
+		# Two if statements one after the other.  Not an error:
+		break
+	    # First if:
+	    if_part :@= parse@If_Part(parser)
+	    if if_part == null@If_Part
+		call log@(parser.messages, token,
+		  "Unable to parse if statement")
+		break
+	    if_clause :@= new@If_Clause()
+	    if_clause.if_part := if_part
+	    call append@(if_clauses, if_clause)
+	    have_if := true@Logical
+	else_if equal@String(value, "else_if")
+	    if !have_if
+		call log@(parser.messages, token,
+		  "Lone 'else_if' with no preceeding 'if'")
+		break
+	    if have_else
+		call log@(parser.messages, token,
+		  "'else_if' follows 'else' in if statement")
+	    else_if_part :@= parse@Else_If_Part(parser)
+	    if else_if_part == null@Else_If_Part
+		call log@(parser.messages, token,
+		  "Unable to parse 'else_if'")
+		break
+	    if_clause := new@If_Clause()
+	    if_clause.else_if_part := else_if_part
+	    call append@(if_clauses, if_clause)
+	else_if equal@String(value, "else")
+	    if !have_if
+		call log@(parser.messages, token,
+		  "Lone 'else' with no preceeding 'if'")
+		break
+	    if have_else
+		call log@(parser.messages, token,
+		  "More that one 'else' in if statement")
+		break
+	    else
+		else_part :@= parse@Else_Part(parser)
+		if else_part == null@Else_Part
+		    call log@(parser.messages, token,
+		      "Unable to parse 'else' clause")
+		    break
+		if_clause :@= new@If_Clause()
+		if_clause.else_part := else_part
+		call append@(if_clauses, if_clause)
+		have_else := true@Logical
+	else
+	    break
+
+    if !have_if
+	if_statement := null@If_Statement
+    return if_statement
+
+
+# {Parameterized_Type} stuff:
+
+routine copy@Parameterized_Type
+    takes parameterized Parameterized_Type
+    returns Parameterized_Type
+
+    result :@= new@Parameterized_Type()
+    call copy_to@(result, parameterized)
+    return result
+
+
+routine copy_to@Parameterized_Type
+    takes to Parameterized_Type
+    takes from Parameterized_Type
+    returns_nothing
+
+    # This routine will replace the contents of {to} with a copy of {from}
+    # down to the  {Token} level.
+
+    to.name := from.name
+    to.open_bracket := from.open_bracket
+    call copy_to@(to.sub_types, from.sub_types, copy@Type)
+    to.close_bracket := from.close_bracket
+
+
+# {Parser} stuff:
+
+routine create@Parser
+    takes tokens Array[Token]
+    takes messages Messages
+    returns Parser
+
+    # This routine will return a new {Parser} object initialized with {tokens}.
+
+    parser :@= new@Parser()
+    parser.c_typedefs := create@Hash_Table[String, String](null@String,
+      hash@String, equal@String, buffer_append@String, buffer_append@String)
+    parser.expressions := new@Array[Expression]()
+    parser.index := 0
+    parser.messages := messages
+    parser.operators := new@Array[Token]()
+    parser.temporary := new@String()
+    parser.tokens := tokens
+    parser.token_end := create@Token(null@File, 0, end@Lexeme, "")
+    parser.token_start := create@Token(null@File, 0, start@Lexeme, "")
+    return parser
+
+
+routine parse@Parser
+    takes parser Parser
+    takes tokens Array[Token]
+    returns Root
+
+    # This routine will parse {tokens} using {parser} and return the
+    # resulting {Root} object.
+
+    assert tokens.size != 0
+
+    parser.tokens := tokens
+    parser.index := 0
+    root :@= parse@Root(parser)
+    return root
+
+
+routine parse_append@Parser
+    takes parser Parser
+    takes root Root
+    takes tokens Array[Token]
+    returns_nothing
+
+    # This routine will append the parse for {tokens} to {root}.
+
+    root_append :@= parse@(parser, tokens)
+    call array_append@(root.declarations, root_append.declarations)
+
+
+routine two_parse@Parser
+    takes parser Parser
+    takes ezc_tokens Array[Token]
+    takes ezg_tokens Array[Token]
+    returns Root
+
+    # This routine will parse {ezc_file} and {ezg_file} into a {Root}
+    # parse tree using {parser}.
+
+    assert ezc_tokens.size != 0
+    assert ezg_tokens.size != 0
+
+    root :@= null@Root
+    if ezg_tokens.size <= 1
+	# No .ezg file:
+	root := parse@Parser(parser, ezc_tokens)
+    else
+	# We have both a .ezc and a .ezg file:
+	tokens :@= new@Array[Token]()
+	call array_append@(tokens, ezc_tokens)
+	call trim@(tokens, tokens.size - 1)
+	call array_append@(tokens, ezg_tokens)
+	root := parse@(parser, tokens)
+	call trim@(tokens, 0)
+    return root
+
+
+# {Routine_Clause} stuff:
+
+routine location_get@Routine_Clause
+    takes routine_clause Routine_Clause
+    returns Token
+
+    # This routine will return a location {Token} for {routine_clause}.
+
+    location :@= null@Token
+    #FIXME: add all_cases_required!!!
+    switch routine_clause.kind
+      case assert
+	location := routine_clause.assert.assert.keyword
+      case call
+	location := routine_clause.call.call.keyword
+      case do_nothing
+	location := routine_clause.do_nothing.do_nothing.keyword
+      case end_of_line
+	location := routine_clause.end_of_line
+      case error
+	error :@= routine_clause.error
+	tokens :@= error.tokens
+	if tokens.size != 0
+	    location := tokens[0]
+      case if
+	if_clauses :@= routine_clause.if.if_clauses
+	if if_clauses.size != 0
+	    if_clause :@= if_clauses[0]
+	    switch if_clause.kind
+	      all_cases_required
+	      case if_part
+		location := if_clause.if_part.if.keyword
+	      case else_if_part
+		location := if_clause.else_if_part.else_if.keyword
+	      case else_part
+		location := if_clause.else_part.else.keyword
+      case note
+	location := routine_clause.note.comment
+      case return
+	return :@= routine_clause.return
+	switch return.kind
+	  case expression
+	    location := return.expression.return.keyword
+	  case empty
+	    location := return.empty.return.keyword
+      case set
+	location := routine_clause.set.set
+      case switch
+	location := routine_clause.switch.switch.keyword
+      case while
+	location := routine_clause.while.while.keyword
+    return location
+
+
+# {Routine_Type} stuff:
+
+routine copy@Routine_Type
+    takes routine Routine_Type
+    returns Routine_Type
+
+    # This routine will return a copy of {routine} copied down to the
+    # {Token} level.
+
+    result :@= new@Routine_Type()
+    call copy_to@(result, routine)
+    return result
+
+
+routine copy_to@Routine_Type
+    takes to_routine Routine_Type
+    takes from_routine Routine_Type
+    returns_nothing
+
+    # This routine will replace the contentsof {to_routine} with
+    # a copy of the contents of {from_routine} copied down to the
+    # {Token} level.
+
+    to_routine.open_bracket := from_routine.open_bracket
+    call copy_to@(to_routine.return_types,
+      from_routine.return_types, copy@Type)
+    to_routine.less_than_or_equal := from_routine.less_than_or_equal
+    call copy_to@(to_routine.takes_types, from_routine.takes_types, copy@Type)
+    to_routine.close_bracket := from_routine.close_bracket
+
+
+routine f@Routine_Type
+    takes routine_type Routine_Type
+    returns String
+
+    # This routine will return {routine_type} formatted as a {String}.
+
+    value :@= field_next@Format()
+    call character_append@(value, '[')
+    call string_append@(value,
+      form@("%t%") / f@(routine_type.return_types, f@Type))
+    call string_append@(value, " <= ")
+    call string_append@(value,
+      form@("%t%") / f@(routine_type.takes_types, f@Type))
+    call character_append@(value, ']')
+    return value
+
+
+routine format@Routine_Type
+    takes routine_type Routine_Type
+    takes buffer String
+    returns_nothing
+
+    # This rooutine will format {routine_type} into {buffer}.
+
+    anchor :@= format_begin@(buffer)
+    call string_gap_insert@(buffer, "[")
+    call string_gap_insert@(routine_type.return_types,
+      buffer, string_gap_insert@Type)
+    call string_gap_insert@(buffer, " <= ")
+    call string_gap_insert@(routine_type.takes_types,
+      buffer, string_gap_insert@Type)
+    call string_gap_insert@(buffer, "]")
+    call format_end@(buffer, anchor)
+
+
+routine parse@Routine_Type
+    takes parser Parser
+    returns Routine_Type
+
+    index :@= parser.index
+    open_bracket :@= parse@Token(parser, open_bracket@Lexeme)
+    if open_bracket == null@Token
+	parser.index := index
+	return null@Routine_Type
+
+    # Accept an empty returns list:
+    return_types :@= new@Comma_Separated[Type]()
+    less_than_or_equal :@= parse@Token(parser, less_than_or_equal@Lexeme)
+    if less_than_or_equal == null@Token
+	# Not empty type list; 
+	return_types := parse@Comma_Separated[Type](parser,
+	  parse@Type, null@Type, less_than_or_equal@Lexeme)
+	if return_types.size = 0
+	    parser.index := index
+	    return null@Routine_Type
+
+	# Now get the following less than or equal:
+	less_than_or_equal := parse@Token(parser, less_than_or_equal@Lexeme)
+	if less_than_or_equal == null@Token
+	    parser.index := index
+	    return null@Routine_Type
+
+    # Accept an empty takes list:
+    takes_types :@= new@Comma_Separated[Type]()
+    close_bracket :@= parse@Token(parser, close_bracket@Lexeme)
+    if close_bracket == null@Token
+	# Not empty type list:
+	takes_types := parse@Comma_Separated[Type](parser,
+	  parse@Type, null@Type, close_bracket@Lexeme)
+	if takes_types.size = 0
+	    parser.index := index
+	    return null@Routine_Type
+
+	close_bracket := parse@Token(parser, close_bracket@Lexeme)
+	if close_bracket == null@Token
+	    parser.index := index
+	    return null@Routine_Type
+
+    routine_type :@= new@Routine_Type()
+    routine_type.open_bracket := open_bracket
+    routine_type.return_types := return_types
+    routine_type.less_than_or_equal := less_than_or_equal
+    routine_type.takes_types := takes_types
+    routine_type.close_bracket := close_bracket
+    return routine_type
+
+
+# {Token} stuff:
+
+routine parse@Token
+    takes parser Parser
+    takes lexeme Lexeme
+    returns Token
+
+    # This routine will return the next {Token} from {parser} provided
+    # it matches {lexeme}.  Otherwise, {Null}@{Token} is returned.
+
+    index :@= parser.index
+    token :@= parser.tokens[index]
+    if token.lexeme = lexeme
+	parser.index := index + 1
+	return token
+    return null@Token
+
+
+routine traverse@Token
+    takes token Token
+    takes traverser Traverser
+    returns_nothing
+
+    # This routine will traverse {token} using {traverser}.
+
+    buffer :@= traverser.buffer
+    if buffer !== null@String
+	call string_gap_insert@(buffer, token.white_space)
+	call string_gap_insert@(buffer, token.value)
+    call append@(traverser.tokens, token)
+
+
+# {Traverser} stuff:
+
+routine create@Traverser
+    takes buffer String
+    takes tokens Array[Token]
+    returns Traverser
+
+    # This routine will return a new {Traverser} object containing
+    # {buffer} and {tokens}.
+
+    traverser :@= new@Traverser()
+    traverser.buffer := buffer
+    traverser.tokens := tokens
+    return traverser
+
+
+# {Type} stuff:
+
+routine base_name@Type
+    takes type Type
+    returns String
+
+    # This routine will return the base name for {type}.
+
+    result :@= "NONE"
+    switch type.kind
+      case simple
+	result := type.simple.value
+      case parameterized
+	result := type.parameterized.name.value
+      case routine
+	result := "NONE"
+    return result
+
+
+routine c_base_name@Type
+    takes type Type
+    returns String
+
+    # This routine will return the base name for {type} as it should
+    # look in C.
+
+    assert type !== null@Type
+    result :@= "NONE"
+    switch type.kind
+      case simple
+	result := type.simple.value
+	compiler :@= one_and_only@Compiler()
+	underlying_type :@= simple_type_lookup@(compiler, result)
+	if underlying_type !== null@Type
+	    result := c_base_name@(underlying_type)
+      case parameterized
+	result := type.parameterized.name.value
+      case routine
+	result := "NONE"
+    return result
+
+
+routine buffer_append@Type
+    takes type Type
+    takes buffer String
+    returns_nothing
+
+    # This routine will append {type} to {buffer}.
+
+    call string_append@(buffer, form@("%t%") / f@(type))
+
+
+routine replaced_c_type@Type
+    takes type Type
+    takes argument_name String
+    returns String
+
+    #: This procedure will return the C type associated with
+    #, {Type} where {argument_name} is an optional argument name.
+
+    buffer :@= new@String()
+    if type == null@Type
+	call buffer_append@("void", buffer)
+	if argument_name !== null@String
+	    call buffer_append@(" ", buffer)
+	    call buffer_append@(argument_name, buffer)
+    else
+	switch type.kind
+	  case simple
+	    if type.replaced
+		call buffer_append@("void *", buffer)
+	    else
+		call buffer_append@(type.simple.value, buffer)
+	    if argument_name !== null@String
+		call buffer_append@(argument_name, buffer)
+		call buffer_append@(" ", buffer)
+		if is_c_keyword@(argument_name)
+		    call buffer_append@(buffer, "___k")
+
+	  case parameterized
+	    call buffer_append@(type.parameterized.name.value, buffer)
+	    if argument_name !== null@String
+		call buffer_append@(argument_name, buffer)
+		call buffer_append@(" ", buffer)
+		if is_c_keyword@(argument_name)
+		    call buffer_append@(buffer, "___k")
+
+	  case routine
+	    routine_type :@= type.routine
+	    return_types :@= routine_type.return_types
+	    takes_types :@= routine_type.takes_types
+
+	    size :@= return_types.size
+	    if size = 0
+		call buffer_append@("void", buffer)
+	    else_if size = 1
+		return_type :@= return_types[0]
+		c_type :@= replaced_c_type@(return_type, null@String)
+		call buffer_append@(c_type, buffer)
+	    else
+		assert false@Logical
+	    call buffer_append@(" ", buffer)
+
+	    call buffer_append@("(*", buffer)
+	    if argument_name !== null@String
+		call buffer_append@(argument_name, buffer)
+		if is_c_keyword@(argument_name)
+		    call buffer_append@("___k", buffer)
+	    call buffer_append@(")", buffer)
+
+	    size := takes_types.size
+	    if size = 0
+		call buffer_append@("(void)", buffer)
+	    else
+		call buffer_append@("(", buffer)
+		prefix :@= ""
+		index :@= 0
+		while index < size
+		    call buffer_append@(prefix, buffer)
+		    prefix := ", "
+		    argument_type :@= takes_types[index]
+		    c_type := replaced_c_type@(argument_type, null@String)
+		    call buffer_append@(c_type, buffer)
+		    index := index + 1
+		call buffer_append@(")", buffer)
+    return buffer
+
+
+routine c_type@Type
+    takes type Type
+    takes parameters_type Type
+    takes argument_name String
+    returns String
+
+    #: This procedure will return the C type associated with
+    #, {parsed_type} where {parameters} is a list of parameters.
+
+    #FIXME: use {argument_name} test with null@String instead of ""!!!
+
+    buffer :@= new@String()
+    if type == null@Type
+	call buffer_append@("void", buffer)
+	if !equal@(argument_name, "")
+	    call buffer_append@(" ", buffer)
+	    call buffer_append@(argument_name, buffer)
+    else
+	compiler :@= one_and_only@Compiler()
+	underlying_type :@= simple_type_lookup@(compiler, base_name@(type))
+	if underlying_type !== null@Type
+	    type := underlying_type
+	if is_c_keyword@(argument_name)
+	    temporary2 :@= new@String()
+	    call string_append@(temporary2, argument_name)
+	    call string_append@(temporary2, "___k")
+	    argument_name := temporary2
+	switch type.kind
+	  case simple
+	    simple :@= type.simple
+	    type_name :@= simple.value
+	    is_pointer :@= false@Logical
+	    switch parameters_type.kind
+	      case parameterized
+		sub_types :@= parameters_type.parameterized.sub_types
+		size :@= sub_types.size
+		index :@= 0
+		while index < size
+		    if equal@(sub_types[index], type)
+			is_pointer := true@Logical
+			break
+		    index := index + 1
+	    if is_pointer
+		call buffer_append@("void *", buffer)
+	    else
+		call buffer_append@(type_name, buffer)
+		if !equal@(argument_name, "")
+		    call buffer_append@(" ", buffer)
+	    call buffer_append@(argument_name, buffer)
+	  case parameterized
+	    call buffer_append@(type.parameterized.name.value, buffer)
+	    if !equal@(argument_name, "")
+		call buffer_append@(" ", buffer)
+		call buffer_append@(argument_name, buffer)
+	  case routine
+	    routine_type :@= type.routine
+	    return_types :@= routine_type.return_types
+	    takes_types :@= routine_type.takes_types
+
+	    size := return_types.size
+	    if size = 0
+		call buffer_append@("void ", buffer)
+	    else_if size = 1
+		return_type :@= return_types[0]
+		c_type :@= c_type@(return_type, parameters_type, "")
+		call buffer_append@(c_type, buffer)
+		call buffer_append@(" ", buffer)
+	    else
+		assert false@Logical
+
+	    call buffer_append@("(*", buffer)
+	    call buffer_append@(argument_name, buffer)
+	    call buffer_append@(")", buffer)
+
+	    size := takes_types.size
+	    if size = 0
+		call buffer_append@("(void)", buffer)
+	    else
+		prefix :@= "("
+		index := 0
+		while index < size
+		    argument_type :@= takes_types[index]
+		    call buffer_append@(prefix, buffer)
+		    prefix := ", "
+		    c_type := c_type@(argument_type, parameters_type, "")
+		    call buffer_append@(c_type, buffer)
+		    index := index + 1
+		call buffer_append@(")", buffer)
+
+    return buffer
+
+
+routine compare@Type
+    takes type1 Type
+    takes type2 Type
+    returns Integer
+
+    # This routine will return {true}@{Logical} if {type1} is equal to {type2}.
+
+    zero :@= 0i
+    one :@= 1i
+    result :@= zero
+    switch type1.kind
+      all_cases_required
+      case simple
+	switch type2.kind
+	  all_cases_required
+	  case simple
+	    result := compare@(type1.simple.value, type2.simple.value)
+	  case parameterized, routine
+	    result := one
+      case parameterized
+	parameterized1 :@= type1.parameterized
+	switch type2.kind
+	  all_cases_required
+	  case simple
+	    result := -one
+	  case parameterized
+	    parameterized2 :@= type2.parameterized
+	    result := compare@(parameterized1.name.value,
+	      parameterized2.name.value)
+	    if result = zero
+		result :=
+		  compare@(parameterized1.sub_types,
+		  parameterized2.sub_types, compare@Type)
+	  case routine
+	    result := one
+      case routine
+	routine1 :@= type1.routine
+	switch type2.kind
+	  all_cases_required
+	  case routine
+	    routine2 :@= type2.routine
+	    result := compare@(routine1.return_types,
+	      routine2.return_types, compare@Type)
+	    if result = zero
+	      result := compare@(routine1.takes_types,
+	        routine2.takes_types, compare@Type)
+	  case simple, parameterized
+	    result := -one
+    return result
+
+
+routine copy@Type
+    takes type Type
+    returns Type
+
+    # This routine will return a copy of {type} copied down to the {Token}
+    # level.
+
+    result :@= new@Type()
+    switch type.kind
+      all_cases_required
+      case simple
+	result.simple := type.simple
+      case parameterized
+	result.parameterized := copy@(type.parameterized)
+      case routine
+	result.routine := copy@(type.routine)
+    return result
+
+
+routine equal@Type
+    takes type1 Type
+    takes type2 Type
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {type1} is equal to {type2}.
+    
+    return compare@(type1, type2) = 0i
+
+
+routine f@Type
+    takes type Type
+    returns String
+
+    # This routine will format {type} using a control string obtained
+    # from {Null}@{}.
+
+    value :@= field_next@Format()
+    c_mode :@= false@Logical
+    base_name_mode :@= false@Logical
+    size :@= value.size
+    index :@= 0
+    while index < size
+	mode_character :@= value[index]
+	if mode_character = 'c'
+	    c_mode := true@Logical
+	else_if mode_character = 'b'
+	    base_name_mode := true@Logical
+	index := index + 1
+
+    call trim@(value, 0)
+    if type == null@Type
+	call string_append@(value, "NO_TYPE")
+    else
+	if type.replaced
+	    call character_append@(value, '<')
+	switch type.kind
+	  all_cases_required
+	  case simple
+	    if c_mode
+		call string_append@(value, c_base_name@(type))
+	    else
+		call string_append@(value, type.simple.value)
+	  case parameterized
+	    parameterized_type :@= type.parameterized
+	    call string_append@(value, parameterized_type.name.value)
+	    if !base_name_mode
+		call character_append@(value, '[')
+		call string_append@(value,
+		  form@("%t%") / f@(parameterized_type.sub_types, f@Type))
+		call character_append@(value, ']')
+	  case routine
+	    routine_type :@= type.routine
+	    call character_append@(value, '[')
+	    call string_append@(value,
+	      form@("%t%") / f@(routine_type.return_types, f@Type))
+	    call string_append@(value, " <= ")
+	    call string_append@(value,
+	      form@("%t%") / f@(routine_type.takes_types, f@Type))
+	    call character_append@(value, ']')
+	if type.replaced
+	    call character_append@(value, '>')
+    return value
+
+
+routine format@Type
+    takes type Type
+    takes buffer String
+    returns_nothing
+
+    # This routine will insert a formatted version of {type} into {buffer}.
+
+    anchor :@= format_begin@(buffer)
+    if type == null@Type
+	call string_gap_insert@(buffer, "NO_TYPE")
+    else
+	call string_gap_insert@(type, buffer)
+    call format_end@(buffer, anchor)
+
+
+routine hash@Type
+    takes type Type
+    returns Unsigned
+
+    # This routine will return a has of {type}.
+
+    hash :@= 0
+    switch type.kind
+      case simple
+	hash := hash@(type.simple)
+      case parameterized
+	parameterized_type :@= type.parameterized
+	hash := hash + hash@(parameterized_type.name) +
+	  hash@(parameterized_type.sub_types, hash@Type)
+      case routine
+	routine_type :@= type.routine
+	hash := hash@(routine_type.return_types, hash@Type) +
+	  hash@(routine_type.takes_types, hash@Type)
+    return hash
+
+
+routine is_parameterized@Type
+    takes type Type
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {type} is parameterized.
+
+    result :@= false@Logical
+    switch type.kind
+      case parameterized
+	result := true@Logical
+    return result
+
+
+routine is_replaced@Type
+    takes type Type
+    returns Logical
+
+    result :@= false@Logical
+    switch type.kind
+      case simple
+	result := type.replaced
+      case parameterized
+	sub_types :@= type.parameterized.sub_types
+	size :@= sub_types.size
+	index :@= 0
+	while index < size
+	    result := is_replaced@(sub_types[index])
+	    if result
+		break
+	    index := index + 1
+      case routine
+	routine_type :@= type.routine
+	takes_types :@= routine_type.takes_types
+	return_types :@= routine_type.return_types
+	size := takes_types.size
+	index := 0
+	while index < size
+	    result := is_replaced@(takes_types[index])
+	    if result
+		break
+	    index := index + 1
+	if !result
+	    size := return_types.size
+	    index := 0
+	    while index < size
+		result := is_replaced@(return_types[index])
+		if result
+		    break
+		index := index + 1
+    return result
+
+
+routine is_routine@Type
+    takes type Type
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {type} is a routine type.
+
+    result :@= false@Logical
+    switch type.kind
+      case routine
+	result := true@Logical
+    return result
+
+
+routine is_scalar@Type
+    takes type Type
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {type} is a scalar {Type}.
+
+    compiler :@= one_and_only@Compiler()
+
+    result :@= false@Logical
+    switch type.kind
+      case simple
+	name :@= type.simple.value
+	result := scalar_lookup@(compiler, name) !== null@Type
+    return result
+
+
+routine is_float_scalar@Type
+    takes type Type
+    returns Logical
+
+    #: This routine will return {true}@{Logical} if {type}
+    #, is a {Double}, {Float}, {Integer} or {Unsigned}.
+
+    result :@= false@Logical
+    switch type.kind
+      case simple
+	name :@= type.simple.value
+	result := equal@(name, "Double") ||
+          equal@(name, "Float") || equal@(name, "Quad")
+    return result
+
+
+routine is_number_scalar@Type
+    takes type Type
+    returns Logical
+
+    #: This routine will return {true}@{Logical} if {type}
+    #, is a {Double}, {Float}, {Integer} or {Unsigned}.
+
+    result :@= false@Logical
+    switch type.kind
+      case simple
+	name :@= type.simple.value
+	result :=
+	  equal@(name, "Byte") ||
+	  equal@(name, "Character") ||
+	  equal@(name, "Double") ||
+	  equal@(name, "Integer") ||
+	  equal@(name, "Long_Integer") ||
+	  equal@(name, "Long_Unsigned") ||
+	  equal@(name, "Float") ||
+	  equal@(name, "Quad") ||
+	  equal@(name, "Short") ||
+	  equal@(name, "Unsigned")
+	if !result
+	    compiler :@= one_and_only@Compiler()
+	    result := scalar_lookup@(compiler, name) !== null@Type
+    return result
+
+
+routine is_logical@Type
+    takes type Type
+    returns Logical
+
+    #: This routine  will return {true}@{Logical} if {type} is a {Logical}.
+
+    result :@= false@Logical
+    switch type.kind
+      case simple
+	name :@= type.simple.value
+	result := equal@(name, "Logical")
+    return result
+
+
+routine is_non_float_scalar@Type
+    takes type Type
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {type}
+    # is {Integer} or {Unsigned}.
+
+    result :@= false@Logical
+    switch type.kind
+      case simple
+	name :@= type.simple.value
+	result :=
+	  equal@(name, "Byte") ||
+	  equal@(name, "Character") ||
+	  equal@(name, "Integer") ||
+	  equal@(name, "Short") ||
+	  equal@(name, "Unsigned")
+    return result
+
+
+routine is_parameter@Type
+    takes parameter Type
+    takes type Type
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {parameter} is a
+    # parameter of {type}.
+
+    result :@= false@Logical
+    switch type.kind
+      case parameterized
+	sub_types :@= type.parameterized.sub_types
+	size :@= sub_types.size
+	index :@= 0
+	while index < size
+	    if equal@(sub_types[index], parameter)
+		result := true@Logical
+		break
+	    index := index + 1
+    return result	
+
+
+routine location_get@Type
+    takes type Type
+    returns Token
+
+    # This routine will return the location of {type} as a {Token} object.
+
+    result :@= null@Token
+    switch type.kind
+      case simple
+	result := type.simple
+      case parameterized
+	result := type.parameterized.name
+      case routine
+	result := type.routine.open_bracket
+    return result    
+
+
+routine replace@Type
+    takes type Type
+    takes formal_type Type
+    takes actual_type Type
+    takes location Token
+    takes level Unsigned
+    returns Type
+
+    # This procedure will return a copy of {type} where each occurrance
+    # of a formal type parameter in {formal_type} is replaced by
+    # its corresponding actual type parameter in {actual_type}.
+
+    compiler :@= one_and_only@Compiler()
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>replace@Type(t:%t%, f:%t%, a:%t%)\n\") %
+	  f@(level) % f@(type) % f@(formal_type) / f@(actual_type),
+	  error@Out_Stream)
+
+    result :@= type
+    switch formal_type.kind
+      case parameterized
+	switch actual_type.kind
+	  case parameterized
+	    actual_parameterized_type :@= actual_type.parameterized
+	    actual_types :@= actual_parameterized_type.sub_types
+	    formal_types :@= formal_type.parameterized.sub_types
+	    actual_types_size :@= actual_types.size
+	    formal_types_size :@= formal_types.size
+	    if actual_types_size = formal_types_size
+		# Looking good, we have two same sized parameter lists:
+		size :@= actual_types_size
+		switch type.kind
+		  case simple
+		    index :@= 0
+		    while index < size
+			if equal@(formal_types[index], type)
+			    result := copy@(actual_types[index])
+			    result.replaced := true@Logical
+			    break
+			index := index + 1
+
+		  case parameterized
+		    # Work on a copy of {type}:
+		    result := copy@(type)
+		    parameterized_type :@= result.parameterized
+
+		    # Sweep through the parameters {sub_types}.
+		    sub_types :@= parameterized_type.sub_types
+		    size := sub_types.size
+		    index := 0
+		    while index < size
+			sub_types[index] := replace@(sub_types[index],
+			  formal_type, actual_type, location, level + 1)
+			index := index + 1
+	
+		  case routine
+		    # Work on a copy of {type}:
+		    result := copy@(type)
+		    routine_type :@= result.routine
+
+		    # Sweep through the argument types:
+		    takes_types :@= routine_type.takes_types
+		    size := takes_types.size
+		    index := 0
+		    while index < size
+			takes_types[index] :=
+			  replace@(takes_types[index], formal_type,
+			    actual_type, location, level + 1)
+			index := index + 1
+	
+		    # Sweep through the return types:
+		    return_types :@= routine_type.return_types
+		    size := return_types.size
+		    index := 0
+		    while index < size
+			return_types[index] :=
+			  replace@(return_types[index],
+			    formal_type, actual_type, location, level + 1)
+			index := index + 1
+	    else
+		call log@(compiler, location,
+		  form@("Parameter count mismatch %t% (%d%) != %t% (%d%)") %
+		  f@(formal_type) % f@(formal_types_size) % f@(actual_type) /
+		  f@(actual_types_size))
+	  default
+	    call log@(compiler, location,
+	      form@("%t% is Parameterized and %t% is not") %
+	      f@(formal_type) / f@(actual_type))
+      default
+	if actual_type.kind = parameterized@Type_Kind
+	    call log@(compiler, location,
+	      form@("%t% is parameterized and %t% is not") %
+	      f@(actual_type) / f@(formal_type))
+	    
+    if tracing
+	call put@(form@("%p%<=replace@Type(t:%t%, f:%t%, a:%t%) => %t%\n\") %
+	  f@(level) % f@(type) % f@(formal_type) % f@(actual_type) /
+	  f@(result), error@Out_Stream)
+    return result
+
+
+routine simple_create@Type
+    takes name String
+    returns Type
+
+    # This procedure will create and return a new simple {Type} object
+    # containing {name}.
+
+    name := read_only_copy@(name)
+    simple :@= create@Token(null@File, 0, symbol@Lexeme, name)
+    type :@= new@Type()
+    type.simple := simple
+    return type
+
+
+routine string_gap_insert@Type
+    takes type Type
+    takes buffer String
+    returns_nothing
+   
+    # This routine will insert {type} into {buffer} at the gap in {buffer}.
+
+    if type.replaced
+	call string_gap_insert@String(buffer, "<")
+    switch type.kind
+      all_cases_required
+      case simple
+	call string_gap_insert@(buffer, type.simple.value)
+      case parameterized
+	parameterized_type :@= type.parameterized
+	call string_gap_insert@(buffer, parameterized_type.name.value)
+	call string_gap_insert@(buffer, "[")
+	call string_gap_insert@(parameterized_type.sub_types,
+	  buffer, string_gap_insert@Type)
+	call string_gap_insert@(buffer, "]")
+      case routine
+	routine_type :@= type.routine
+	call string_gap_insert@(buffer, "[")
+	call string_gap_insert@(routine_type.return_types,
+	  buffer, string_gap_insert@Type)
+	call string_gap_insert@(buffer, " <= ")
+	call string_gap_insert@(routine_type.takes_types,
+	  buffer, string_gap_insert@Type)
+	call string_gap_insert@(buffer, "]")
+    if type.replaced
+	call string_gap_insert@(buffer, ">")
+
+
+# {Typed_Name} stuff:
+
+routine equal@Typed_Name
+    takes typed_name1 Typed_Name
+    takes typed_name2 Typed_Name
+    returns Logical
+
+    # This procedure will return {true}@{Logical} if {type_name1} is
+    # equal to {type_name2} and {false}@{Logical} otherwise.
+
+    names_equal :@= equal@(typed_name1.name.value, typed_name2.name.value)
+    types_equal :@=
+      equal@(base_name@(typed_name1.type), base_name@(typed_name2.type))
+    result :@= names_equal && types_equal
+    return result
+
+
+routine f@Typed_Name
+    takes typed_name Typed_Name
+    returns String
+
+    # This routine will format {typed_name} and return the resulting {String}
+    # object.
+
+    value :@= field_next@Format()
+    call trim@(value, 0)
+    call string_append@(value,
+      form@("%s%@%t%") % f@(typed_name.name.value) / f@(typed_name.type))
+    return value
+
+
+routine format@Typed_Name
+    takes typed_name Typed_Name
+    takes buffer String
+    returns_nothing
+
+    # This routine will format {named_type} into {buffer}.
+
+    anchor :@= format_begin@(buffer)
+    call string_gap_insert@(buffer, typed_name.name.value)
+    call string_gap_insert@(buffer, "@")
+    call string_gap_insert@(typed_name.type, buffer)
+    call format_end@(buffer, anchor)
+
+
+routine hash@Typed_Name
+    takes typed_name Typed_Name
+    returns Unsigned
+
+    # This routine will return a hash for {typed_name}.
+
+    return hash@(typed_name.name) + hash@(base_name@Type(typed_name.type))
+
+
+routine show@Typed_Name
+    takes typed_name Typed_Name
+    takes buffer String
+    returns_nothing
+
+    # This procedure will append {typed_name} to {buffer}.
+
+    if typed_name == null@Typed_Name
+	call buffer_append@("{null@Typed_Name}", buffer)
+    else
+	call buffer_append@(typed_name.name.value, buffer)
+	call buffer_append@("@", buffer)
+	call string_gap_insert@(typed_name.type, buffer)
+
+

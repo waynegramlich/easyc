@@ -1,0 +1,3741 @@
+easy_c 1.0
+
+# Copyright (c) 2004-2011 by Wayne C. Gramlich.
+# All rights reserved.
+
+# This module will generate code for declarations.
+
+library Compiler
+library Easy_C
+library Token
+library Parse
+library Statement
+
+define Typed_Name_Object
+    variant kind Typed_Name_Object_Kind
+	constant Constant_Declaration
+	external External_Declaration
+	external_named External_Named_Declaration
+	global Global_Declaration
+	routine Routine_Declaration
+
+# {Collection_Declaration} routines:
+
+routine visit@Collection_Declaration
+    takes collection Collection_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This is the routine that processes an {Collection}.
+
+    switch compiler.phase
+      all_cases_required
+      case c_defines_emit, c_emit, ezh_emit, ezh_scan, generate_emit,
+       h_externs_emit, h_includes_emit, h_structs_emit, link_emit,
+       link_scan, prefix_scan, h_typedefs_emit
+	do_nothing
+      case source_find
+	source :@= compiler.source
+	assert source !== null@Source
+	collection_name :@= collection.name.value
+	if source.collection == null@Collection
+	    source.collection :=
+	      collection_register@(compiler, collection, source)
+	    source.collection_declaration := collection
+	else
+	    call log2@(compiler.messages, collection.name,
+	      source.collection_declaration.name,
+	      form@("Collection %v% defined more than once") /
+	      f@(collection_name))
+    do_nothing
+
+
+# {Constant_Declaration} routines:
+
+routine equal@Constant_Declaration
+    takes constant_declaration1 Constant_Declaration
+    takes constant_declaration2 Constant_Declaration
+    returns Logical
+
+    # This routine will return {true@Logial} if {constant_declaration1} is
+    # equal to {constant_declaration2} and {false@Logical} otherwise.
+
+    result :@= 0f
+    result :=
+      equal@(constant_declaration1.typed_name,
+      constant_declaration2.typed_name) &&
+      equal@(constant_declaration1.type, constant_declaration2.type) &&
+      equal@(constant_declaration1.expression, constant_declaration2.expression)
+    return result
+
+routine visit@Constant_Declaration
+    takes constant Constant_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    location :@= constant.constant.keyword
+    call location_push@(compiler, "constant declaration", location)
+
+    typed_name :@= constant.typed_name
+    typed_name_type :@= typed_name.type
+    typed_name_name :@= typed_name.name
+    type :@= constant.type
+    expression :@= constant.expression
+    switch compiler.phase
+      all_cases_required
+      case c_defines_emit, generate_emit, h_externs_emit, h_includes_emit,
+       h_structs_emit, source_find, link_emit, link_scan, prefix_scan
+	do_nothing
+      case h_typedefs_emit
+	# Really should have a separate phase:
+	switch type.kind
+	  case simple
+	    if is_scalar@(type)
+		call string_append@(buffer,
+		  form@("#define %s%__%s% ((%s%)%s%)\n\") %
+		  f@(base_name@(typed_name_type)) %
+		  f@(typed_name_name.value) %
+		  f@(c_base_name@(type)) /
+		  f@(macro_evaluate@(expression, compiler, null@String)))
+	    else
+		call log@(compiler, location,
+		  form@("%t% is not a scalar type like 'Unsigned'") / f@(type))
+      case c_emit
+	switch typed_name_type.kind
+	  case simple
+	    do_nothing
+	  default
+	    call log@(compiler, location,
+	      form@("%t% needs to be a simple type (no parameters)") /
+	      f@(type))
+
+	switch type.kind
+	  case simple
+	    if !is_scalar@(type)
+		call log@(compiler, location,
+		  form@("%t% is not a scalar type like 'Integer'") / f@(type))
+	  default
+	    call log@(compiler, location,
+	      form@("%t% needs to be a simple type like (no parameters)") /
+	      f@(type))
+      case ezh_scan
+	typed_name_object :@= new@Typed_Name_Object()
+	typed_name_object.constant := constant
+	call typed_name_insert@(compiler,
+	  typed_name, typed_name_object, typed_name.name,
+	  "visit@Constant_Declaration")
+      case ezh_emit
+	call traverse@(constant, compiler.traverser)
+
+    call location_pop@(compiler)
+
+
+# {Declaration} routines:
+
+routine library_visit@Declaration
+    takes library Library_Declaration
+    takes interface Interface_Declaration
+    takes global_library Global_Library_Declaration
+    takes library_name String
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {library} using {compiler}.
+
+    assert buffer !== null@String
+
+    middlefix :@= compiler.middlefix
+    temporary :@= compiler.temporary
+    messages :@= compiler.messages
+    switch compiler.phase
+      case c_emit
+	call string_append@(buffer,
+	  form@("#include \dq\%s%%s%.h\dq\/*D1*/\n\") %
+	  f@(library_name) / f@(compiler.middlefix))
+
+	#ezh_file :@= read@File(library_name, middlefix, ".ezh", compiler)
+	#if ezh_file !== null@File
+	#    ezh_tokens :@= ezh_file.tokens
+	#    ezh_parser :@= create@Parser(ezh_tokens, messages)
+	#    ezh_root :@= parse@Root(ezh_parser)
+	#    call visit@(ezh_root, "", compiler, ezh_scan@Phase)
+      case link_emit
+	#ezh_file := read@File(library_name, middlefix, ".ezh", compiler)
+	#if ezh_file !== null@File
+	#    ezh_tokens := ezh_file.tokens
+	#    ezh_parser := create@Parser(ezh_tokens, messages)
+	#    ezh_root := parse@Root(ezh_parser)
+
+	#    call visit@Root(ezh_root, buffer, compiler, link_scan@Phase)
+      case ezh_emit
+	if library !== null@Library_Declaration
+	    call traverse@(library, compiler.traverser)
+	else_if interface !== null@Interface_Declaration
+	    call traverse@(interface, compiler.traverser)
+
+	# Append {library_name} to either {library_bases} or {interface_bases}
+	# if it is not already there:
+	library_bases :@= compiler.library_bases
+	interface_bases :@= compiler.interface_bases
+	options :@= compiler.options
+	source_bases :@= options.source_bases
+
+	size :@= source_bases.size
+	index :@= 0
+	while index < size
+	    if equal@(source_bases[index], library_name)
+		break
+	    index := index + 1
+	if index >= size
+	    # Not in {source_bases}:
+	    size := library_bases.size
+	    index := 0
+	    while index < size
+		if equal@(library_bases[index], library_name)
+		    break
+		index := index + 1
+	    if index >= size
+		# Not in {library_bases} either:
+		size := interface_bases.size
+		index := 0
+		while index < size
+		    if equal@(interface_bases[index], library_name)
+			break
+		    index := index + 1
+		if index >= size
+		    # Not in {source_bases}, {library_bases} or
+		    # {interface_bases}; append to appropriate list:
+		    if library !== null@Library_Declaration
+			call append@(library_bases, library_name)
+		    else_if interface !== null@Interface_Declaration
+			call append@(interface_bases, library_name)
+		    else
+			assert false@Logical
+      case h_includes_emit
+	#FIXME: use %u% in format:
+	upper_library_name :@= new@String()
+	call upper_case_append@(upper_library_name, library_name)
+
+	call string_append@(buffer,
+	  form@("#ifndef %s%_INCLUDED\n\") / f@(upper_library_name))
+
+	call string_append@(buffer,
+	  form@("#include \dq\%s%%s%.h\dq\/*D2*/\n\") %
+	  f@(library_name) / f@(compiler.middlefix))
+
+	call string_append@(buffer,
+	  form@("#endif /* %s%_INCLUDED */\n\") / f@(upper_library_name))
+
+
+routine location_get@Declaration
+    takes declaration Declaration
+    returns Token
+
+    # This routine will return a position {Token} for {declaration}.
+
+    location :@= null@Token
+    switch declaration.kind
+      all_cases_required
+      case collection
+	location := declaration.collection.end_of_line
+      case constant
+	location := declaration.constant.end_of_line
+      case define
+	location := declaration.define.end_of_line
+      case defines_prefix
+	location := declaration.defines_prefix.end_of_line
+      case easy_c
+	location := declaration.easy_c.end_of_line
+      case end_of_line
+	location := declaration.end_of_line
+      case error
+	error :@= declaration.error
+	location := error.tokens[0]
+      case external
+	location := declaration.external.end_of_line
+      case external_named
+	location := declaration.external_named.end_of_line
+      case global
+	location := declaration.global.end_of_line
+      case global_library
+	location := declaration.global_library.end_of_line
+      case include_string
+	location := declaration.include_string.end_of_line
+      case interface
+	location := declaration.interface.end_of_line
+      case library
+	location := declaration.library.end_of_line
+      case load
+	location := declaration.load.end_of_line
+      case note
+	location := declaration.note.end_of_line
+      case require
+	location := declaration.require.end_of_line
+      case routine
+	location := declaration.routine.end_of_line
+    return location
+
+
+routine visit@Declaration
+    takes declaration Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {declaration} using {compiler}.
+
+    call location_push@(compiler, "Declaration", location_get@(declaration))
+
+    assert buffer !== null@String
+    #trace :@= true@Logical
+    trace :@= false@Logical
+    if trace
+	call d@(form@("=>visit@Declaration(%p%)\n\") / f@(compiler.phase))
+
+    switch declaration.kind
+      all_cases_required
+      case collection
+	call visit@(declaration.collection, buffer, compiler)
+      case constant
+	call visit@(declaration.constant, buffer, compiler)
+      case define
+	call visit@(declaration.define, buffer, compiler)
+      case defines_prefix
+	call visit@(declaration.defines_prefix, buffer, compiler)
+      case easy_c
+	call visit@(declaration.easy_c, buffer, compiler)
+      case end_of_line
+	switch compiler.phase
+	  case c_emit, ezh_emit
+	    call buffer_append@("\n\", buffer)
+      case error
+	#call visit@(declaration.error, buffer, compiler)
+	do_nothing
+      case external
+	call visit@(declaration.external, buffer, compiler)
+      case external_named
+	call visit@(declaration.external_named, buffer, compiler)
+      case global
+	call visit@(declaration.global, buffer, compiler)
+      case global_library
+	call visit@(declaration.global_library, buffer, compiler)
+      case include_string
+	call visit@(declaration.include_string, buffer, compiler)
+      case library
+	call visit@(declaration.library, buffer, compiler)
+      case interface
+	call visit@(declaration.interface, buffer, compiler)
+      case load
+	call visit@(declaration.load, buffer, compiler)
+      case note
+	call visit@(declaration.note, buffer, compiler)
+      case require
+	call visit@(declaration.require, buffer, compiler)
+      case routine
+	temp :@= compiler.tracing
+	compiler.tracing := true@Logical
+	call visit@(declaration.routine, buffer, compiler)
+	compiler.tracing := temp
+
+    call location_pop@(compiler)
+
+    if trace
+	call d@(form@("<=visit@Declaration(%p%)\n\") / f@(compiler.phase))
+
+
+# {Define_Declaration} routines:
+
+routine compare@Define_Declaration
+    takes define1 Define_Declaration
+    takes define2 Define_Declaration
+    returns Integer
+
+    # This routine will return -1, 0, or 1 depending upon whether {define1}
+    # is alphabetically before, the same or after {define2}.
+
+    return compare@(define1.type, define2.type)
+
+
+routine show@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    returns_nothing
+
+    # This routine will append a short version of {define} onto {buffer}.
+
+    if define == null@Define_Declaration
+	call buffer_append@("null@Define_Declaration", buffer)
+    else
+	call string_gap_insert@(define.type, buffer)
+
+
+routine c_defines_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will append the C code for {define} to {buffer}
+    # using {compiler].
+
+    assert buffer !== null@String
+
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+
+    call undefs_append@(compiler, buffer)
+
+    call string_append@(buffer,
+      form@("/* {%s%} stuff: */\n,n\") / f@(define_name))
+
+    call variant_globals_emit@(define, buffer, compiler)
+    call null_emit@(define, buffer, compiler)
+    call erase_emit@(define, buffer, compiler)
+    call new_emit@(define, buffer, compiler)
+    call initialize_emit@(define, buffer, compiler)
+
+
+routine h_structs_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will append C header file struct information for
+    # {define} to {buffer} using {compiler}.
+
+    #put@("=>h_struct_emit@define_declaration()\n\", debug_stream)
+
+    assert buffer !== null@String
+
+    struct_output :@= false@Logical
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case record
+	    if !struct_output
+		call string_append@(buffer,
+		  form@("struct %s%__Struct {\n\") / f@(define_name))
+		struct_output := true@Logical
+	    field_clauses :@= define_clause.record.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    field_name :@= field.name.value
+		    field_type :@= field.type
+		    c_type_text :@=
+		      c_type@(field_type, define_type, field_name)
+		    call string_append@(buffer,
+		      form@("    %k%;\n\") / f@(c_type_text))
+		field_clauses_index := field_clauses_index + 1
+	  case record_import
+	    # There is no need to define the struct; it is already there:
+	    do_nothing
+	  case variant
+	    variant :@= define_clause.variant
+	    if !struct_output
+		call string_append@(buffer, 
+		  form@("struct %s%__Struct {\n\") / f@(define_name))
+		struct_output := true@Logical
+	    kind_name :@= variant.kind_name.value
+	    kind_type :@= variant.kind_type
+	    kind_type_base :@= base_name@(kind_type)
+	    call string_append@(buffer,
+	      form@("    %k% %k%;\n\") % f@(kind_type_base) / f@(kind_name))
+	    call buffer_append@("    union {\n\", buffer)
+
+	    field_clauses := variant.field_clauses
+	    field_clauses_size := field_clauses.size
+	    field_clauses_index := 0
+	    while field_clauses_index < field_clauses_size
+		field_clause := field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field := field_clause.field
+		    field_name := field.name.value
+		    field_type := field.type
+
+		    #foo :@= simple_type_lookup@(compiler,
+		    #  base_name@(field_type))
+		    #if foo !== null@Type
+		    #	call d@(form@("%t% => %t%\n\") %
+		    #	  f@(field_type) / f@(foo))
+
+		    call string_append@(buffer, form@("\t\%c% %k%;/*u*/\n\") %
+		      f@(field_type) / f@(field_name))
+		field_clauses_index := field_clauses_index + 1
+	    call string_append@(buffer, 
+	      form@("    } %s%__union;\n\") / f@(kind_name))
+	index := index + 1
+
+    if struct_output
+	call buffer_append@("};\n\", buffer)
+
+	if !is_parameterized@(define_type)
+	    call string_append@(buffer,
+	      form@("extern struct %s%__Struct %s%__Initial;/*D1*/\n\") %
+	      f@(define_name) / f@(define_name))
+
+    #put@("<=h_struct_emit@define_declaration()\n\", debug_stream)
+
+
+routine h_typedefs_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will generate the header file information for
+    # {define} using {compiler}.
+
+    #call put@("=>h_typedefs_emit@define_declaration()\n\",
+    #  error@Out_Stream)
+
+    assert buffer !== null@String
+
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+
+    need_top_typedef :@= false@Logical
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  all_cases_required
+	  case record
+	    need_top_typedef := true@Logical
+	  case base_type
+	    base_type :@= define_clause.base_type
+	
+	    # Output the typedef:
+	    call string_append@(buffer,
+	      form@("typedef %s% %s%;\n\") %
+	      f@(string_convert@(base_type.string)) / f@(define_name))
+
+	    # Add to the scalar table:
+	    #new_type :@= simple_create@Type(define_name)
+	    #call scalar_insert@(compiler, define_name, new_type)
+	    
+	  case enumeration
+	    enumeration :@= define_clause.enumeration
+	    call string_append@(buffer,
+	      form@("enum %s%__Enum {\n\") / f@(define_name))
+
+	    item_clauses :@= enumeration.item_clauses
+	    item_clauses_size :@= item_clauses.size
+	    item_clauses_index :@= 0
+	    while item_clauses_index < item_clauses_size
+		item_clause :@= item_clauses[item_clauses_index]
+		switch item_clause.kind
+		  case item
+		    item_name :@= item_clause.item.name.value
+		    call string_append@(buffer, 
+		      form@("    %s%___%s%,\n\") %
+		      f@(define_name) /  f@(item_name))
+		item_clauses_index := item_clauses_index + 1
+	    call buffer_append@("};\n\", buffer)
+	    call  string_append@(buffer,
+	      form@("typedef enum %s%__Enum %k%;\n\") %
+	      f@(define_name) / f@(define_name))
+	  case enumeration_prefix
+	    enumeration_prefix :@= define_clause.enumeration_prefix
+	    if enumeration_prefix.define_datas_initialized
+		call string_append@(buffer,
+		  form@("enum %s%__Enum {\n\") / f@(define_name))
+		define_datas :@= enumeration_prefix.define_datas
+		define_datas_size :@= 0
+		if enumeration_prefix.define_datas_initialized
+		    define_datas_size := define_datas.size
+		define_datas_index :@= 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    call string_append@(buffer, 
+		      form@("    %s%___%s%,\n\") %
+		      f@(define_name) /  f@(define_data.new_name))
+		    define_datas_index := define_datas_index + 1
+		call buffer_append@("};\n\", buffer)
+		call  string_append@(buffer,
+		  form@("typedef enum %s%__Enum %k%;\n\") %
+		  f@(define_name) / f@(define_name))
+	  case external
+	    do_nothing
+	  case record_import
+	    type_string :@= string_convert@(define_clause.record_import.string)
+	    call string_append@(buffer,
+	      form@("typedef %s% %s%;\n\") % f@(type_string) / f@(define_name))
+	  case registers
+	    call string_append@(buffer,
+	      form@("typedef int %s%;\n\") / f@(define_name))
+	  case variant
+	    need_top_typedef := true@Logical
+
+	    #variant :@= define_clause.variant
+	    #kind_name :@= variant.kind_name.value
+	    #kind_type :@= variant.kind_type
+	    #kind_type_base :@= base_name@(kind_type)
+
+	    #call string_append@(buffer,
+	    #  form@("enum %t%__Enum {\n\") / f@(kind_type_base))
+
+	    #field_clauses :@= variant.field_clauses
+	    #field_clauses_size :@= field_clauses.size
+	    #field_clauses_index :@= 0
+	    #while field_clauses_index < field_clauses_size
+	    #	field_clause :@= field_clauses[field_clauses_index]
+	    #	switch field_clause.kind
+	    #	  case field
+	    #	    field_name :@= field_clause.field.name.value
+	    #	    call string_append@(buffer,
+	    #	      form@("    %t%___%s%,\n\") %
+	    #	      f@(kind_type_base) / f@(field_name))
+	    #	field_clauses_index := field_clauses_index + 1
+	    #call buffer_append@("};\n\", buffer)
+
+	    #call string_append@(buffer,
+	    #  form@("typedef enum %s%__Enum %s%;\n\") %
+	    #  f@(kind_type_base) / f@(kind_type_base))
+	  case simple
+	    simple :@= define_clause.simple
+
+	    # No longer output the typedef:
+	    #simple_typedefs :@= compiler.simple_typedefs
+	    #call string_append@(simple_typedefs,
+	    #  form@("typedef %t% %s%;\n\") %
+	    #  f@(simple.type) / f@(define_name))
+
+	    #simple_type :@= simple.type
+	    #if is_scalar@Type(simple_type)
+	    #	new_type :@= simple_create@Type(define_name)
+	    #	call scalar_insert@(compiler, define_name, new_type)
+	    #	#call d@(form@("Inserting %t% into scalar table under %v%\n\") %
+	    #	#  f@(new_type) / f@(define_name))
+
+	  case simple_numeric
+	    simple_numeric :@= define_clause.simple_numeric
+	    other_typedefs :@= compiler.other_typedefs
+	    call string_append@(other_typedefs,
+	      form@("typedef %t% %s%;\n\") %
+	      f@(simple_numeric.type) / f@(define_name))
+	    #previous_definition :@= scalar_lookup@(compiler, define_name)
+	    #if previous_definition == null@Type
+	    #	call scalar_insert@(compiler, define_name, simple_numeric.type)
+	    #else
+	    #	assert 0f
+	  case end_of_line, error, note, generate
+	    do_nothing
+	index := index + 1
+    if need_top_typedef
+	call string_append@(buffer,
+	  form@("typedef struct %s%__Struct *%k%;\n\") %
+	  f@(define_name) / f@(define_name))
+
+    #call put@("<=h_typedefs_emit@define_declaration()\n\",
+    #  error@Out_Stream)
+
+
+routine initialize_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will append the initialize routine for {define} to {buffer}
+    # using {compiler}.
+
+    assert buffer !== null@String
+
+    # Output the Initialize routine:
+    if !is_external@(define) && !is_registers@(define) &&
+      !is_simple@(define) && !is_base_type@(define)
+	temporary :@= compiler.temporary
+	define_type :@= define.type
+	define_name :@= base_name@(define_type)
+
+	call string_append@(buffer,
+	  form@("void %s%__Initialize(void)\n\") / f@(define_name))
+	call buffer_append@("{\n\", buffer)
+
+	if !is_record_import@(define)
+	    call string_append@(buffer,
+	      form@("    %s%__erase(%s%__null);\n\") %
+	      f@(define_name) / f@(define_name))
+
+	call buffer_append@("}\n,n\", buffer)
+
+
+routine is_enumeration@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {define} is an enumeration.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case enumeration, enumeration_prefix
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine is_base_type@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {define} is a base type.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case base_type
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine is_external@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {define} is an external.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case external
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine is_simple_numeric@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logial} if {define} is simple numeric.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case simple_numeric
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine is_simple@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logial} if {define} is simple.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case simple, simple_numeric
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine is_record@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {define} is a record.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case record
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine is_registers@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {define} is a registers.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case registers
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine is_record_import@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {define} is a record import.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case record_import
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine is_variant@Define_Declaration
+    takes define Define_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {define} is a variant.
+
+    result :@= false@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case variant
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine record_field_type@Define_Declaration
+    takes define Define_Declaration
+    takes field_name String
+    returns Type
+
+    # This routine will return the type associated with {field_name} in
+    # {define}.  If {field_name} is not found, {Null}@{Type}is returned.
+
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case record
+	    field_clauses :@= define_clause.record.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    if equal@(field.name.value, field_name)
+			return field.type
+		field_clauses_index := field_clauses_index + 1
+	  case record_import
+	    import_field_clauses :@=
+	      define_clause.record_import.import_field_clauses
+	    import_field_clauses_size :@= import_field_clauses.size
+	    import_field_clauses_index :@= 0
+	    while import_field_clauses_index < import_field_clauses_size
+		import_field_clause :@=
+		  import_field_clauses[import_field_clauses_index]
+		switch import_field_clause.kind
+		  case import_field
+		    import_field :@= import_field_clause.import_field
+		    if equal@(import_field.name.value, field_name)
+			return import_field.type
+		import_field_clauses_index := import_field_clauses_index + 1
+	  case variant
+	    variant :@= define_clause.variant
+	    if equal@(variant.kind_name.value, field_name)
+		return variant.kind_type
+	index := index + 1
+    return null@Type
+
+
+routine record_field_name@Define_Declaration
+    takes define Define_Declaration
+    takes field_name String
+    returns String
+
+    # This routine will return the actual field name associated with
+    # {field_name} in {define}.  If {field_name} is not found,
+    # {Null}@{String} is returned.
+
+    result :@= null@String
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case record
+	    field_clauses :@= define_clause.record.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    if equal@(field.name.value, field_name)
+			result := field_name
+			break 2
+		field_clauses_index := field_clauses_index + 1
+	  case record_import
+	    import_field_clauses :@=
+	      define_clause.record_import.import_field_clauses
+	    import_field_clauses_size :@= import_field_clauses.size
+	    import_field_clauses_index :@= 0
+	    while import_field_clauses_index < import_field_clauses_size
+		import_field_clause :@=
+		  import_field_clauses[import_field_clauses_index]
+		switch import_field_clause.kind
+		  case import_field
+		    import_field :@= import_field_clause.import_field
+		    if equal@(import_field.name.value, field_name)
+			result := import_field.c_name.value
+			break 2
+		import_field_clauses_index := import_field_clauses_index + 1
+	  case variant
+	    if equal@(define_clause.variant.kind_name.value, field_name)
+		result := field_name
+		break
+	index := index + 1
+    return result
+
+
+routine register_bit_name@Define_Declaration
+    takes define Define_Declaration
+    takes field_name String
+    returns String
+
+    # This routine will return the bit name associated with
+    # {field_name} in {define}.  If {field_name} is not found,
+    # {Null}@{String} is returned.
+
+    result :@= null@String
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case registers
+	    register_clauses :@= define_clause.registers.register_clauses
+	    register_clauses_size :@= register_clauses.size
+	    register_clauses_index :@= 0
+	    while register_clauses_index < register_clauses_size
+		register_clause :@= register_clauses[register_clauses_index]
+		switch register_clause.kind
+		  case bit
+		    bit :@= register_clause.bit
+		    if equal@(bit.name.value, field_name)
+			result := string_convert@(bit.string)
+			break 2
+		  case byte
+		    byte :@= register_clause.byte
+		register_clauses_index := register_clauses_index + 1
+	index := index + 1
+    return result
+
+
+routine register_bit_byte_name@Define_Declaration
+    takes define Define_Declaration
+    takes field_name String
+    returns String
+
+    # This routine will return the byte name associated with
+    # {field_name} in {define}.  If {field_name} is not found,
+    # {Null}@{String} is returned.
+
+    result :@= null@String
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case registers
+	    register_clauses :@= define_clause.registers.register_clauses
+	    register_clauses_size :@= register_clauses.size
+	    register_clauses_index :@= 0
+	    while register_clauses_index < register_clauses_size
+		register_clause :@= register_clauses[register_clauses_index]
+		switch register_clause.kind
+		  case bit
+		    bit :@= register_clause.bit
+		    if equal@(bit.name.value, field_name)
+			break 2
+		  case byte
+		    byte :@= register_clause.byte
+		    result := string_convert@(byte.string)
+		register_clauses_index := register_clauses_index + 1
+	index := index + 1
+    if index >= size
+	result := null@String
+    return result
+
+
+routine register_byte_name@Define_Declaration
+    takes define Define_Declaration
+    takes field_name String
+    returns String
+
+    # This routine will return the byte name associated with
+    # {field_name} in {define}.  If {field_name} is not found,
+    # {Null}@{String} is returned.
+
+    result :@= null@String
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case registers
+	    register_clauses :@= define_clause.registers.register_clauses
+	    register_clauses_size :@= register_clauses.size
+	    register_clauses_index :@= 0
+	    while register_clauses_index < register_clauses_size
+		register_clause :@= register_clauses[register_clauses_index]
+		switch register_clause.kind
+		  case byte
+		    byte :@= register_clause.byte
+		    if equal@(byte.name.value, field_name)
+			result := string_convert@(byte.string)
+			break 2
+		register_clauses_index := register_clauses_index + 1
+	index := index + 1
+    return result
+
+
+routine variant_field_type@Define_Declaration
+    takes define Define_Declaration
+    takes field_name String
+    returns Type
+
+    # This routine will return the type associated with {field_name} in
+    # {define}.  If not found, {null}@{Type} is returned.
+
+    result :@= null@Type
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case variant
+	    field_clauses :@= define_clause.variant.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    if equal@(field.name.value, field_name)
+			result := field.type
+			break 2
+		field_clauses_index := field_clauses_index + 1
+	index := index + 1
+    return result
+
+
+routine variant_lookup@Define_Declaration
+    takes define Define_Declaration
+    takes field_name String
+    returns Variant_Clause
+
+    # This routine will return the {Varaint_Clause} associated
+    # {field_name} in {define}.  {null}@{Variant_Clause} is returned
+    # if no such association exists.
+
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case variant
+	    variant :@= define_clause.variant
+	    field_clauses :@= variant.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    if equal@(field_clause.field.name.value, field_name)
+			return variant
+		field_clauses_index := field_clauses_index + 1
+	index := index + 1
+    return null@Variant_Clause
+
+
+routine visit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will process {xdefine} using {compiler}.
+
+    assert buffer !== null@String
+
+    temporary :@= compiler.temporary
+    switch compiler.phase
+      all_cases_required
+      case c_emit, h_includes_emit, link_emit
+	do_nothing
+      case c_defines_emit
+	call c_defines_emit@(define, buffer, compiler)
+      #case library_type_find
+      #	call define_register@(compiler, define)
+      case ezh_emit
+	call ezh_emit@(define, buffer, compiler)
+      case ezh_scan
+	define_table :@= compiler.define_table
+	define_type :@= define.type
+	define_name :@= base_name@(define_type)
+	previous_define :@= lookup@(define_table, define_name)
+	if previous_define == null@Define_Declaration
+	    call insert@(define_table, define_name, define)
+	    define_clauses :@= define.define_clauses
+	    size :@= define_clauses.size
+	    index :@= 0
+	    while index < size
+		define_clause :@= define_clauses[index]
+		switch define_clause.kind
+		  case simple
+		    simple :@= define_clause.simple
+		    call simple_type_insert@(compiler, define_name, simple.type)
+		index := index + 1
+	#else
+	#    if is_external@(previous_define) &&
+	#      is_external@(define)
+	#	# Everything is OK.
+	#	do_nothing
+	#    else
+	#	call log@(compiler, define.define.keyword,
+	#	  form@("Define %t% is previously defined") /
+	#	  f@Type(define.type))
+	#	call log@(compiler., previous_define.define.keyword,
+	#	  form@("Define %t% is previously defined here") /
+	#	  f@Type(previous_define.type))
+
+      case h_structs_emit
+	call h_structs_emit@(define, buffer, compiler)
+      case h_typedefs_emit
+	call h_typedefs_emit@(define, buffer, compiler)
+      case h_externs_emit
+	call h_externs_emit@(define, buffer, compiler)
+      case link_scan
+	#if !is_external@(define) && !is_enumeration@(define)
+	if !is_enumeration@(define) && !is_simple@(define) &&
+	  !is_base_type@(define)
+	    call append@(compiler.scanned_types, define.type)
+      case prefix_scan	
+	call prefix_scan@(define, buffer, compiler)
+      case generate_emit
+	call generate_emit@(define, buffer, compiler)
+      case source_find
+	source :@= compiler.source
+	call append@(compiler.defines, define)
+	call append@(source.defines, define)
+
+
+routine variant_globals_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will append the global variables for {define} to {buffer}
+    # using {compiler}
+
+    assert buffer !== null@String
+
+    if is_external@(define)
+	do_nothing
+    else_if is_enumeration@(define)
+	do_nothing
+    else
+	# Generate globals for variants:
+	temporary :@= compiler.temporary
+	define_clauses :@= define.define_clauses
+	size :@= define_clauses.size
+	index :@= 0
+	while index < size
+	    define_clause :@= define_clauses[index]
+	    switch define_clause.kind
+	      case variant
+		variant :@= define_clause.variant
+		kind_name :@= variant.kind_name.value
+		kind_type :@= variant.kind_type
+		kind_type_base :@= base_name@(kind_type)
+		field_clauses :@= variant.field_clauses
+		field_clauses_size :@= field_clauses.size
+		field_clauses_index :@= 0
+		while field_clauses_index < field_clauses_size
+		    field_clause :@= field_clauses[field_clauses_index]
+		    switch field_clause.kind
+		      case field
+			field_name :@= field_clause.field.name.value
+			call string_append@(buffer, 
+			  form@("%k% %t%__%s% = %s%___%s%;\n\") %
+			  f@(kind_type_base) % f@(kind_type_base) %
+			  f@(field_name) % f@(kind_type_base) / f@(field_name))
+		    field_clauses_index := field_clauses_index + 1
+	    index := index + 1
+	    
+
+routine null_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will append the null code for {define} to {buffer}
+    # using {compiler}.
+
+    assert buffer !== null@String
+
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_type_base :@= base_name@(define_type)
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+
+    if is_external@(define)
+	do_nothing
+    else_if is_enumeration@(define)
+	call string_append@(buffer, 
+	  form@("%k% %s%__null = (%k%)0;\n\") %
+	  f@(define_type_base) % f@(define_type_base) / f@(define_type_base))
+
+	index :@= 0
+	while index < size
+	    define_clause :@= define_clauses[index]
+	    switch define_clause.kind
+	      case enumeration
+		item_clauses :@= define_clause.enumeration.item_clauses
+		item_clauses_size :@= item_clauses.size
+		item_clauses_index :@= 0
+		while item_clauses_index < item_clauses_size
+		    item_clause :@= item_clauses[item_clauses_index]
+		    switch item_clause.kind
+		      case item
+			item_name :@= item_clause.item.name.value
+			call string_append@(buffer,
+			  form@("%k% %s%__%s% = %s%___%s%;\n\") %
+			  f@(define_type_base) % f@(define_type_base) %
+			  f@(item_name) % f@(define_type_base) /
+			  f@(item_name))
+		    item_clauses_index := item_clauses_index + 1
+	      case enumeration_prefix
+		enumeration_prefix :@= define_clause.enumeration_prefix
+		define_datas :@= enumeration_prefix.define_datas
+		define_datas_size :@= 0
+		if enumeration_prefix.define_datas_initialized
+		    define_datas_size := define_datas.size
+		define_datas_index :@= 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    new_name :@= define_data.new_name
+		    value :@= define_data.value
+		    call string_append@(buffer,
+		      form@("%s% %s%__%s% = %s%___%s%;\n\") %
+		      f@(define_type_base) % f@(define_type_base) %
+		      f@(new_name) % f@(define_type_base) / f@(new_name))
+		    call string_append@(buffer,
+		      form@("Unsigned Unsigned__%s% = %s%;\n\") %
+		      f@(new_name) / f@(value))
+		    define_datas_index := define_datas_index + 1
+	    index := index + 1
+    else_if is_record@(define) || is_variant@(define)
+	# We create the null@{name} object:
+	# Output the null object:
+	call string_append@(buffer, 
+	  form@("struct %s%__Struct %s%__Initial = {\n\") %
+	  f@(define_type_base) / f@(define_type_base))
+
+	index := 0
+	while index < size
+	    define_clause := define_clauses[index]
+	    switch define_clause.kind
+	      case record
+		field_clauses :@= define_clause.record.field_clauses
+		field_clauses_size :@= field_clauses.size
+		field_clauses_index :@= 0
+		while field_clauses_index < field_clauses_size
+		    field_clause :@= field_clauses[field_clauses_index]
+		    switch field_clause.kind
+		      case field
+			field :@= field_clause.field
+			field_name :@= field.name.value
+			field_type :@= field.type
+			field_type_base :@= base_name@(field_type)
+			field_define :@=
+			  lookup@(compiler.define_table, field_type_base)
+
+			if is_parameter@(field_type, define_type)
+			    # We have a parameter:
+			    call buffer_append@("    0", buffer)
+			else_if is_routine@(field_type)
+			    call buffer_append@("    0", buffer)
+			else_if field_define == null@Define_Declaration
+			    call log@(compiler, field.name,
+			      form@("Field type %t% is not defined") /
+			      f@(field_type))
+			else_if is_scalar@(field_type)
+			    call buffer_append@("    0", buffer)
+			else_if is_enumeration@(field_define)
+			    call string_append@(buffer,
+			      form@("    (%k%)0") / f@(field_type_base))
+			else_if is_parameterized@(field_type)
+			    call string_append@(buffer,
+			      form@("    (%k%)0") / f@(field_type_base))
+			else
+			    call string_append@(buffer,
+			      form@("    &%s%__Initial") / f@(field_type_base))
+			call buffer_append@(",\n\", buffer)
+		    field_clauses_index := field_clauses_index + 1
+	      case variant
+		do_nothing
+	    index := index + 1
+	call buffer_append@("};\n,n\", buffer)
+
+	call string_append@(buffer, 
+	  form@("%k% %s%__null = &%s%__Initial;\n\") %
+	  f@(define_type_base) % f@(define_type_base) / f@(define_type_base))
+    else_if is_record_import@(define)
+	# No initialization:
+	call string_append@(buffer, form@("%k% %s%__null;\n\") %
+	  f@(define_type_base) / f@(define_type_base))
+    else_if is_registers@(define)
+	do_nothing
+    else_if is_simple@(define)
+	if is_simple_numeric@(define)
+	    call string_append@(buffer,
+	      form@("%k% %s%__null = (%t%)0;\n\") % f@(define_type_base) %
+	      f@(define_type_base) / f@(define_type_base))
+    else_if is_base_type@(define)
+	call string_append@(buffer, form@("%k% %s%__null;\n\") %
+	  f@(define_type_base) / f@(define_type_base))
+    else
+	call log@(compiler, define.define.keyword,
+	  "No record, enumeration, variant, or record_import clause")
+
+
+routine erase_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine append the code for the New routine for {define}
+    # to {buffer} using {compiler}.
+
+    assert buffer !== null@String
+
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+
+    if is_external@(define) || is_record_import@(define)
+	do_nothing
+    else_if is_enumeration@(define)
+	# Output the erase routine:
+	call string_append@(buffer, 
+	  form@("void %s%__erase(\n\") / f@(define_name))
+
+	call string_append@(buffer,
+	  form@("  %k% %lk%)\n\") % f@(define_name) / f@(define_name))
+	call buffer_append@("{\n\", buffer)
+	call buffer_append@("    /* do nothing */\n\", buffer)
+	call buffer_append@("}\n,n\", buffer)
+    else_if is_record@(define) || is_variant@(define)
+	# Record/variant:
+
+	#FIXME: The header of the erase routine can be refactored!!!
+	# Output the erase routine:
+	call string_append@(buffer,
+	  form@("void %s%__erase(\n\") / f@(define_name))
+
+	call string_append@(buffer,
+	  form@("  %k% %lk%)\n\") % f@(define_name) / f@(define_name))
+
+	call buffer_append@("{\n\", buffer)
+
+	define_clauses :@= define.define_clauses
+	size :@= define_clauses.size
+	index :@= 0
+	while index < size
+	    define_clause :@= define_clauses[index]
+	    switch define_clause.kind
+	      case record
+		field_clauses :@= define_clause.record.field_clauses
+		fields_size :@= field_clauses.size
+		fields_index :@= 0
+		while fields_index < fields_size
+		    field_clause :@= field_clauses[fields_index]
+		    switch field_clause.kind
+		      case field
+			field :@= field_clause.field
+			field_name :@= field.name.value
+			field_type :@= field.type
+			field_type_name :@= base_name@(field_type)
+			switch field_type.kind
+			  all_cases_required
+			  case simple
+			    if is_parameter@(field_type, define_type)
+				call string_append@(buffer,
+				  form@("    /* %s% (type %t%) is parameterized */") %
+				  f@(field_name) / f@(field_type))
+			    else
+				if is_float_scalar@(field_type)
+				    call string_append@(buffer,
+				      form@("    %lk%->%k% = 0.0;\n\") %
+				      f@(define_name) / f@(field_name))
+				else_if is_scalar@(field_type)
+				    call string_append@(buffer,
+				      form@("    %lk%->%k% = 0;\n\") %
+				      f@(define_name) / f@(field_name))
+				else
+				    call string_append@(buffer,
+				      form@("    %lk%->%lk% = %s%__null;\n\") %
+				        f@(define_name) % f@(field_name) /
+					f@(field_type_name))
+			  case parameterized
+			    call string_append@(buffer,
+			      form@("    if (%lk%->%k% == 0) {\n\") %
+			      f@(define_name) / f@(field_name))
+
+			    call string_append@(buffer, 
+			      form@("\t\%lk%->%k% = %s%__new();\n\") %
+			      f@(define_name) % f@(field_name) /
+			      f@(field_type_name))
+			    call buffer_append@("    } else {\n\",
+			      buffer)
+			    call string_append@(buffer,
+			      form@("\t\%s%__erase(%lk%->%k%);\n\") %
+			      f@(field_type_name) % f@(define_name) /
+			      f@(field_name))
+			    call buffer_append@("    }\n\", buffer)
+			  case routine
+			    call buffer_append@(buffer,
+			      form@("\t\%lk%->%k% = 0;\n\") %
+			      f@(define_name) / f@(field_name))
+		    fields_index := fields_index + 1
+	      case variant
+		#FIXME: Shouldn't there be code here!!!
+		do_nothing
+	    index := index + 1
+	call buffer_append@("}\n,n\", buffer)
+    else_if is_registers@(define)
+	do_nothing
+    else_if is_simple@(define)
+	do_nothing
+    else_if is_base_type@(define)
+	do_nothing
+    else
+	call log@(compiler, define.define.keyword,
+	  "There is no enumeration, record, variant, or record_import clause")
+
+
+routine new_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine append the code for the New routine for {define}
+    # to {buffer} using {compiler}.
+
+    assert buffer !== null@String
+
+    if is_external@(define)
+	do_nothing
+    else_if is_enumeration@(define)
+	do_nothing
+    else_if is_registers@(define)
+	do_nothing
+    else_if is_simple@(define)
+	do_nothing
+    else_if is_base_type@(define)
+	do_nothing
+    else
+	# Output the new routine:
+	temporary :@= compiler.temporary
+	define_type :@= define.type
+	define_name :@= base_name@(define_type)
+
+	call string_append@(buffer, 
+	  form@("%k% %s%__new(void)\n\") % f@(define_name) / f@(define_name))
+	call buffer_append@("{\n\", buffer)
+
+	call string_append@(buffer,
+	  form@("    %k% %lk%;\n\") % f@(define_name) / f@(define_name))
+
+	call buffer_append@("    extern void *malloc(unsigned int);\n\",
+	  buffer)
+        call buffer_append@("\n\", buffer)
+
+	call string_append@(buffer,
+	  form@("    %lk% = (%k%)malloc(sizeof(*%lk%));\n\") %
+	  f@(define_name) % f@(define_name) / f@(define_name))
+
+	# Initialize fields:
+	define_clauses :@= define.define_clauses
+	size :@= define_clauses.size
+	index :@= 0
+	while index < size
+	    define_clause :@= define_clauses[index]
+	    switch define_clause.kind
+	      case record
+		field_clauses :@= define_clause.record.field_clauses
+		field_clauses_size :@= field_clauses.size
+		field_clauses_index :@= 0
+		while field_clauses_index < field_clauses_size
+		    field_clause :@= field_clauses[field_clauses_index]
+		    switch field_clause.kind
+		      case field
+			field :@= field_clause.field
+			field_name :@= field.name.value
+			field_type :@= field.type
+			field_type_base :@= base_name@(field_type)
+			switch field_type.kind
+			  all_cases_required
+			  case simple
+			    if is_parameter@(field_type, define.type)
+				call string_append@(buffer, 
+				  form@("    %lk%->%k% = 0;\n\") %
+				  f@(define_name) / f@(field_name))
+			    else
+				call string_append@(buffer,
+				  form@("    %lk%->%k% = %cb%__null;\n\") %
+				  f@(define_name) % f@(field_name) /
+				  f@(field_type))
+			  case parameterized
+			    # Do something:
+			    call string_append@(buffer,
+			      form@("    %lk%->%k% = %s%__new();\n\") %
+			      f@(define_name) % f@(field_name) /
+			      f@(field_type_base))
+			  case routine
+			    call string_append@(buffer, 
+			      form@("    %lk%->%k% = 0;\n\") %
+			      f@(define_name) / f@(field_name))
+		    field_clauses_index := field_clauses_index + 1
+	      case variant
+		#FIXME: There should probably be code here!!!
+		do_nothing
+	      case record_import
+		# No need to initialize an imported structure:
+		do_nothing
+	    index := index + 1
+
+	call string_append@(buffer, 
+	  form@("    return %lk%;\n\") / f@(define_name))
+
+	call buffer_append@("}\n,n\", buffer)
+
+
+routine ezh_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    assert buffer !== null@String
+
+    # call d@("=>ezh_emit@Define_Declaration()\n\")
+
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+
+    #call d@(form@("name=%v% size=%d%\n\") % f@(define_name) / f@(size))
+
+    # Copy the entire define declaration over to {buffer}:
+    traverser :@= compiler.traverser
+    traverser.buffer := buffer
+    call traverse@(define, traverser)
+
+
+    if is_external@(define)
+	do_nothing
+    else_if is_simple@(define)
+	call string_append@(buffer,
+	  form@("external null@%t% %t% = %c%__null\t\#D2\n,n\") %
+	  f@(define_type) % f@(define_type) / f@(define_type))
+    else_if is_enumeration@(define)
+	# Enumeration:
+	index :@= 0
+	while index < size
+	    define_clause :@= define_clauses[index]
+	    switch define_clause.kind
+	      case enumeration
+		# call d@("enumeration\n\")
+		item_clauses :@= define_clause.enumeration.item_clauses
+		item_clauses_size :@= item_clauses.size
+		item_clauses_index :@= 0
+		while item_clauses_index < item_clauses_size
+		    item_clause :@= item_clauses[item_clauses_index]
+		    switch item_clause.kind
+		      case item
+			item_name :@= item_clause.item.name.value
+			call string_append@(buffer, 
+			  form@("external %s%@%s% %s%\t\#D3\n\") %
+			  f@(item_name) % f@(define_name) / f@(define_name))
+		    item_clauses_index := item_clauses_index + 1
+	      case enumeration_prefix
+		# call d@("enumeration_prefix\n\")
+		enumeration_prefix :@= define_clause.enumeration_prefix
+		define_datas :@= enumeration_prefix.define_datas
+		define_datas_size :@= define_datas.size
+
+		#call d@(form@("define_datas_size=%d%\n\") /
+		#  f@(define_datas_size))
+
+		define_datas_index :@= 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    new_name :@= define_data.new_name
+		    call string_append@(buffer,
+		      form@("external %s%@%s% %s%\t\#D4\n\") %
+			f@(new_name) % f@(define_name) / f@(define_name))
+		    call string_append@(buffer,
+		      form@("external %s%@Unsigned Unsigned\t\#D5\n\") /
+		      f@(new_name))
+		    define_datas_index := define_datas_index + 1
+	    index := index + 1
+	call string_append@(buffer, 
+	  form@("routine string_convert@%s%\n\") / f@(define_name))
+
+	call string_append@(buffer, form@("    takes %ls% %s%\n\") %
+	  f@(define_name) / f@(define_name))
+	call buffer_append@("    returns String\n\", buffer)
+
+	call string_append@(buffer,
+	  form@("    external %s%__string_convert\n\") / f@(define_name))
+
+	call buffer_append@("\n\", buffer)
+
+	call string_append@(buffer, 
+	  form@("    # This routine returns a {String} version of %ls%.\n\") /
+	  f@(define_name))
+
+	call buffer_append@("\n,n\", buffer)
+    else
+	# In addition, we have to create the new@type() and erase@type()
+	# routine prototypes:
+
+	# null object:
+	call string_append@(buffer,
+	  form@("external null@%s% %s%\t\#D6\n,n\") %
+	  f@(define_name) / f@(define_name))
+
+	# new routine:
+	call string_append@(buffer,
+	  form@("routine new@%t%\n\") / f@(define_type))
+	call buffer_append@("    takes_nothing\n\", buffer)
+	call string_append@(buffer,
+	  form@("    returns %t%\n\") / f@(define_type))
+	call string_append@(buffer,
+	  form@("    external %s%__new\n\") / f@(define_name))
+	call buffer_append@("\n\", buffer)
+	call string_append@(buffer,
+	  form@("    # This routine allocates and returns a new {%s%}.\n\") /
+	  f@(define_name))
+	call buffer_append@("\n,n\", buffer)
+
+	# erase routine:
+	call string_append@(buffer,
+	  form@("routine erase@%t%\n\") / f@(define_type))
+	call string_append@(buffer,
+	  form@("    takes object %t%\n\") / f@(define_type))
+	call buffer_append@("    returns_nothing\n\", buffer)
+	call string_append@(buffer,
+	  form@("    external %s%__erase\n\") / f@(define_name))
+
+	call buffer_append@("\n\", buffer)
+	call buffer_append@("    # This routine will erase {object}\n\",
+	  buffer)
+	call buffer_append@("\n,n\", buffer)
+
+	#put@("  <=ezh emit\n\", debug_stream)
+
+    # We need to check for errors:
+    define_clauses := define.define_clauses
+    size := define_clauses.size
+    index := 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case variant
+	    variant :@= define_clause.variant
+	    call string_append@(buffer,
+	      form@("define %t%\n\") / f@(variant.kind_type))
+
+	    call buffer_append@("    enumeration\n\", buffer)
+
+	    field_clauses :@= variant.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    call string_append@(buffer,
+		      form@("\t\%s%\n\") / f@(field_clause.field.name.value))
+		field_clauses_index := field_clauses_index + 1
+	    call buffer_append@("\n\", buffer)
+
+	    field_clauses_index := 0
+	    while field_clauses_index < field_clauses_size
+		field_clause := field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    call string_append@(buffer, 
+		      form@("external %s%@%t% %t%\t\#D7\n\") %
+		      f@(field_clause.field.name.value) %
+		      f@(variant.kind_type) / f@(variant.kind_type))
+		field_clauses_index := field_clauses_index + 1
+	    call buffer_append@("\n\", buffer)
+	index := index + 1
+
+    #call d@("<=ezh_emit@Define_Declaration()\n\")
+
+
+routine h_externs_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This procedure will append the .h header file extern code
+    # for {define} to {buffer}.
+
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+
+    if is_external@(define)  || is_registers@(define)
+	# External or registers or simple:
+	do_nothing
+    else_if is_simple@(define) || is_base_type@(define)
+	#call string_append@(buffer,
+	#  form@("extern %k% %t%__null;//D2//\n\") %
+	#  f@(define_type) / f@(define_type))
+    else_if is_enumeration@(define)
+	# Enumeration
+	index :@= 0
+	while index < size
+	    define_clause :@= define_clauses[index]
+	    switch define_clause.kind
+	      case enumeration
+		item_clauses :@= define_clause.enumeration.item_clauses
+		item_clauses_size :@= item_clauses.size
+		item_clauses_index :@= 0
+		while item_clauses_index < item_clauses_size
+		    item_clause :@= item_clauses[item_clauses_index]
+		    switch item_clause.kind
+		      case item
+			call string_append@(buffer,
+			  form@("extern %k% %s%__%s%;/*D3*/\n\") %
+			  f@(define_name) % f@(define_name) /
+			  f@(item_clause.item.name.value))
+		    item_clauses_index := item_clauses_index + 1
+	      case enumeration_prefix
+		enumeration_prefix :@= define_clause.enumeration_prefix
+		define_datas :@= enumeration_prefix.define_datas
+		define_datas_size :@= define_datas.size
+		define_datas_index :@= 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    new_name :@= define_data.new_name
+		    call string_append@(buffer,
+		      form@("extern Unsigned Unsigned__%s%;/*D4*/\n\") /
+		        f@(new_name))
+		    call string_append@(buffer,
+		      form@("extern %s% %s%__%s%;/*D5*/\n\") %
+		      f@(define_name) % f@(define_name) / f@(new_name))
+		    define_datas_index := define_datas_index + 1
+	    index := index + 1
+
+	call string_append@(buffer,
+	  form@("extern %cb% %s%__null;/*D6*/\n\") %
+	    f@(define_type) / f@(define_name))
+
+	call string_append@(buffer,
+	  form@("extern String %s%__string_convert(%k%);/*D7*/\n\") %
+	  f@(define_name) / f@(define_name))
+
+	call string_append@(buffer,
+	  form@("extern void %s%__erase(%k%);/*D8*/\n\") %
+	  f@(define_name) / f@(define_name))
+    else
+	# Do variant type externs:
+	index := 0
+	while index < size
+	    define_clause :@= define_clauses[index]
+	    switch define_clause.kind
+	      case variant
+		variant :@= define_clause.variant
+		kind_name :@= variant.kind_name.value
+		kind_type :@= variant.kind_type
+		kind_type_base :@= base_name@(kind_type)
+
+		field_clauses :@= variant.field_clauses
+		field_clauses_size :@= field_clauses.size
+		field_clauses_index :@= 0
+		while field_clauses_index < field_clauses_size
+		    field_clause :@= field_clauses[field_clauses_index]
+		    switch field_clause.kind
+		      case field
+			field_name :@= field_clause.field.name.value
+			call string_append@(buffer, 
+			  form@("extern %k% %s%__%s%;/*D9*/\n\") % 
+			  f@(kind_type_base) % f@(kind_type_base) /
+			  f@(field_name))
+		    field_clauses_index := field_clauses_index + 1
+	    index := index + 1
+
+	# Variant/ Record:
+	call string_append@(buffer,
+	  form@("extern %s% %s%__null;/*D10*/\n\") %
+	  f@(define_name) / f@(define_name))
+
+	call string_append@(buffer,
+	  form@("extern %s% %s%__new(void);/*D11*/\n\") %
+	  f@(define_name) / f@(define_name))
+
+	call string_append@(buffer,
+	  form@("extern void %s%__erase(%s%);/*D12*/\n\") %
+	  f@(define_name) / f@(define_name))
+
+
+routine prefix_scan@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will look for {enumeration_prefix} clauses in {define}:
+
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case enumeration_prefix
+	    enumeration_prefix :@= define_clause.enumeration_prefix
+	    call append@(compiler.enumeration_prefixes, enumeration_prefix)
+	index := index + 1
+
+
+routine generate_emit@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will generate any requested routine from
+    # the generate clause of {define} and append them to {buffer}.
+
+    assert buffer !== null@String
+
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+
+    null_external_needed :@= true@Logical
+    new_needed :@= true@Logical
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  all_cases_required
+	  case end_of_line, note, error, registers, record_import
+	    do_nothing
+	  case base_type
+	    do_nothing
+	  case enumeration
+	    enumeration :@= define_clause.enumeration
+	    item_clauses :@= enumeration.item_clauses
+	    item_clauses_size :@= item_clauses.size
+	    item_clauses_index :@= 0
+	    while item_clauses_index < item_clauses_size
+		item_clause :@= item_clauses[item_clauses_index]
+		switch item_clause.kind
+		  case item
+		    item :@= item_clause.item
+		    item_name :@= item.name.value
+		    call string_append@(buffer,
+		      form@("external %s%@%s% %s%\t\#D8\n\") %
+		      f@(item_name) % f@(define_name) / f@(define_name))
+		item_clauses_index := item_clauses_index + 1
+
+
+	    # Now generate the string convert routine:
+	    call string_append@(buffer,
+	      form@("routine string_convert@%t%\n\") / f@(define_type))
+	    call string_append@(buffer,
+	      form@("    takes %l% %t%\n\") % f@(define_name) / f@(define_type))
+	    call string_append@(buffer, "    returns String\n,n\")
+
+	    # Now generate {string_convert} routine:
+	    call string_append@(buffer,
+	      form@("    switch %l%\n\") / f@(define_name))
+	    item_clauses_index := 0
+	    while item_clauses_index < item_clauses_size
+		item_clause :@= item_clauses[item_clauses_index]
+		switch item_clause.kind
+		  case item
+		    item :@= item_clause.item
+		    item_name :@= item.name.value
+		    call string_append@(buffer,
+		      form@("      case %l%\n\") / f@(item_name))
+		    call string_append@(buffer,
+		      form@("\t\return %v%\n\") / f@(item_name))
+		item_clauses_index := item_clauses_index + 1
+	    call string_append@(buffer, "    return \dq,dq,n,n\")
+	  case record
+	    do_nothing
+	  case external
+	    null_external_needed := false@Logical
+	    new_needed := false@Logical
+	  case generate
+	    do_nothing
+	  case simple
+	    call string_append@(buffer,
+	      form@("external null@%t% = \dq\%c%__null\dq,t\#D13\n,n\") %
+	      f@(define_type) / f@(define_type))
+	    null_external_needed := false@Logical
+	  case simple_numeric
+	    do_nothing
+	  case variant
+	    variant :@= define_clause.variant
+	    kind_type :@= variant.kind_type
+	    kind_name :@= base_name@(kind_type)
+
+	    # Generate enumeration:
+	    call string_append@(buffer, form@("define %t%\n\") / f@(kind_type))
+	    call string_append@(buffer, "    enumeration\n\")
+
+	    # Generate the enumeration names:
+	    field_clauses :@= variant.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    call string_append@(buffer,
+		      form@("\t\%s%\n\") / f@(field.name.value))
+		field_clauses_index := field_clauses_index + 1
+	    call string_append@(buffer, "\n\")
+
+	    # Now do it again for externals:
+	    field_clauses_index := 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    field_type :@= field.type
+		    call string_append@(buffer,
+		      form@("external %s%@%t% %t%\t\#D9\n\") %
+		      f@(field.name.value) % f@(kind_type) / f@(kind_type))
+		field_clauses_index := field_clauses_index + 1
+	    call string_append@(buffer, "\n\")
+
+	    # Now generate the string convert routine:
+	    call string_append@(buffer,
+	      form@("routine string_convert@%t%\n\") / f@(kind_type))
+	    call string_append@(buffer,
+	      form@("    takes %l% %t%\n\") % f@(kind_name) / f@(kind_type))
+	    call string_append@(buffer, "    returns String\n,n\")
+
+	    call string_append@(buffer,
+	      form@("    switch %l%\n\") / f@(kind_name))
+	    field_clauses_index := 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    field_name :@= field.name.value
+		    call string_append@(buffer,
+		      form@("      case %l%\n\") / f@(field_name))
+		    call string_append@(buffer,
+		      form@("\t\return %v%\n\") / f@(field_name))
+		field_clauses_index := field_clauses_index + 1
+	    call string_append@(buffer, "    return \dq,dq,n,n\")
+
+	  case enumeration_prefix
+	    enumeration_prefix :@= define_clause.enumeration_prefix
+	    define_datas :@= enumeration_prefix.define_datas
+	    define_datas_size :@= define_datas.size
+	    if define_datas_size != 0
+		# Generate value routine:
+		call string_append@(buffer,
+		  form@("routine value@%s%\n\") / f@(define_name))
+
+		call string_append@(buffer, form@("    takes %l% %s%\n\") %
+		  f@(define_name) / f@(define_name))
+
+		call string_append@(buffer, "    returns Unsigned\n,n\")
+
+		call string_append@(buffer,
+		  form@("    # Return the value of {%l%}.\n,n\") /
+		  f@(define_name))
+
+		call string_append@(buffer, "    value :@= 0\n\")
+
+		call string_append@(buffer,
+		  form@("    switch %l%\n\") / f@(define_name))
+		
+		define_datas_index :@= 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    new_name :@= define_data.new_name
+		    value :@= define_data.value
+		    call string_append@(buffer,
+		      form@("      case %s%\n\") / f@(new_name))
+		    define_datas_index := define_datas_index + 1
+		    call string_append@(buffer,
+		      form@("\t\value := %s%\n\") / f@(value))
+
+		call string_append@(buffer, "    return value\n,n\")
+
+		# Generate string routine:
+		call string_append@(buffer,
+		  form@("routine string@%s%\n\") / f@(define_name))
+
+		call string_append@(buffer, form@("    takes %l% %s%\n\") %
+		  f@(define_name) / f@(define_name))
+
+		call string_append@(buffer, "    returns String\n,n\")
+
+		call string_append@(buffer,
+		  form@("    # Return the string for {%l%}.\n,n\") /
+		  f@(define_name))
+
+		call string_append@(buffer, "    result :@= \dq,dq,n\")
+
+		call string_append@(buffer,
+		  form@("    switch %l%\n\") / f@(define_name))
+		
+		define_datas_index := 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    new_name :@= define_data.new_name
+		    value :@= define_data.value
+		    call string_append@(buffer,
+		      form@("      case %s%\n\") / f@(new_name))
+		    define_datas_index := define_datas_index + 1
+		    call string_append@(buffer,
+		      form@("\t\result := %v%\n\") / f@(new_name))
+
+		call string_append@(buffer, "    return result\n,n\")
+
+		# Generate unsigned routine:
+		call string_append@(buffer,
+		  form@("routine unsigned@%s%\n\") / f@(define_name))
+
+		call string_append@(buffer, form@("    takes %l% %s%\n\") %
+		  f@(define_name) / f@(define_name))
+
+		call string_append@(buffer, "    returns Unsigned\n,n\")
+
+		call string_append@(buffer,
+		  form@("    # Return the ordinal of {%l%}.\n,n\") /
+		  f@(define_name))
+
+		call string_append@(buffer, "    result :@= 0\n\")
+
+		call string_append@(buffer,
+		  form@("    switch %l%\n\") / f@(define_name))
+		
+		define_datas_index := 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    new_name :@= define_data.new_name
+		    value :@= define_data.value
+		    call string_append@(buffer,
+		      form@("      case %s%\n\") / f@(new_name))
+		    call string_append@(buffer,
+		      form@("\t\result := %s%\n\") / f@(define_datas_index))
+		    define_datas_index := define_datas_index + 1
+
+		call string_append@(buffer, "    return result\n,n\")
+
+		# Generate next routine:
+		call string_append@(buffer,
+		  form@("routine next@%s%\n\") / f@(define_name))
+
+		call string_append@(buffer, form@("    takes %l% %s%\n\") %
+		  f@(define_name) / f@(define_name))
+
+		call string_append@(buffer, form@("    returns %s%\n\") /
+		  f@(define_name))
+
+		call string_append@(buffer,
+		  form@("    # Return the value of {%l%}.\n,n\") /
+		  f@(define_name))
+
+		call string_append@(buffer,
+		  form@("    result :@= %l%\n\") / f@(define_name))
+
+		call string_append@(buffer,
+		  form@("    switch %l%\n\") / f@(define_name))
+		
+		define_datas_index := 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    define_data_next :@=
+		      define_datas[(define_datas_index + 1) % define_datas_size]
+		    new_name :@= define_data.new_name
+		    value :@= define_data.value
+		    call string_append@(buffer,
+		      form@("      case %s%\n\") / f@(new_name))
+		    define_datas_index := define_datas_index + 1
+		    call string_append@(buffer,
+		      form@("\t\result := %s%@%s%\n\") %
+		      f@(define_data_next.new_name) / f@(define_name))
+
+		call string_append@(buffer, "    return result\n,n\")
+
+		define_datas_index := 0
+		while define_datas_index < define_datas_size
+		    define_data :@= define_datas[define_datas_index]
+		    new_name :@= define_data.new_name
+		    call string_append@(buffer,
+		      form@("external %s%@%s% %s%\t\#D10\n\") %
+			f@(new_name) % f@(define_name) / f@(define_name))
+		    call string_append@(buffer,
+		      form@("external %s%@Unsigned Unsigned\t\#D11\n\") /
+		      f@(new_name))
+		    define_datas_index := define_datas_index + 1
+
+
+	index := index + 1
+
+    generate :@= generate@Define_Declaration(define)
+    if generate !== null@Generate_Clause
+	generate_names :@= generate.names
+	size := generate_names.size
+	index := 0
+	while index < size
+	    generate_name :@= generate_names[index]
+	    name :@= generate_name.name.value
+	    if equal@(name, "parse")
+		call parse_generate@(define, buffer, compiler)
+	    else_if equal@(name, "traverse")
+		call traverse_generate@(define, buffer, compiler)
+	    else
+		call log@(compiler, generate_name.name,
+		  form@("Unrecognized %qv% generate keyword") / f@(name))
+	    index := index + 1
+
+    if null_external_needed
+	call string_append@(buffer,
+	  form@("external null@%t% %s%\t\#D1\n,n\") %
+	  f@(define_name) / f@(define_name))
+
+    if new_needed
+	call string_append@(buffer,
+	  form@("routine new@%t%\n\") / f@(define_type))
+	call string_append@(buffer, "    takes_nothing\n\")
+	call string_append@(buffer,
+	  form@("    returns %t%\n\") / f@(define_type))
+	call string_append@(buffer,
+	  form@("    external %s%__new\n,n\") / f@(base_name@(define_type)))
+
+
+routine parse_generate@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will generate the parse routine for {define} using
+    # {compiler} and append the result to {buffer}.
+
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+    locals :@= new@String()
+    code1 :@= new@String()
+    code2 :@= new@String()
+
+    call string_append@(buffer, form@("routine parse@%s%\n\") / f@(define_name))
+    call buffer_append@("    takes parser Parser\n\", buffer)
+
+    call string_append@(buffer, form@("    returns %s%\n,n\") / f@(define_name))
+
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case record
+	    field_clauses :@= define_clause.record.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+
+	    call string_append@(code2,
+	      form@("    %l% :@= new@%t%()\n\") %
+	      f@(define_name) / f@(define_type))
+
+	    call buffer_append@("    index :@= parser.index\n\", code1)
+
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    field_name :@= field.name.value
+		    field_type :@= field.type
+		    field_type_base :@= base_name@(field_type)
+
+		    is_array :@= false@Logical
+		    call string_append@(code1,
+		      form@("    %s% :@= parse@") / f@(field_name))
+
+		    switch field_type.kind
+		      all_cases_required
+		      case parameterized
+			# Parameterized parsing:
+			next_field_clause :@=
+			  field_clauses[field_clauses_index + 1]
+			next_field_name :@= ""
+			switch next_field_clause.kind
+			  case field
+			    next_field :@= next_field_clause.field
+			    next_field_name := next_field.name.value
+
+			sub_type :@= field_type.parameterized.sub_types[0]
+			call string_append@(code1, 
+			  form@("%t%(parser, parse@%t%, null@%t%, %s%@Lexeme)\n\") %
+			  f@(field_type) % f@(sub_type) % f@(sub_type) /
+			  f@(next_field_name))
+			is_array := true@Logical
+		      case simple
+			if equal@(field_type_base, "Token")
+			    # Token parsing:
+			    if is_lexeme_string@Lexeme(field_name)
+				call string_append@(code1, 
+				  form@("Token(parser, %s%@Lexeme)\n\") /
+				  f@(field_name))
+			    else
+				call string_append@(code1, 
+				  "Token(parser, symbol@Lexeme)\n\")
+			else_if equal@(field_type_base, "Keyword")
+			    # Keyword parsing:
+			    call string_append@(code1,
+			      form@("Keyword(parser, %qv%)\n\") /
+			      f@(field_name))
+			else
+			    # All others:
+			    call string_append@(code1,
+			      form@("%t%(parser)\n\") / f@(field_type))
+		      case routine
+			call log@(compiler, field.name,
+			  form@("parse routine for %t% not allowed") /
+			  f@(field_type))
+
+		    if is_array
+			# Array parsing tests for empty array:
+			call string_append@(code1,
+			  form@("    if %s%.size = 0\n\") / f@(field_name))
+		    else
+			# Otherwise, check for Null:
+			call string_append@(code1,
+			  form@("    if %s% == null@%t%\n\") %
+			  f@(field_name) / f@(field_type))
+
+		    call string_append@(code1, "\t\parser.index := index\n\")
+
+		    call string_append@(code1,
+		      form@("\t\return null@%t%\n,n\") / f@(define_type))
+
+		    call string_append@(code2, 
+		      form@("    %l%.%s% := %s%\n\") % f@(define_name) %
+		      f@(field_name) / f@(field_name))
+
+		field_clauses_index := field_clauses_index + 1
+	    call string_append@(code2, 
+	      form@("    return %l%\n,n\") / f@(define_name))
+	    break
+	  case variant
+	    field_clauses :@= define_clause.variant.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+
+	    call string_append@(code1, form@("    %l% :@= new@%t%()\n\") %
+	      f@(define_name) / f@(define_type))
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    field_name :@= field.name.value
+		    field_type :@= field.type
+		    field_type_base :@= base_name@(field_type)
+
+		    if equal@(field_type_base, "Token")
+			enum_name :@= "symbol"
+			if is_lexeme_string@Lexeme(field_name)
+			    enum_name := field_name
+			call string_append@(code1, 
+			  form@("    %s% :@= parse@%t%(parser, %s%@Lexeme)\n\") %
+			    f@(field_name) % f@(field_type) / f@(enum_name))
+		    else
+			call string_append@(code1,
+			  form@("    %s% :@= parse@%t%(parser)\n\") %
+			  f@(field_name) / f@(field_type))
+
+		    call string_append@(code1,
+		      form@("    if %s% !== null@%t%\n\") %
+		      f@(field_name) / f@(field_type))
+
+		    call string_append@(code1,
+		      form@("\t\%l%.%s% := %s%\n\") % f@(define_name) %
+		      f@(field_name) / f@(field_name))
+
+		    call string_append@(code1, 
+		      form@("\t\return %l%\n,n\") / f@(define_name))
+
+		field_clauses_index := field_clauses_index + 1
+
+	    # A variant end, just return {Null}":
+	    call string_append@(code2,
+	      form@("    return null@%t%\n,n\") / f@(define_type))
+	    break
+	index := index + 1
+
+    call buffer_append@(locals, buffer)
+    call buffer_append@("\n\", buffer)
+    call buffer_append@(code1, buffer)
+    call buffer_append@(code2, buffer)
+
+
+routine traverse_generate@Define_Declaration
+    takes define Define_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will generate the traverse routine for {define} using
+    # {compiler} and append the code to {buffer}.
+
+    temporary :@= compiler.temporary
+    define_type :@= define.type
+    define_name :@= base_name@(define_type)
+
+    locals :@= new@String()
+    code1 :@= new@String()
+
+    call string_append@(buffer,
+      form@("routine traverse@%s%\n\") / f@(define_name))
+
+    call string_append@(buffer, form@("    takes %l% %t%\n\") %
+      f@(define_name) / f@(define_type))
+
+    call buffer_append@("    takes traverser Traverser\n\", buffer)
+    call buffer_append@("    returns_nothing\n,n\", buffer)
+
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case record
+	    field_clauses :@= define_clause.record.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    field_name :@= field.name.value
+		    field_type :@= field.type
+		    switch field_type.kind
+		      all_cases_required
+		      case simple
+			call string_append@(code1,
+			  form@("    call traverse@%t%(%l%.%s%, traverser)\n\") %
+			  f@(field_type) % f@(define_name) / f@(field_name))
+		      case parameterized
+			parameterized_type :@= field_type.parameterized
+			call string_append@(code1,
+			  form@("    call traverse@%t%(%l%.%s%, traverser, traverse@%t%)\n\") %
+			  f@(field_type) % f@(define_name) % f@(field_name) /
+			  f@(parameterized_type.sub_types[0]))
+		      case routine
+			call log@(compiler, field.name,
+			  form@("Traverse of type (%t%) not allowed") /
+			  f@(field_type))
+		field_clauses_index := field_clauses_index + 1
+	    break
+	  case variant
+	    variant :@= define_clause.variant
+	    call string_append@(code1, form@("    switch %l%.%s%\n\") %
+	      f@(define_name) / f@(variant.kind_name.value))
+
+	    field_clauses :@= variant.field_clauses
+	    field_clauses_size :@= field_clauses.size
+	    field_clauses_index :@= 0
+	    while field_clauses_index < field_clauses_size
+		field_clause :@= field_clauses[field_clauses_index]
+		switch field_clause.kind
+		  case field
+		    field :@= field_clause.field
+		    field_name :@= field.name.value
+		    field_type :@= field.type
+		    call string_append@(code1,
+		      form@("      case %s%\n\") / f@(field_name))
+		    call string_append@(code1,
+		      form@("\t\call traverse@%t%(%l%.%s%, traverser)\n\") %
+		      f@(field.type) % f@(define_name) / f@(field_name))
+		field_clauses_index := field_clauses_index + 1
+	    break
+	index := index + 1
+
+    call buffer_append@(locals, buffer)
+    call buffer_append@("\n\", buffer)
+    call buffer_append@(code1, buffer)
+    call buffer_append@("\n\", buffer)
+
+
+routine generate@Define_Declaration
+    takes define Define_Declaration
+    returns Generate_Clause
+
+    # This routine will return the {generate_declaration} in {xdefine}
+    # or {Null}@{Generate_Clause}.
+
+    result :@= null@Generate_Clause
+    define_clauses :@= define.define_clauses
+    size :@= define_clauses.size
+    index :@= 0
+    while index < size
+	define_clause :@= define_clauses[index]
+	switch define_clause.kind
+	  case generate
+	    result := define_clause.generate
+	    break
+	index := index + 1
+    return result
+
+
+# {Defines_Prefix_Declaration} routines:
+
+routine visit@Defines_Prefix_Declaration
+    takes defines_prefix Defines_Prefix_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will append the code for {defines_prefix} to {buffer}
+    # using {compiler}.
+
+    switch compiler.phase
+      case prefix_scan
+	# We have some prefixes to deal with:
+	call append@(compiler.defines_prefixes, defines_prefix)
+
+
+# {Easy_C_Declaration} routines:
+
+routine visit@Easy_C_Declaration
+    takes easy_c Easy_C_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This is the routine that processes an {Easy_C_Declaration}.
+
+    do_nothing
+
+
+# {External_Declaration} routines:
+
+routine equal@External_Declaration
+    takes external_declaration1 External_Declaration
+    takes external_declaration2 External_Declaration
+    returns Logical
+
+    # This routine will return {true@Logical} if {external_declaration1}
+    # is equal to {external_declaration2} and {false@Logical} otherwise.
+    
+    result :@= 0f
+    result := equal@(external_declaration1.typed_name,
+      external_declaration2.typed_name) &&
+      equal@(external_declaration1.type, external_declaration2.type)
+    return result
+
+
+routine visit@External_Declaration
+    takes external External_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine emit the C global declarations for {external}
+    # using {compiler}.
+
+    trace :@= false@Logical
+    #trace := true@Logical
+    if trace
+	call d@(form@("=>visit@External_Declaration(*,*,%s%)\n\") /
+	  f@(compiler.phase))
+
+    assert buffer !== null@String
+
+    typed_name :@= external.typed_name
+    external_name :@= typed_name.name.value
+    external_type :@= typed_name.type
+    external_type_base :@= base_name@(external_type)
+    type :@= external.type
+    temporary :@= compiler.temporary
+
+    switch compiler.phase
+      case h_externs_emit
+	call string_append@(buffer,
+	  form@("extern %cb% %s%__%s%;;/*D13*/\n\") % f@(type) %
+	  f@(external_type_base) / f@(external_name))
+      case ezh_scan
+	switch external_type.kind
+	  case simple
+	    typed_name_object :@= new@Typed_Name_Object()
+	    typed_name_object.external := external
+	    call typed_name_insert@(compiler,
+	      typed_name, typed_name_object, typed_name.name,
+	      "visit@External_Declaration")
+	  default
+	    call log@(compiler, typed_name.name,
+	      form@("external declaration requires a simple type, not %t%") /
+	      f@(external_type))
+      case ezh_emit
+	call traverse@(external, compiler.traverser)
+
+    if trace
+	call d@(form@("<=visit@External_Declaration(*,*,%s%)\n\") /
+	  f@(compiler.phase))
+
+
+routine visit@External_Named_Declaration
+    takes external_named External_Named_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine emit the C global declarations for {external_named}
+    # using {compiler}.
+
+    assert buffer !== null@String
+
+    typed_name :@= external_named.typed_name
+    external_name :@= typed_name.name.value
+    external_type :@= typed_name.type
+    external_type_base :@= base_name@(external_type)
+    temporary :@= compiler.temporary
+
+    switch compiler.phase
+      case h_externs_emit
+	call string_append@(buffer, form@("extern %cb% %cb%__%s%;/*D14*/\n\") %
+	  f@(external_type) % f@(external_type) / f@(external_name))
+      case ezh_scan
+	switch external_type.kind
+	  case simple
+	    typed_name_object :@= new@Typed_Name_Object()
+	    typed_name_object.external_named := external_named
+	    call typed_name_insert@(compiler,
+	      typed_name, typed_name_object, typed_name.name,
+	      "visit@External_Declaration")
+	  default
+	    call log@(compiler, typed_name.name,
+	      form@("external declaration requires a simple type, not %t%") /
+	      f@(external_type))
+      case ezh_emit
+	call traverse@(external_named, compiler.traverser)
+
+
+# {External_Named_Declaration} routines:
+
+routine equal@External_Named_Declaration
+    takes external_named_declaration1 External_Named_Declaration
+    takes external_named_declaration2 External_Named_Declaration
+    returns Logical
+
+    # This routine will return {true@Logical} if {external_named_declaration1}
+    # is equal to {external_named_declaration2} and {false@Logical} otherwise.
+    
+    result :@= 0f
+    result := equal@(external_named_declaration1.typed_name,
+      external_named_declaration2.typed_name) &&
+      equal@(external_named_declaration1.string,
+      external_named_declaration2.string)
+    return result
+
+
+# {Global_Declaration} routines:
+
+routine equal@Global_Declaration
+    takes global_declaration1 Global_Declaration
+    takes global_declaration2 Global_Declaration
+    returns Logical
+
+    # This routine will return {true@Logical} if {global_declaration1}
+    # is equal to {global_declaration2} and {false@Logical} otherwise.
+    
+    result :@= 0f
+    result :=
+      equal@(global_declaration1.typed_name, global_declaration2.typed_name) &&
+      equal@(global_declaration1.type, global_declaration2.type)
+    return result
+
+routine visit@Global_Declaration
+    takes global Global_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine emit the C global declarations for {global}
+    # using {compiler}.
+
+    assert buffer !== null@String
+
+    temporary :@= compiler.temporary
+    typed_name :@= global.typed_name
+    global_name :@= typed_name.name.value
+    global_type :@= typed_name.type
+    global_type_base :@= base_name@(global_type)
+    type :@= global.type
+    type_base :@= base_name@(type)
+
+    switch compiler.phase
+      case h_externs_emit
+	call string_append@(buffer, 
+	  form@("%k% %s%__%s%;\n\") % f@(type_base) %
+	  f@(global_type_base) / f@(global_name))
+      case ezh_scan
+	switch global_type.kind
+	  case simple
+	    typed_name_object :@= new@Typed_Name_Object()
+	    typed_name_object.global := global
+	    call typed_name_insert@(compiler,
+	      typed_name, typed_name_object, typed_name.name,
+	      "visit@Global_Declaration")
+	  default
+	    call log@(compiler, typed_name.name,
+	      form@("global declaration requires a simple type, not %t%") /
+	      f@(global_type))
+      case ezh_emit
+	call traverse@(global, compiler.traverser)
+
+
+# {Global_Library_Declaration} routines:
+
+routine visit@Global_Library_Declaration
+    takes global_library Global_Library_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine emit the C global declarations for {global}
+    # using {compiler}.
+
+    assert buffer !== null@String
+
+    switch compiler.phase
+      all_cases_required
+      case c_emit, ezh_emit, link_emit, h_includes_emit
+	call library_visit@Declaration(null@Library_Declaration,
+	  null@Interface_Declaration, global_library,
+	  global_library.name.value, buffer, compiler)
+      case source_find
+	# We want to ensure that the library gets added to the list:
+	global_library_name :@= global_library.name
+	source :@= compiler.source
+	call append@(source.global_libraries, global_library)
+	call source_register@(compiler,
+	  global_library_name.value, global_library_name)
+	#assert 0f
+	#call append@(compiler.global_libraries, global_library)
+	#assert 0f
+      case c_defines_emit, ezh_scan, generate_emit, h_externs_emit,
+       h_structs_emit, h_typedefs_emit, link_scan, prefix_scan
+	do_nothing
+
+
+# {Include_String_Declaration} routines:
+
+routine visit@Include_String_Declaration
+    takes include_string Include_String_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {include} using {compiler}.
+
+    assert buffer !== null@String
+    temporary :@= compiler.temporary
+
+    include_name :@= string_convert@(include_string.string)
+    switch compiler.phase
+      case prefix_scan
+	call append@(compiler.includes, include_string)
+      case c_emit
+	call string_append@(buffer, 
+	  form@("#include \dq\%s%\dq\/*D3*/\n\") / f@(include_name))
+      case h_includes_emit
+	upper_include_name :@= new@String()
+	call upper_case_append@(upper_include_name, include_name)
+	size :@= upper_include_name.size
+	index :@= 0
+	while index < size
+	    character :@= upper_include_name[index]
+	    if !is_lower_case@(character) && !is_upper_case@(character) &&
+	      !is_decimal_digit@(character) && character != '_'
+		upper_include_name[index] := '_'
+	    index := index + 1
+
+	call string_append@(buffer,
+	  form@("#ifndef %s%_INCLUDED\n\") / f@(upper_include_name))
+
+	call string_append@(buffer,
+	  form@("#include \dq\%s%\dq\/*D4*/\n\") / f@(include_name))
+
+	call string_append@(buffer, 
+	  form@("#endif /* %s%_INCLUDED */\n\") / f@(upper_include_name))
+
+
+# {Interface_Declaration} routines:
+
+
+routine visit@Interface_Declaration
+    takes interface Interface_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {interface} using {compiler}.
+
+    switch compiler.phase
+      all_cases_required
+      case c_emit, ezh_emit, link_emit, h_includes_emit
+	call library_visit@Declaration(null@Library_Declaration, interface,
+	  null@Global_Library_Declaration, interface.name.value,
+	  buffer, compiler)
+      case source_find
+	# We want to ensure that the library gets added to the list:
+	interface_name :@= interface.name
+	source :@= compiler.source
+	call append@(source.interfaces, interface)
+	call source_register@(compiler, interface_name.value, interface_name)
+      case c_defines_emit, ezh_scan, generate_emit, h_externs_emit,
+       h_structs_emit, h_typedefs_emit, link_scan, prefix_scan
+	do_nothing
+
+
+# {Libary_Declaration} routines:
+
+
+routine visit@Library_Declaration
+    takes library Library_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {library} using {compiler}.
+
+    switch compiler.phase
+      all_cases_required
+      case c_emit, ezh_emit, link_emit, h_includes_emit
+	call library_visit@Declaration(library, null@Interface_Declaration,
+	null@Global_Library_Declaration, library.name.value, buffer, compiler)
+      case source_find
+	# We want to ensure that the library gets added to the list:
+	source :@= compiler.source
+	call append@(source.libraries, library)
+	library_name :@= library.name
+	call source_register@(compiler, library_name.value, library_name)
+      case c_defines_emit, ezh_scan, generate_emit, h_externs_emit,
+       h_structs_emit, h_typedefs_emit, link_scan, prefix_scan
+	do_nothing
+
+
+# {Load_Declaration} routines:
+
+routine visit@Load_Declaration
+    takes load Load_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {library} using {compiler}.
+
+    assert buffer !== null@String
+
+    switch compiler.phase
+      case link_scan
+	call append@(compiler.loads, string_convert@(load.string))
+
+
+# {Note} routines:
+
+routine visit@Note
+    takes note Note
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {comment} using {compiler}.
+
+
+    assert buffer !== null@String
+    temporary :@= compiler.temporary
+    switch compiler.phase
+      case ezh_emit
+	call traverse@(note, compiler.traverser)
+      case c_emit
+	call pad_append@(compiler, buffer)
+	call string_append@(buffer,
+	  form@("/* %s% */\n\") / f@(note.comment.value))
+
+
+# {Root} stuff:
+
+routine visit@Root
+    takes root Root
+    takes buffer String
+    takes compiler Compiler
+    takes phase Phase
+    returns_nothing
+
+    # This procedure will visit the various nodes of {root} using {buffer}
+    # and {compiler}.
+
+    trace :@= false@Logical
+    #trace := true@Logical
+    temporary :@= compiler.temporary
+    if trace
+	call put@(form@("=>visit@Root(*, *, *, %p%)\n\") /
+	  f@(phase), error@Out_Stream)
+
+    previous_phase :@= compiler.phase
+    compiler.phase := phase
+    call visit@Array[Declaration](root.declarations,
+      buffer, compiler, visit@Declaration)
+
+    if trace
+	call put@(form@("<=visit@Root(*, buffer.size=%d%, *, %p%)\n\") %
+	  f@(buffer.size) / f@(phase), error@Out_Stream)
+    compiler.phase := previous_phase
+
+
+# {Routine_Clause} routines:
+
+routine f@Routine_Clause
+    takes routine_clause Routine_Clause
+    returns String
+
+    # This routine format {routine_clause} as a {String} and return it.
+
+    value :@= field_next@Format()
+    traverser :@= create@Traverser(value, new@Array[Token]())
+    call traverse@(routine_clause, traverser)
+    return value
+
+
+routine format@Routine_Clause
+    takes routine_clause Routine_Clause
+    takes buffer String
+    returns_nothing
+
+    # This routine will insert {rotune_clause} into {buffer} at the
+    # next "%e%" location.
+
+    anchor :@= format_begin@String(buffer)
+    size :@= buffer.size
+    index :@= anchor + 1
+    character :@= ' '
+    while index < size && character != '%'
+	character := buffer[index]
+	index := index + 1
+    traverser :@= create@Traverser(buffer, new@Array[Token]())
+    call traverse@(routine_clause, traverser)
+    call format_end@(buffer, anchor)
+
+
+routine visit@Routine_Clause
+    takes routine_clause Routine_Clause
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {routine_clause} using {compiler}.
+
+    assert buffer !== null@String
+
+    previous_tracing :@= compiler.tracing
+    line_number :@= routine_clause.location.line_number
+    compiler.tracing := line_number = compiler.trace_line
+
+    temporary :@= compiler.temporary
+    trace :@= false@Logical
+    #trace := true@Logical
+    if trace
+	call put@(form@("=>visit@Routine_Clause(): line:%d% trace:%l%\n\%r%\n\") %
+	  f@(line_number) % f@(compiler.tracing) / f@(routine_clause),
+	  error@Out_Stream)    
+
+    switch routine_clause.kind
+      all_cases_required
+      case assert
+	call visit@(routine_clause.assert, buffer, compiler)
+      case c_array_access
+	do_nothing
+      case call
+	call visit@(routine_clause.call, buffer, compiler)
+      case do_nothing
+	call pad_append@(compiler, buffer)
+	call buffer_append@("/* do_nothing */;\n\", buffer)
+      case end_of_line
+	#call buffer_append@("\n\", buffer)
+	do_nothing
+      case external
+	do_nothing
+      case fail
+	call pad_append@(compiler, buffer)
+	call buffer_append@("/* fail() */;\n\", buffer)
+      case if
+	call visit@(routine_clause.if, buffer, compiler)
+      case interrupt
+	do_nothing
+      case local
+	do_nothing
+      case note
+	#call visit@(routine_clause.note, buffer, compiler)
+      case return
+	call visit@(routine_clause.return, buffer, compiler)
+      case returns
+	do_nothing
+      case returns_nothing
+	do_nothing
+      case set
+	call visit@(routine_clause.set, buffer, compiler)
+      case scalar_cast
+	do_nothing
+      case switch
+	call visit@(routine_clause.switch, buffer, compiler)
+      case take
+	do_nothing
+      case take_import
+	do_nothing
+      case takes_nothing
+	do_nothing
+      case while
+	call visit@(routine_clause.while, buffer, compiler)
+      case error
+	do_nothing
+
+    compiler.tracing := previous_tracing
+
+    if trace
+	call put@("<=visit@Routine_Clause()\n\", error@Out_Stream)
+
+
+# {Require_Declaration} routines:
+
+routine c_array_access@Routine_Declaration
+    takes routine Routine_Declaration
+    returns Logical
+
+    # This routine will return the scalar parse type of {routine}
+    # or {null@Type} otherwise.
+
+    result :@= false@Logical
+    routine_clauses :@= routine.routine_clauses
+    size :@= routine_clauses.size
+    index :@= 0
+    while index < size
+	routine_clause :@= routine_clauses[index]
+	switch routine_clause.kind
+	  case c_array_access
+	    result := true@Logical
+	    break
+	index := index + 1
+    return result
+
+
+routine visit@Require_Declaration
+    takes require Require_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This procedure will process {require} using {compiler}.  {buffer} is
+    # unused.
+
+    #FIXME: Is this the way to handle requires?!!!
+    require_name :@= require.name.value
+    switch compiler.phase
+      case h_includes_emit
+	# Append {include_name} to {require_bases} if it is not already there:
+	options :@= compiler.options
+	require_bases :@= options.require_bases
+	size :@= require_bases.size
+	index :@= 0
+	while index < size
+	    if equal@(require_bases[index], require_name)
+		break
+	    index := index + 1
+	if index >= size
+	    call append@(require_bases, require_name)
+
+
+# {Routine_Declaration} routines:
+
+routine c_emit@Routine_Declaration
+    takes routine Routine_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will emit the C header file declaration
+    # for {routine}.
+
+    compiler.label_count := 0
+    temporary :@= compiler.temporary
+    typed_name :@= routine.typed_name
+
+    trace :@= false@Logical
+    #trace := true@Logical
+    if trace
+	call put@(form@("=>c_emit(%t%)\n\") / f@(typed_name), error@Out_Stream)
+
+    routine_name :@= typed_name.name.value
+    routine_type :@= typed_name.type
+    routine_type_base :@= base_name@(routine_type)
+
+    assert buffer !== null@String
+
+    c_array_access :@= c_array_access@Routine_Declaration(routine)
+    interrupt :@= interrupt@Routine_Declaration(routine)
+    scalar_cast :@= scalar_cast@Routine_Declaration(routine)
+    external :@= external@Routine_Declaration(routine)
+    if external == null@String && scalar_cast == null@Type && !c_array_access
+	return_type :@= return_type@Routine_Declaration(routine)
+	c_return_type :@= c_type@(return_type, routine_type, "")
+	take_clauses :@= take_clauses_extract@Routine_Declaration(routine)
+	variables :@= compiler.variables
+	temporaries :@= compiler.temporaries
+	call trim@(variables, 0)
+	call trim@(temporaries, 0)
+
+	call undefs_append@(compiler, buffer)
+
+	if interrupt == null@String
+	    call buffer_append@(c_return_type, buffer)
+	    call buffer_append@(" ", buffer)
+
+	    # Deal with -M option:
+	    if compiler.options.plain_main && equal@(routine_name, "main") &&
+	      equal@(routine_type, compiler.type_easy_c)
+		call buffer_append@("main", buffer)
+	    else
+		call buffer_append@(routine_type_base, buffer)
+		call buffer_append@("__", buffer)
+		call buffer_append@(routine_name, buffer)
+
+	    size :@= take_clauses.size
+	    if size = 0
+		call buffer_append@("(void)\n\", buffer)
+	    else
+		call buffer_append@("(\n\", buffer)
+		index :@= 0
+		while index < size
+		    call buffer_append@("  ", buffer)
+		    c_type :@= null@String
+		    take_clause :@= take_clauses[index]
+		    take_name :@= null@String
+		    take_type :@= null@Type
+		    switch take_clause.kind
+		      case take
+			take :@= take_clause.take
+			take_name := take.name.value
+			take_type := take.type
+			c_type := c_type@(take_type, routine_type, take_name)
+		      case take_import
+			take_import :@= take_clause.take_import
+			take_name := take_import.name.value
+			take_type := take_import.type
+			c_type := string_convert@(take_import.string)
+		    call buffer_append@(c_type, buffer)
+
+		    call variable_insert@(compiler,
+		      take_name, take_type, true@Logical)
+
+		    index := index + 1
+
+		    if index = size
+			call buffer_append@(")\n\", buffer)
+		    else
+			call buffer_append@(",\n\", buffer)
+	else
+	    call string_append@(buffer, form@("ISR(%s%)\n\") / f@(interrupt))
+
+	call buffer_append@("{\n\", buffer)
+
+	# Create all of the local variables:
+	routine_clauses :@= routine.routine_clauses
+	size := routine_clauses.size
+	index := 0
+	while index < size
+	    routine_clause :@= routine_clauses[index]
+	    switch routine_clause.kind
+	      case local
+		local :@= routine_clause.local
+		local_name :@= local.name.value
+		local_type :@= local.type
+		call variable_insert@(compiler,
+		  local_name, local_type, false@Logical)
+	    index := index + 1
+
+	# Generate the procedure code:
+	code_buffer :@= new@String()
+	call level_begin@(compiler)
+	call visit@(routine.routine_clauses,
+	  code_buffer, compiler, visit@Routine_Clause)
+	call level_end@(compiler)
+
+	if return_type !== null@Type
+	    # We have a return; now verify that the routine ends in
+	    # a return statement (or Fail) statement:
+	    index := 0
+	    while index < size
+		routine_clause := routine_clauses[size - 1 - index]
+		switch routine_clause.kind
+		  case end_of_line, note
+		    do_nothing
+		  case return, fail
+		    break
+		  default
+		    call log@(compiler, routine.typed_name.at_sign,
+		      form@("%t% returns %t% but does not end in return/fail") %
+		      f@(routine.typed_name) / f@(return_type))
+		    break
+		index := index + 1
+
+	# Now output all of the variables:
+	size := variables.size
+	index := 0
+	while index < size
+	    variable :@= variables[index]
+	    if variable.level != 0
+		# Not an argument variable:
+		
+		call buffer_append@("    ", buffer)
+		c_type :@= c_type@(variable.type, routine_type, variable.name)
+		call buffer_append@(c_type, buffer)
+		call buffer_append@(";\n\", buffer)
+	    index := index + 1
+	size := temporaries.size
+	index := 0
+	while index < size
+	    variable :@= temporaries[index]
+	    call buffer_append@("    ", buffer)
+	    c_type := c_type@(variable.type, routine_type, variable.name)
+	    call buffer_append@(c_type, buffer)
+	    call buffer_append@(";\n\", buffer)
+	    index := index + 1
+
+	call buffer_append@(code_buffer, buffer)
+
+	call buffer_append@("}\n,n\", buffer)
+
+	call variables_clear@(compiler)
+
+    if trace
+	call put@(form@("<=c_emit(%t%)\n\") / f@(typed_name), error@Out_Stream)
+
+
+routine compatible@Routine_Declaration
+    takes routine1 Routine_Declaration
+    takes routine2 Routine_Declaration
+    returns Logical
+
+    # This routine will return {true@Logical} if {routine1} is compatible
+    # with {routine2} and {false@Logical} otherwise.  Two routines are
+    # compatible their prototypes match and one or both of the are external.
+    # If they are external, the external clauses must match exactly.
+
+    routine_clauses1 :@= routine1.routine_clauses
+    routine_clauses2 :@= routine2.routine_clauses
+
+    external1 :@= null@External_Routine_Clause
+    size :@= routine_clauses1.size
+    index :@= 0
+    while index < size
+	routine_clause :@= routine_clauses1[index]
+	switch routine_clause.kind
+	  case external
+	    external1 := routine_clause.external
+	index := index + 1
+
+    external2 :@= null@External_Routine_Clause
+    size := routine_clauses2.size
+    index := 0
+    while index < size
+	routine_clause :@= routine_clauses2[index]
+	switch routine_clause.kind
+	  case external
+	    external2 := routine_clause.external
+	index := index + 1
+
+    prototype1 :@= prototype_extract@Routine_Declaration(routine1)
+    prototype2 :@= prototype_extract@Routine_Declaration(routine2)
+
+    result :@= 0f
+    if equal@Typed_Name(routine1.typed_name, routine2.typed_name) &&
+      equal@(prototype1, prototype2)
+	# They mostly match:
+	if external1 == null@External_Routine_Clause
+	    if external2 == null@External_Routine_Clause
+		# Neither are external; return false:
+	    else
+		result := 1t
+	else
+	    if external2 == null@External_Routine_Clause
+		result := 1t
+	    else
+		# Both have an external clause:
+		result := equal@(external1.name, external2.name)
+    return result
+
+
+routine external@Routine_Declaration
+    takes routine Routine_Declaration
+    returns String
+
+    # This routine will return the value of the external clause of {routine};
+    # otherwise {Null}@{String} is returned.
+
+    result :@= null@String
+    routine_clauses :@= routine.routine_clauses
+    size :@= routine_clauses.size
+    index :@= 0
+    while index < size
+	routine_clause :@= routine_clauses[index]
+	switch routine_clause.kind
+	  case external
+	    result := routine_clause.external.name.value
+	    break
+	index := index + 1
+    return result
+
+
+routine h_externs_emit@Routine_Declaration
+    takes routine Routine_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will emit the C header file declaration
+    # for {routine}.
+
+    assert buffer !== null@String
+
+    typed_name :@= routine.typed_name
+    routine_name :@= typed_name.name.value
+    routine_type :@= typed_name.type
+    routine_base_name :@= base_name@(routine_type)
+
+    external :@= external@(routine)
+    return_type :@= return_type@(routine)
+    c_return_type :@= c_type@(return_type, routine_type, "")
+    take_clauses :@= take_clauses_extract@(routine)
+
+    call buffer_append@("extern ", buffer)
+    call buffer_append@(c_return_type, buffer)
+    call buffer_append@(" ", buffer)
+
+    if external == null@String
+	call buffer_append@(routine_base_name, buffer)
+	call buffer_append@("__", buffer)
+	call buffer_append@(routine_name, buffer)
+    else
+	call buffer_append@(external, buffer)
+    call buffer_append@("(", buffer)
+    
+    size :@= take_clauses.size
+    if size = 0
+	call buffer_append@("void", buffer)
+    else
+	prefix :@= ""
+	index :@= 0
+	while index < size
+	    call buffer_append@(prefix, buffer)
+	    prefix := ", "
+	    take_clause :@= take_clauses[index]
+	    c_type :@= null@String
+	    switch take_clause.kind
+	      case take
+		c_type := c_type@(take_clause.take.type, routine_type, "")
+	      case take_import
+		c_type := string_convert@(take_clause.take_import.string)
+	    call buffer_append@(c_type, buffer)
+	    index := index + 1
+    call buffer_append@(");\n\", buffer)
+
+
+routine take_clauses_extract@Routine_Declaration
+    takes routine Routine_Declaration
+    returns Array[Routine_Clause]
+
+    # This routine will return the takes of {routine}.
+
+    take_clauses :@= new@Array[Routine_Clause]()
+    routine_clauses :@= routine.routine_clauses
+    size :@= routine_clauses.size
+    index :@= 0
+    while index < size
+	routine_clause :@= routine_clauses[index]
+	switch routine_clause.kind
+	  case take, take_import
+	    call append@(take_clauses, routine_clause)
+	index := index + 1
+    return take_clauses
+
+
+routine return_type@Routine_Declaration
+    takes routine Routine_Declaration
+    returns Type
+
+    # This routine will return the return type for {routine_declartion}.
+
+    type :@= null@Type
+    routine_clauses :@= routine.routine_clauses
+    size :@= routine_clauses.size
+    index :@= 0
+    while index < size
+	routine_clause :@= routine_clauses[index]
+	switch routine_clause.kind
+	  case returns
+	    return_types :@= routine_clause.returns.return_types
+	    assert return_types.size = 1
+	    type := return_types[0]
+	index := index + 1
+    return type
+
+
+routine prototype_extract@Routine_Declaration
+    takes routine Routine_Declaration
+    returns Type
+
+    # This routine will return the prototype for {routine}.
+
+    compiler :@= one_and_only@Compiler()
+    messages :@= compiler.messages
+    temporary :@= compiler.temporary
+
+    typed_name :@= routine.typed_name
+    routine_name :@= typed_name.name
+    position :@= routine_name.position
+    file :@= routine_name.file
+
+    tracing :@= compiler.tracing
+    tracing := false@Logical
+    if tracing
+	call put@(form@("=>prototype_extract@routine_declaration(%t%)\n\") /
+	  f@(routine.typed_name), error@Out_Stream)
+
+    routine_type :@= new@Routine_Type()
+    takes_types :@= routine_type.takes_types
+    return_types :@= routine_type.return_types
+    commas :@= takes_types.commas
+    sub_types :@= takes_types.sub_types
+
+    routine_clauses :@= routine.routine_clauses
+    size :@= routine_clauses.size
+    index :@= 0
+    while index < size
+	routine_clause :@= routine_clauses[index]
+	switch routine_clause.kind
+	  case take
+	    if takes_types.size != 0
+		call append@(commas,
+		  create@Token(file, position, comma@Lexeme, ","))
+	    call append@(sub_types, routine_clause.take.type)
+	  case take_import
+	    if takes_types.size != 0
+		call append@(commas,
+		  create@Token(file, position, comma@Lexeme, ","))
+	    call append@(sub_types, routine_clause.take_import.type)
+	  case returns
+	    return_types := routine_clause.returns.return_types
+	index := index + 1
+
+    routine_type.open_bracket :=
+      create@Token(file, position, open_bracket@Lexeme, "[")
+    routine_type.return_types := return_types
+    routine_type.less_than_or_equal :=
+      create@Token(file, position, less_than_or_equal@Lexeme, "<=")
+    routine_type.takes_types := takes_types
+    routine_type.close_bracket :=
+      create@Token(file, position, close_bracket@Lexeme, "]")
+
+    prototype :@= new@Type()
+    prototype.routine := routine_type
+
+    if tracing
+	call put@(form@("<=prototype_extract@routine_declaration(%t%, %t%) => %t%\n\") %
+	  f@(routine.typed_name) % f@(routine.end_of_line) /
+	  f@(prototype), error@Out_Stream)
+
+    return prototype
+
+
+routine visit@Routine_Declaration
+    takes routine Routine_Declaration
+    takes buffer String
+    takes compiler Compiler
+    returns_nothing
+
+    # This routine will visit {routine} using {compiler}.
+
+    #call put@(form@("=>visit@routine_declaration(%t%)\n\") /
+    #  f@(routine.typed_name), error@Out_Stream)
+
+    assert buffer !== null@String
+
+    messages :@= compiler.messages
+    compiler.current_routine := routine
+    switch compiler.phase
+      case c_emit
+        call c_emit@(routine, buffer, compiler)
+      case h_externs_emit
+        call h_externs_emit@(routine, buffer, compiler)
+      case ezh_emit
+	traverser :@= compiler.traverser
+	call traverse@(routine.routine, traverser)
+	call traverse@(routine.typed_name, traverser)
+	call traverse@(routine.end_of_line, traverser)
+	call traverse@(routine.open_indent, traverser)
+
+	routine_clauses :@= routine.routine_clauses
+	size :@= routine_clauses.size
+	index :@= 0
+	while index < size
+	    routine_clause :@= routine_clauses[index]
+	    switch routine_clause.kind
+	      all_cases_required
+	      case c_array_access, end_of_line, external, interrupt,
+	       returns, returns_nothing, scalar_cast, take, takes_nothing,
+	       take_import
+		call traverse@(routine_clause, traverser)
+	      case note
+		# We only want comments that are followed by other comments
+		# followed by a bare end-of line.
+		ok :@= true@Logical
+		end_index :@= index + 1
+		while end_index < size
+		    switch routine_clauses[end_index].kind
+		      case note
+			# Keep looking:
+			end_index := end_index + 1
+		      case end_of_line
+			# We are done:
+			break
+		      default
+			# We are done, s
+			ok := false@Logical
+			break
+		if ok
+		    while index <= end_index
+			call traverse@(routine_clauses[index], traverser)
+			index := index + 1
+	      case assert, call, do_nothing, error, fail, if, local, return,
+	       set, switch, while
+		break
+	    index := index + 1
+      case ezh_scan
+	typed_name_object :@= new@Typed_Name_Object()
+	typed_name_object.routine := routine
+	typed_name :@= routine.typed_name
+	call typed_name_insert@(compiler,
+	  typed_name, typed_name_object, typed_name.name,
+	  "visit@Routine_Declaration")
+
+    #call put@("<=visit@routine_declaration\n\", error@Out_Stream)
+
+
+routine interrupt@Routine_Declaration
+    takes routine Routine_Declaration
+    returns String
+
+    # This routine will return the scalar parse type of {routine}
+    # or {null@Type} otherwise.
+
+    result :@= null@String
+    routine_clauses :@= routine.routine_clauses
+    size :@= routine_clauses.size
+    index :@= 0
+    while index < size
+	routine_clause :@= routine_clauses[index]
+	switch routine_clause.kind
+	  case interrupt
+	    result := routine_clause.interrupt.name.value
+	    break
+	index := index + 1
+    return result
+
+
+routine is_parameter@Routine_Declaration
+    takes routine Routine_Declaration
+    takes type Type
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {type} is
+    # parameter of {routine}.
+
+    result :@= false@Logical
+    routine_type :@= routine.typed_name.type
+    switch routine_type.kind
+      case parameterized
+	parameters :@= routine_type.parameterized.sub_types
+	size :@= parameters.size
+	index :@= 0
+	while index < size
+	    if equal@(parameters[index], type)
+		result := true@Logical
+		break
+	    index := index + 1
+
+    #call put@(form@("=>is_parameter@Routine_Declaration(%t%, %t%) => %l%\n\") %
+    #  f@(routine.typed_name) % format@(type, temporary) / f@(result),
+    #  error@Out_Stream)
+
+    return result
+
+
+routine returns_parameter@Routine_Declaration
+    takes routine Routine_Declaration
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {routine}
+    # returns a parameter.
+
+    result :@= false@Logical
+    typed_name :@= routine.typed_name
+
+    switch typed_name.type.kind
+      case parameterized
+	# {routine} type is parameterized:
+	parameters :@= typed_name.type.parameterized.sub_types
+	    
+        # Now get the return types:
+	prototype :@= prototype_extract@Routine_Declaration(routine)
+	switch prototype.kind
+	  case routine
+	    routine_type :@= prototype.routine
+	    return_types :@= routine_type.return_types
+	    if return_types.size >= 1
+		# We have a return type:
+		return_type :@= return_types[0]
+
+		switch return_type.kind
+		  case parameterized
+		    parameters := return_type.parameterized.sub_types
+
+		    # Now try to match up with a parameter:
+		    size :@= parameters.size
+		    index :@= 0
+		    while index < size
+			if equal@(parameters[index], return_type)
+			    result := true@Logical
+			    break
+		        index := index + 1
+	  default
+	    assert false@Logical
+    return result
+
+
+routine scalar_cast@Routine_Declaration
+    takes routine Routine_Declaration
+    returns Type
+
+    # This routine will return the scalar parse type of {routine}
+    # or {null@Type} otherwise.
+
+    result :@= null@Type
+    routine_clauses :@= routine.routine_clauses
+    size :@= routine_clauses.size
+    index :@= 0
+    while index < size
+	routine_clause :@= routine_clauses[index]
+	switch routine_clause.kind
+	  case scalar_cast
+	    result := routine_clause.scalar_cast.type
+	    break
+	index := index + 1
+    return result
+
+
+# {Typed_Name_Object} routines;
+
+routine equal@Typed_Name_Object
+    takes typed_name_object1 Typed_Name_Object
+    takes typed_name_object2 Typed_Name_Object
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {typed_name_object1}
+    # is equal to {typed_name_object2}.
+
+    result :@= 0f
+    switch typed_name_object1.kind
+      all_cases_required
+      case constant
+        switch typed_name_object2.kind
+	  case constant
+	    result :=
+	      equal@(typed_name_object1.constant, typed_name_object2.constant)
+      case external
+	switch typed_name_object2.kind
+	  case external
+	    result :=
+	      equal@(typed_name_object1.external, typed_name_object2.external)
+      case external_named
+	switch typed_name_object2.kind
+	  case external_named
+	    result := equal@(typed_name_object1.external_named,
+	      typed_name_object2.external_named)
+      case global
+	switch typed_name_object2.kind
+	  case global
+	    result :=
+	      equal@(typed_name_object1.global, typed_name_object2.global)
+      case routine
+	switch typed_name_object2.kind
+	  case routine
+	    result := compatible@(typed_name_object1.routine,
+	      typed_name_object2.routine)
+    return result
+
+
+routine show@Typed_Name_Object
+    takes typed_name_object Typed_Name_Object
+    takes buffer String
+    returns_nothing
+
+    if typed_name_object == null@Typed_Name_Object
+	call buffer_append@("null@Typed_Name_Object", buffer)
+    else
+	switch typed_name_object.kind
+	  all_cases_required
+	  case constant
+	    call buffer_append@("constant", buffer)
+	  case external
+	    call buffer_append@("external", buffer)
+	  case external_named
+	    call buffer_append@("external_named", buffer)
+	  case global
+	    call buffer_append@("global", buffer)
+	  case routine
+	    call buffer_append@("routine", buffer)
+
+
+routine location_get@Typed_Name_Object
+    takes typed_name_object Typed_Name_Object
+    returns Token
+
+    # This procedure will return the location of {typed_name_object}.
+
+    result :@= null@Token
+    switch typed_name_object.kind
+      all_cases_required
+      case constant
+	result := typed_name_object.constant.end_of_line
+      case external
+	result := typed_name_object.external.end_of_line
+      case external_named
+	result := typed_name_object.external_named.end_of_line
+      case global
+	result := typed_name_object.global.end_of_line
+      case routine
+	result := typed_name_object.routine.end_of_line
+    return result
+

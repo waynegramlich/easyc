@@ -1,0 +1,426 @@
+easy_c 1.0
+
+# Copyright (c) 2007 by Wayne C. Gramlich
+# All rights reseverd.
+
+# This file defines the interfaces to the Posix(Unix) Termios
+# sub-system for controlling serial lines.
+
+library Easy_C
+library Unix
+include "termios.h"
+include "Unix_Termios_C.h"
+require Unix_Termios_C
+
+# The externally define "struct termios" structure:
+define Unix_Termios
+    record_import "struct termios *"
+	c_iflag = input_flags Integer
+	c_oflag = output_flags Integer
+	c_cflag = control_flags Integer
+	c_lflag = local_modes Integer
+
+# There is no clever prefix for the termios macros, so we
+# basically grab them one by one.  We get lazy for the baud macros tho':
+
+# Input flags:
+defines_prefix unix_termios_in_ignore_break = IGNBRK @ Integer
+defines_prefix unix_termios_in_ignore_parity = IGNPAR @ Integer
+defines_prefix unix_termios_in_parity_mark = PARMRK @ Integer
+defines_prefix unix_termios_in_input_check = INPCK @ Integer
+defines_prefix unix_termios_in_strip_eigth_bit = ISTRIP @ Integer
+defines_prefix unix_termios_in_nl_to_cr = INLCR @ Integer
+defines_prefix unix_termios_in_ignore_cr = IGNCR @ Integer
+defines_prefix unix_termios_in_ignore_nl = IGNNL @ Integer
+defines_prefix unix_termios_in_upper_to_lower = IUCLC @ Integer	# Not in POSIX
+defines_prefix unix_termios_in_xon_xoff_enable = IXON @ Integer
+defines_prefix unix_termios_in_any_restart = IXANY @ Integer
+defines_prefix unix_termios_in_xon_xoff_disable = IXOFF @ Integer
+defines_prefix unix_termios_in_bell_when_full = IMAXBEL @ Integer
+
+# Output flags:
+defines_prefix unix_termios_out_post = OPOST @ Integer
+defines_prefix unix_termios_out_lower_to_upper = OLCUC @ Integer
+defines_prefix unix_termios_out_nl_to_crnl = ONLCR @ Integer
+defines_prefix unix_termios_out_cr_to_nl = OCRNL @ Integer
+defines_prefix unix_termios_out_no_cr_at_0 = ONOCR @ Integer
+defines_prefix unix_termios_out_no_cr = ONLRET @ Integer
+defines_prefix unix_termios_out_fill_characters = OFILL @ Integer
+defines_prefix unix_termios_out_fill_delay = OFDEL @ Integer
+
+# Control flags:
+defines_prefix unix_termios_control_size_mask = CSIZE @ Integer
+defines_prefix unix_termios_control_8_data_bits = CS8 @ Integer
+defines_prefix unix_termios_control_7_data_bits = CS7 @ Integer
+defines_prefix unix_termios_control_2_stop_bits = CSTOPB @ Integer
+defines_prefix unix_termios_control_receive_enable = CREAD @ Integer
+defines_prefix unix_termios_control_parity_enable = PARENB @ Integer
+defines_prefix unix_termios_control_odd_parity = PARODD @ Integer
+defines_prefix unix_termios_control_hang_up = HUPCL @ Integer
+defines_prefix unix_termios_control_ignore_control_lines = CLOCAL @ Integer
+defines_prefix unix_termios_control_enable_rts_cts = CRTSCTS @ Integer
+
+# Flow flags:
+defines_prefix unix_termios_flow_interrupt = ISIG @ Integer
+defines_prefix unix_termios_flow_cannonical_mode = ICANON @ Integer
+defines_prefix unix_termios_flow_echo = ECHO @ Integer
+defines_prefix unix_termios_flow_echo_erase = ECHOE @ Integer
+defines_prefix unix_termios_flow_echo_kill = ECHOK @ Integer
+defines_prefix unix_termios_flow_echo_nl = ECHOL @ Integer
+defines_prefix unix_termios_flow_echo_control = ECTL @ Integer
+defines_prefix unix_termios_flow_no_flush = NOFLSH @ Integer
+
+# Action flags:
+defines_prefix unix_termios_action_immediate = TCSANOW @ Integer
+defines_prefix unix_termios_action_drain = TCSADRAIN @ Integer
+defines_prefix unix_termios_action_flush = TCSAFLUSH @ Integer
+
+# Vector indices:
+defines_prefix unix_termios_index_interrupt = VINTR @ Integer
+defines_prefix unix_termios_index_quit = VQUIT @ Integer
+defines_prefix unix_termios_index_erase = VERASE @ Integer
+defines_prefix unix_termios_index_kill = VKILL @ Integer
+defines_prefix unix_termios_index_end_of_file = VEOF @ Integer
+defines_prefix unix_termios_index_minimum_read = VMIN @ Integer
+# This one picks up both VEOL and VEOL2
+defines_prefix unix_termios_index_end_of_line = VEOL @ Integer
+defines_prefix unix_termios_index_timeout = VTIME @ Integer
+defines_prefix unix_termios_index_switch = VSWTCH @ Integer
+defines_prefix unix_termios_index_start = VSTART @ Integer
+defines_prefix unix_termios_index_stop = VSTOP @ Integer
+defines_prefix unix_termios_index_suspend = VSUSP @ Integer
+defines_prefix unix_termios_index_delayed_suspend = VDSUSP @ Integer
+defines_prefix unix_termios_index_quote_next = VLNEXT @ Integer
+defines_prefix unix_termios_index_word_erase = VWERASE @ Integer
+defines_prefix unix_termios_index_reprint = VREPRINT @ Integer
+defines_prefix unix_termios_index_output_discard = VDISCARD @ Integer
+defines_prefix unix_termios_index_status_request = VSTATUS @ Integer
+
+# Baud rates (this one captures a few extras BRKINT, BS0, BS1, and BSDLY):
+defines_prefix unix_termios_baud_ = B @ Integer
+
+routine attributes_fetch@Unix_Termios
+    takes fd Integer
+    takes termios Unix_Termios
+    returns Integer
+    external tcgetattr
+
+    # This routine will get the terminal attributes associated with the
+    # file descriptor {fd} and put the attributes into {termios}.  0 is
+    # returned on success and -1 on failure.
+
+
+routine attributes_store@Unix_Termios
+    takes fd Integer
+    takes optional_actions Integer
+    takes_import termios Unix_Termios = "const struct termios *"
+    returns Integer
+    external tcsetattr
+
+    # This routine will set the terminal attributes associated with the
+    # file descriptor {fd} and with the values in {termios}.  0 is
+    # returned on success and -1 on failure.
+
+
+routine drain@Unix_Termios
+    takes fd Integer
+    returns Integer
+    external tcdrain
+
+    # This routine will wait until all output to {fd} has been transmitted
+    # (i.e. drained.)
+
+
+routine f@Unix_Termios
+    takes termios Unix_Termios
+    returns String
+
+    # This routine will format {termios} as a {String} and return it.
+
+    zero :@= 0i
+    value :@= field_next@Format()
+    call trim@(value, 0)
+
+    input_flags :@= termios.input_flags
+    call string_append@(value, "{iflags=")
+    if input_flags & unix_termios_in_ignore_break@Integer != zero
+	call string_append@(value, "IGNBRK ")
+    if input_flags & unix_termios_in_ignore_parity@Integer != zero
+	call string_append@(value, "IGNPAR ")
+    if input_flags & unix_termios_in_parity_mark@Integer != zero
+	call string_append@(value, "PARMRK ")
+    if input_flags & unix_termios_in_input_check@Integer != zero
+	call string_append@(value, "INPCK ")
+    if input_flags & unix_termios_in_strip_eigth_bit@Integer != zero
+	call string_append@(value, "ISTRIP ")
+    if input_flags & unix_termios_in_nl_to_cr@Integer != zero
+	call string_append@(value, "INLCR ")
+    if input_flags & unix_termios_in_ignore_cr@Integer != zero
+	call string_append@(value, "IGNCR ")
+    #if input_flags & unix_termios_in_ignore_nl@Integer != zero
+    #	call string_append@(value, "IGNNL ")
+    if input_flags & unix_termios_in_upper_to_lower@Integer != zero
+	call string_append@(value, "IUCLC ")	
+    if input_flags & unix_termios_in_xon_xoff_enable@Integer != zero
+	call string_append@(value, "IXON ")
+    if input_flags & unix_termios_in_any_restart@Integer != zero
+	call string_append@(value, "IXANY ")
+    if input_flags & unix_termios_in_xon_xoff_disable@Integer != zero
+	call string_append@(value, "IXOFF ")
+    if input_flags & unix_termios_in_bell_when_full@Integer != zero
+	call string_append@(value, "IMAXBEL ")
+    
+    output_flags :@= termios.output_flags
+    call string_append@(value, " oflags=")
+    if output_flags & unix_termios_out_post@Integer != zero
+	call string_append@(value, "OPOST ")
+    if output_flags & unix_termios_out_lower_to_upper@Integer != zero
+	call string_append@(value, "OLCUC ")
+    if output_flags & unix_termios_out_nl_to_crnl@Integer != zero
+	call string_append@(value, "ONLCR ")
+    if output_flags & unix_termios_out_cr_to_nl@Integer != zero
+	call string_append@(value, "OCRNL ")
+    if output_flags & unix_termios_out_no_cr_at_0@Integer != zero
+	call string_append@(value, "ONOCR ")
+    if output_flags & unix_termios_out_no_cr@Integer != zero
+	call string_append@(value, "ONLRET ")
+    if output_flags & unix_termios_out_fill_characters@Integer != zero
+	call string_append@(value, "OFILL ")
+    if output_flags & unix_termios_out_fill_delay@Integer != zero
+	call string_append@(value, "OFDEL ")
+
+    control_flags :@= termios.control_flags
+    call string_append@(value, " cflags=")
+    if control_flags & unix_termios_control_size_mask@Integer = 
+      unix_termios_control_8_data_bits@Integer
+	call string_append@(value, "CS8 ")
+    if control_flags & unix_termios_control_size_mask@Integer = 
+      unix_termios_control_7_data_bits@Integer
+	call string_append@(value, "CS7 ")
+    if control_flags & unix_termios_control_2_stop_bits@Integer != zero
+	call string_append@(value, "CSTOPB ")
+    if control_flags & unix_termios_control_receive_enable@Integer != zero
+	call string_append@(value, "CREAD ")
+    if control_flags & unix_termios_control_parity_enable@Integer != zero
+	call string_append@(value, "PARENB ")
+    if control_flags & unix_termios_control_odd_parity@Integer != zero
+	call string_append@(value, "PARODD ")
+    if control_flags & unix_termios_control_hang_up@Integer != zero
+	call string_append@(value, "HUPCL ")
+    if control_flags & unix_termios_control_ignore_control_lines@Integer != zero
+	call string_append@(value, "CLOCAL ")
+    if control_flags & unix_termios_control_enable_rts_cts@Integer != zero
+	call string_append@(value, "CRTSCTS ")
+
+    local_modes :@= termios.local_modes
+    call string_append@(value, " lflags=")
+    if local_modes & unix_termios_flow_interrupt@Integer != zero
+	call string_append@(value, "ISIG ")
+    if local_modes & unix_termios_flow_cannonical_mode@Integer != zero
+	call string_append@(value, "ICANON ")
+    if local_modes & unix_termios_flow_echo@Integer != zero
+	call string_append@(value, "ECHO ")
+    if local_modes & unix_termios_flow_echo_erase@Integer != zero
+	call string_append@(value, "ECHOE ")
+    if local_modes & unix_termios_flow_echo_kill@Integer != zero
+	call string_append@(value, "ECHOK ")
+    #if local_modes & unix_termios_flow_echo_nl@Integer != zero
+    #	call string_append@(value, "ECHOL ")
+    #if local_modes & unix_termios_flow_echo_control@Integer != zero
+    #	call string_append@(value, "ECTL ")
+    if local_modes & unix_termios_flow_no_flush@Integer != zero
+	call string_append@(value, "NOFLSH ")
+
+    call character_append@(value, '}')
+    return value
+
+routine fetch1@Unix_Termios
+    takes termios Unix_Termios
+    takes index Integer
+    returns Integer
+    external Unix_Termios__fetch1
+
+    # This routine will return the {index}'th value from the control
+    # character vector in {termios}.
+
+
+routine flow@Unix_Termios
+    takes fd Integer
+    takes action Integer
+    returns Integer
+    external tcflow
+
+    # This routine will control output data flow on {fd} depending
+    # upon {action}.  Read tcflow(3) form more details.
+
+
+routine flush@Unix_Termios
+    takes fd Integer
+    takes queue_selector Integer
+    returns Integer
+    external tcflush
+
+    # This routine will cause untransmitted data to be flushed
+    # or unread data to be flushed for {fd} depending upon the
+    # value of {queue_selector}.  Read tcflush(3) for more details.
+
+
+routine input_speed_get@Unix_Termios
+    takes_import termios Unix_Termios = "const struct termios *"
+    returns Unsigned
+    external cfgetispeed
+
+    # This routine will return the input speed from {termios}
+    # as a macro value.
+
+
+routine input_speed_set@Unix_Termios
+    takes termios Unix_Termios
+    takes input_speed Unsigned
+    returns Integer
+    external cfsetispeed
+
+    # This routine will set the input speed of {termios} to {input_speed},
+    # {input_speed} must be a macro value.
+
+
+routine output_speed_get@Unix_Termios
+    takes_import termios Unix_Termios = "const struct termios *"
+    returns Unsigned
+    external cfgetospeed
+
+    # This routine will return the output speed from {termios}
+    # as a macro value.
+
+
+routine output_speed_set@Unix_Termios
+    takes termios Unix_Termios
+    takes output_speed Unsigned
+    returns Integer
+    external cfsetospeed
+
+    # This routine will set the input speed of {termios} to {output_speed},
+    # {output_speed} must be a macro value.
+
+
+routine raw_make@Unix_Termios
+    takes termios Unix_Termios
+    returns_nothing
+    external cfmakeraw
+
+    # This routine will set {termios} up for raw reading.  The
+    # baud rate is not set.
+
+
+routine send_break@Unix_Termios
+    takes fd Integer
+    takes duration Integer
+    returns Integer
+    external tcsendbreak
+
+    # This routine will send a break on {fd}.  If {duration} is 0, the
+    # duration is at least 0.25 seconds.  Otherwise, it sends of break
+    # of some unknown (implementation dependent) amount of time.
+
+
+routine store1@Unix_Termios
+    takes termios Unix_Termios
+    takes index Integer
+    takes value Integer
+    returns_nothing
+    external Unix_Termios__store1
+
+    # This routine will store {value into the {index}'th value of the control
+    # character vector in {termios}.
+
+
+routine terminal_open@Unix_Termios
+    takes path_name String
+    takes baud_rate Unsigned
+    takes non_blocking Logical
+    returns Integer
+
+    # This routine will open up a serial line connected to {path_name}
+    # at speed {baud_rate} using 8N1 asynchronous protocol.  If {non_blocking}
+    # is {true}@{Logical}, no read from the returned file descriptor will
+    # block; otherwise, it will block on reads.
+
+    zero :@= 0i
+    one :@= 1i
+    read_write :@= unix_file_o_rdwr@Unsigned
+    non_block :@= unix_file_o_nonblock@Unsigned
+
+    # Open the terminal device:
+    flags :@= read_write
+    if non_blocking
+	flags := flags | non_block
+    fd :@= open@Unix(path_name, flags, 0)
+    if fd < zero
+	return fd
+
+    # Baud rate selectiong:
+    baud_flag :@= 0i
+    if baud_rate = 1000000
+	baud_flag := unix_termios_baud_1000000@Integer
+    else_if baud_rate = 921600
+	baud_flag := unix_termios_baud_921600@Integer
+    else_if baud_rate = 576000
+	baud_flag := unix_termios_baud_576000@Integer
+    else_if baud_rate = 500000
+	baud_flag := unix_termios_baud_500000@Integer
+    else_if baud_rate = 460800
+	baud_flag := unix_termios_baud_460800@Integer
+    else_if baud_rate = 230400
+	baud_flag := unix_termios_baud_230400@Integer
+    else_if baud_rate = 115200
+	baud_flag := unix_termios_baud_115200@Integer
+    else_if baud_rate = 57600
+	baud_flag := unix_termios_baud_57600@Integer
+    else_if baud_rate = 38400
+	baud_flag := unix_termios_baud_38400@Integer
+    else_if baud_rate = 19200
+	baud_flag := unix_termios_baud_19200@Integer
+    else_if baud_rate = 9600
+	baud_flag := unix_termios_baud_9600@Integer
+    else_if baud_rate = 4800
+	baud_flag := unix_termios_baud_4800@Integer
+    else_if baud_rate = 2400
+	baud_flag := unix_termios_baud_2400@Integer
+    else_if baud_rate = 1200
+	baud_flag := unix_termios_baud_1200@Integer
+    else_if baud_rate = 600
+	baud_flag := unix_termios_baud_1200@Integer
+    else_if baud_rate = 300
+	baud_flag := unix_termios_baud_300@Integer
+    else_if baud_rate = 110
+	baud_flag := unix_termios_baud_110@Integer
+    else
+	return -2i
+
+    termios :@= new@Unix_Termios()
+    call raw_make@(termios)
+    control_flags :@= termios.control_flags
+    control_flags := control_flags &
+      ~unix_termios_control_enable_rts_cts@Integer
+    control_flags := control_flags |
+      unix_termios_control_receive_enable@Integer |
+      unix_termios_control_ignore_control_lines@Integer |
+      unix_termios_control_hang_up@Integer
+    termios.control_flags := control_flags
+    termios[unix_termios_index_minimum_read@Integer] := one
+    termios[unix_termios_index_timeout@Integer] := zero
+
+    baud :@= unsigned@(baud_flag)
+    if input_speed_set@(termios, baud) != zero ||
+      output_speed_set@(termios, baud) != zero
+	return -3i
+
+    immediate_flag :@= unix_termios_action_immediate@Integer
+    if attributes_store@Unix_Termios(fd, immediate_flag, termios) < zero
+	return -4i
+
+    call put@(form@("termios=%t%\n\") / f@(termios), error@Out_Stream)
+
+    return fd
+
+

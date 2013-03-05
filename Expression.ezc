@@ -1,0 +1,2999 @@
+easy_c 1.0
+
+# Copyright (c) 2004-2010 by Wayne C. Gramlich.
+# All rights reserved.
+
+# This module will generate code for expressions:
+
+library Compiler
+library Declaration
+library Easy_C
+library Parse
+library Token
+library Statement
+
+define Code_Chunk
+    record
+	types Array[Type]		# Types of expression
+	code String			# Code to be executed
+	contains_call Logical		# {true}=>contains a procedure call
+
+# {Code_Chunk} stuff:
+
+routine buffer_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes buffer String
+    returns_nothing
+
+    call buffer_append@(code_chunk.code, buffer)
+
+
+routine character_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes character Character
+    returns_nothing
+
+    # This routine will append {character} to {code_chunk}.
+
+    call character_append@(code_chunk.code, character)
+
+
+routine chunk_append@Code_Chunk
+    takes to_code_chunk Code_Chunk
+    takes from_code_chunk Code_Chunk
+    returns_nothing
+
+    # This routine will append {from_code_chunk} to {code_chunk}.
+
+    call string_append@(to_code_chunk.code, from_code_chunk.code)
+    if from_code_chunk.contains_call
+	to_code_chunk.contains_call := true@Logical
+
+
+routine comma_types_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes comma_types Comma_Separated[Type]
+    returns_nothing
+
+    # This routine will append {types} to {code_chunk}.
+
+    types :@= code_chunk.types
+    size :@= comma_types.size
+    index :@= 0
+    while index < size
+	call append@(types, comma_types[index])
+	index := index + 1
+
+
+routine create@Code_Chunk
+    takes_nothing
+    returns Code_Chunk
+
+    code_chunk :@= new@Code_Chunk()
+    #code_chunk.types is already initialized:
+    code_chunk.code := new@String()
+    code_chunk.contains_call := false@Logical
+    return code_chunk
+
+
+routine decimal_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes number Unsigned
+    returns_nothing
+
+    # This routine will append {number} to {code_chunk}.
+
+    call buffer_append@(number, code_chunk.code)
+
+
+routine f@Code_Chunk
+    takes code_chunk Code_Chunk
+    returns String
+
+    # This routine will format {code_chunk} and return the resulting string.
+
+    expanded :@= false@Logical
+    value :@= field_next@Format()
+    size :@= value.size
+    index :@= 0
+    while index < size
+	character :@= value[index]
+	if character = 'x'
+    	    expanded := true@Logical
+	index := index + 1
+    call trim@(value, 0)
+    
+    if expanded    
+	if code_chunk == null@Code_Chunk
+	    call string_append@(value, "{?? <>}")
+	else
+	    call string_append@(value, form@("{ %s% <%t%> }") %
+	      f@(code_chunk.code) / f@(code_chunk.types, f@Type))
+    else
+	call string_append@(value, code_chunk.code)
+    return value
+
+
+routine format@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes buffer String
+    returns_nothing
+
+    # This routine will format {code_chunk} into {buffer}.
+
+    anchor :@= format_begin@(buffer)
+    expanded :@= false@Logical
+
+    size :@= buffer.size
+    index :@= anchor + 1
+    character :@= ' '
+    while index < size && character != '%'
+	character := buffer[index]
+	if character = 'x'
+    	    expanded := true@Logical
+	index := index + 1
+    
+    if expanded    
+	if code_chunk == null@Code_Chunk
+	    call string_gap_insert@(buffer, "{?? <>}")
+	else
+	    call string_gap_insert@(buffer, "{'")
+	    call string_gap_insert@(buffer, code_chunk.code)
+	    call string_gap_insert@(buffer, "' <")
+	    prefix :@= ""
+	    types :@= code_chunk.types
+	    size := types.size
+	    index := 0
+	    while index < size
+		call string_gap_insert@(buffer, prefix)
+		call string_gap_insert@(types[index], buffer)
+		prefix := ", "
+		index := index + 1
+	    call string_gap_insert@(buffer, ">}")
+    else
+	call string_gap_insert@(buffer, code_chunk.code)
+
+    call format_end@(buffer, anchor)
+
+
+routine space_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    returns_nothing
+
+    # This routine will append a space to {code_chunk}.
+
+    call string_append@(code_chunk.code, " ")
+
+
+routine string_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes text String
+    returns_nothing
+
+    # This routine will append {text} to {code_chunk}.
+
+    call string_append@(code_chunk.code, text)
+
+
+routine typed_name_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes typed_name Typed_Name
+    returns_nothing
+
+    # This routine will append {routine_name} to {code_chunk}.
+
+    call string_append@(code_chunk, base_name@Type(typed_name.type))
+    call string_append@(code_chunk, "__")
+    call string_append@(code_chunk, typed_name.name.value)
+
+
+routine type@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes expression Expression
+    returns Type
+
+    # This routine will return the type of {code_chunk}.  If {code_chunk}
+    # does not have a single type, ane error is issued using {expression}.
+
+    type :@= null@Type
+    if code_chunk !== null@Code_Chunk
+	types :@= code_chunk.types
+	size :@= types.size
+	if size = 1
+	    type := types[0]
+	else
+	    compiler :@= one_and_only@Compiler()
+	    call log@(compiler, expression.location,
+	      form@("Expression %e% evaluates to %d% types") %
+	      f@(expression) /  f@(size))
+    return type
+	  
+
+routine type_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes type Type
+    returns_nothing
+
+    # This routine will append {type} to {code_chunk}.
+
+    call append@(code_chunk.types, type)
+
+
+routine types_append@Code_Chunk
+    takes code_chunk Code_Chunk
+    takes types Array[Type]
+    returns_nothing
+
+    # This routine will append {types} to {code_chunk}.
+
+    call array_append@(code_chunk.types, types)
+
+
+# {Binary_Expression} routines:
+
+routine c_emit@Binary_Expression
+    takes binary Binary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will output the C code for {binary} using {compiler}.
+
+    left_expression :@= parenthesis_remove@(binary.left)
+    operator :@= binary.operator
+    right_expression :@= parenthesis_remove@(binary.right)
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>c_emit@Binary_Expression(%e% %s% %e%)\n\") %
+	  f@(level) % f@(left_expression) % f@(operator.value) / 
+	  f@(right_expression), error@Out_Stream)
+
+    code_chunk :@= null@Code_Chunk
+    is_conditional :@= false@Logical
+    is_equals :@= false@Logical
+    is_identical :@= false@Logical
+    is_not_identical :@= false@Logical
+    is_relational :@= false@Logical
+
+    switch operator.lexeme
+      case assign
+	code_chunk := assign_c_emit@(binary, compiler, level + 1)
+      case at_sign
+	code_chunk :=
+	  typed_name_access_c_emit@(binary, compiler, level + 1)
+      case dot
+	code_chunk := field_access_c_emit@(binary,compiler, level + 1)
+      case conditional_and, conditional_or
+	is_relational := true@Logical
+	is_conditional := true@Logical
+      case define_assign
+	code_chunk := define_assign_c_emit@(binary, compiler, level + 1)
+      case not_equal, less_than, less_than_or_equal, greater_than,
+       greater_than_or_equal
+	is_relational := true@Logical
+      case equals
+	is_relational := true@Logical
+	is_equals := true@Logical
+      case identical
+	is_relational := true@Logical
+	is_equals := true@Logical
+	is_identical := true@Logical
+      case not_identical
+	is_relational := true@Logical
+	is_not_identical := true@Logical
+      default
+	call put@(form@("Need some code for %l%\n\") /
+	  f@(operator.lexeme), error@Out_Stream)
+	assert false@Logical
+
+    if is_relational
+	left_code_chunk :@= c_emit@(left_expression, compiler, level + 1)
+	right_code_chunk :@= c_emit@(right_expression, compiler, level + 1)
+	left_type :@= type@(left_code_chunk, left_expression)
+	right_type :@= type@(right_code_chunk, right_expression)
+	if left_type !== null@Type && right_type !== null@Type
+	    if equal@(left_type, right_type)
+		left_type_base :@= base_name@(left_type)
+		define :@= lookup@(compiler.define_table, left_type_base)
+		if define !== null@Define_Declaration &&
+	          is_enumeration@(define) || is_number_scalar@Type(left_type)
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk, "(")
+		    call chunk_append@(code_chunk, left_code_chunk)
+		    call space_append@(code_chunk)
+		    if is_equals
+			call string_append@(code_chunk, "==")
+		    else_if is_not_identical
+			call string_append@(code_chunk, "!=")
+		    else
+			if is_conditional
+			    call string_append@(code_chunk, " ")
+			    call string_append@(code_chunk, operator.value)
+			    call string_append@(code_chunk, " ")
+			else
+			    call string_append@(code_chunk, operator.value)
+		    call space_append@(code_chunk)
+		    call chunk_append@(code_chunk, right_code_chunk)
+		    call string_append@(code_chunk, ")")
+		    call type_append@(code_chunk, compiler.type_logical)
+		else_if is_identical || is_not_identical
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk, "(")
+		    call chunk_append@(code_chunk, left_code_chunk)
+		    if is_identical
+			call string_append@(code_chunk, " == ")
+		    else
+			call string_append@(code_chunk, " != ")
+		    call chunk_append@(code_chunk, right_code_chunk)
+		    call type_append@(code_chunk, compiler.type_logical)
+		    call string_append@(code_chunk, ")")
+		else		
+		    call log@(compiler, operator,
+		      form@("%e% is not scalar type (Character, ...)") /
+		      f@(left_expression))
+	    else
+		call log@(compiler, operator,
+		  form@("%e% %s% %e% Type mismatch (%t% != %t%)") %
+		   f@(left_expression) % f@(operator.value) %
+		   f@(right_expression) % f@(left_type) / f@(right_type))
+    if code_chunk == null@Code_Chunk
+	code_chunk := create@Code_Chunk()
+
+    if tracing
+	call put@(form@("%p%<=c_emit@Binary_Expression(%e% %s% %e%)=>%c%\n\") %
+	  f@(level) % f@(left_expression) % f@(operator.value) %
+	  f@(right_expression) / f@(code_chunk), error@Out_Stream)
+
+    return code_chunk
+
+
+routine assign_c_emit@Binary_Expression
+    takes binary Binary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    left_expression :@= parenthesis_remove@(binary.left)
+    assign :@= binary.operator
+    right_expression :@= parenthesis_remove@(binary.right)
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>assign_c_emit@Binary_Expr(%e% %s% %e%)\n\") %
+	  f@(level) % f@(left_expression) % f@(assign.value) /
+	  f@(right_expression), error@Out_Stream)
+
+    assert assign.lexeme = assign@Lexeme
+
+    code_chunk :@= null@Code_Chunk
+    switch left_expression.kind
+      case binary
+	code_chunk := binary_assign_c_emit@(binary, compiler, level + 1)
+      case bracket
+	code_chunk := array_assign_c_emit@(binary, compiler, level + 1)
+      case symbol
+	code_chunk := symbol_assign_c_emit@(binary, compiler, level + 1)
+      default
+	call log@(compiler, left_expression.location,
+          form@("%e% must be either a symbol, field, or array assignment") /
+	  f@(left_expression))
+
+    if tracing
+	call put@(form@("%p%<=assign_c_emit@Bin_Expr(%e% %s% %e%) => %c%\n\") %
+	  f@(level) % f@(left_expression) % f@(assign.value) %
+	  f@(right_expression) / f@(code_chunk), error@Out_Stream)
+    return code_chunk
+
+
+routine define_assign_c_emit@Binary_Expression
+    takes binary Binary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    left_expression :@= parenthesis_remove@(binary.left)
+    define_assign :@= binary.operator
+    right_expression :@= parenthesis_remove@(binary.right)
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>define_assign_c_emit@Bin_Expr(%e% %s% %e%)\n\") %
+	  f@(level) % f@(left_expression) % f@(define_assign.value) /
+	  f@(right_expression), error@Out_Stream)
+
+    assert define_assign.lexeme = define_assign@Lexeme
+
+    code_chunk :@= null@Code_Chunk
+    switch left_expression.kind
+      case symbol
+	code_chunk := create@Code_Chunk()
+	assert left_expression.kind = symbol@Expression_Kind
+	symbol :@= left_expression.symbol
+	right_code_chunk :@= c_emit@(right_expression, compiler, level + 1)
+	right_type :@= type@(right_code_chunk, right_expression)
+	if right_type !== null@Type
+	    variable_name :@= symbol.value
+	    variable :@= variable_lookup@(compiler, variable_name)
+	    if variable == null@Variable
+		# First time this variable is being defined for the first time:
+		variable := variable_insert@(compiler,
+		  variable_name, right_type, false@Logical)
+		variable.level := compiler.level
+
+		# Generate the assignment
+ 		call string_append@(code_chunk, form@("%k% = %c%") %
+		  f@(variable_name) / f@(right_code_chunk))
+	    else
+		# Variable previously defined:
+		if equal@(variable.type, right_type)
+		    if variable.level = 0xffffffff
+			# We are not duplicating a variable at the same scope:
+			variable.level := compiler.level
+
+			# Generate the assignment:
+			call string_append@(code_chunk, form@("%k% = %c%") %
+			  f@(variable_name) / f@(right_code_chunk))
+		    else
+			call log@(compiler, define_assign,
+			  form@("Variable %qv% defined earlier") /
+			  f@(variable_name))
+		else
+		    call log@(compiler, define_assign,
+		      form@("Previous variable %qv% type %t% != expr %e% type %dt%") %
+		      f@(variable_name) % f@(variable.type) %
+		      f@(right_expression) / f@(right_type))
+
+      default
+	call log@(compiler, define_assign,
+          form@("%e% is not a symbol; only a variable can be to the left of :@=") /
+	  f@(left_expression))
+
+    if tracing
+	call put@(form@("%p%<=define_assign_c_emit@Bin_Expr(%e% %s% %e%) => %c%\n\") %
+	 f@(level) % f@(left_expression) % f@(define_assign.value) %
+	 f@(right_expression) / f@(code_chunk), error@Out_Stream)
+    return code_chunk
+
+
+routine binary_assign_c_emit@Binary_Expression
+    takes assign_expression Binary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    left_expression :@= parenthesis_remove@(assign_expression.left)
+    assign :@= assign_expression.operator
+    right_expression :@= parenthesis_remove@(assign_expression.right)
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>binary_assign_c_emit@Bin_Expr(%e% %s% %e%)\n\") %
+	  f@(level) % f@(left_expression) % f@(assign.value) /
+	  f@(right_expression), error@Out_Stream)
+
+    switch assign.lexeme
+      case assign, define_assign
+	do_nothing
+      default
+	assert false@Logical
+
+    code_chunk :@= create@Code_Chunk()
+    assert left_expression.kind = binary@Expression_Kind
+    binary_expression :@= left_expression.binary
+    right_code_chunk :@= c_emit@(right_expression, compiler, level + 1)
+
+    switch binary_expression.operator.lexeme
+      case dot
+	# {record_expression}.{field_expression} := {right_expression}
+	record_expression :@= binary_expression.left
+	field_expression :@= binary_expression.right
+	switch field_expression.kind
+	  case symbol
+	    symbol :@= field_expression.symbol
+	    field_name :@= symbol.value
+	    record_code_chunk :@=
+	      c_emit@(record_expression, compiler, level + 1)
+	    record_type :@= type@(record_code_chunk, record_expression)
+	    right_type :@= type@(right_code_chunk, right_expression)
+	    if record_type !== null@Type && right_type !== null@Type
+		record_type_base :@= base_name@(record_type)
+		define :@= lookup@(compiler.define_table, record_type_base)
+		if define == null@Define_Declaration
+		    call log@(compiler, record_expression.location,
+		      form@("%e% is not a known record type") /
+		      f@(record_expression))
+		else
+		    if is_registers@(define)
+			if tracing
+			    call d@(form@("%p%%v% is registers\n\") %
+			      f@(level) / f@(record_type_base))
+			# We are assigning to an I/O register:
+			bit_byte_name :@=
+			  register_bit_byte_name@(define, field_name)
+			bit_name :@= register_bit_name@(define, field_name)
+			byte_name :@= register_byte_name@(define, field_name)
+			if bit_byte_name !== null@String &&
+			  bit_name !== null@String
+			    right_code :@= right_code_chunk.code
+			    if equal@(right_code, "1")
+				call string_append@(code_chunk,
+				  form@("%s% |= 1<<%s%") %
+				  f@(bit_byte_name) / f@(bit_name))
+			    else_if equal@(right_code, "0")
+				call string_append@(code_chunk,
+				  form@("%s% &= ~(1<<%s%)") %
+				  f@(bit_byte_name) / f@(bit_name))
+			    else
+				call string_append@(code_chunk,
+				  form@("if (%c%) { %s% |= (1<<%s%); } else { %s% &= ~(1<<%s%); }") %
+				    f@(right_code_chunk) %
+				    f@(bit_byte_name) % f@(bit_name) %
+				    f@(bit_byte_name) / f@(bit_name))
+			else_if byte_name !== null@String
+			    call string_append@(code_chunk,
+			      form@("%s% = %c") %
+			      f@(byte_name) / f@(right_code_chunk))
+			else
+			    call log@(compiler, symbol,
+			      form@("Field name %s% is not recoginized") /
+			      f@(field_name))
+		    else
+			if tracing
+			    call d@(form@("%p%%v% is record\n\") %
+			      f@(level) / f@(record_type_base))
+			record_field_type :@=
+			  record_field_type@(define, field_name)
+			record_field_name :@=
+			  record_field_name@(define, field_name)
+			variant_field_type :@=
+			  variant_field_type@(define, field_name)
+			#FIXME: deal with __set routines!!!
+			if record_field_type == null@Type &&
+			  variant_field_type == null@Type
+			    call log@(compiler, symbol,
+			      form@("Field %ds% does not exist for type %t%") %
+			      f@(field_name) / f@(record_type))
+			else_if record_field_type !== null@Type
+			    if equal@(record_field_type, right_type)
+				# Everything is cool; emit the code:
+				code_chunk := create@Code_Chunk()
+				call string_append@(code_chunk,
+				  form@("%c%->%k% = %c%") %
+				  f@(record_code_chunk) %
+				  f@(record_field_name) / f@(right_code_chunk))
+			    else
+				call log@(compiler, assign,
+				  form@("Type mismatch: %t% (%e%) != %t% (%e%)") %
+				  f@(record_field_type) % f@(left_expression) %
+				  f@(right_type) / f@(right_expression))
+			else_if variant_field_type !== null@Type
+			    variant :@= variant_lookup@(define, field_name)
+			    assert variant !== null@Variant_Clause
+			    if equal@(variant_field_type, right_type)
+				# Everything is cool; emit the code:
+				#FIXME: Code evaluates {record_code_chunk}
+				# twice!!!
+				kind_name :@= variant.kind_name.value
+				code_chunk := create@Code_Chunk()
+				call string_append@(code_chunk,
+				  form@("%c%->%k% = %s%___%s%; %c%->%k%__union.%k% = %c%") %
+				  f@(record_code_chunk) % f@(kind_name) %
+				  f@(base_name@(variant.kind_type)) %
+				  f@(field_name) % f@(record_code_chunk) %
+				  f@(kind_name) % f@(field_name) /
+				  f@(right_code_chunk))
+			    else
+				call log@(compiler, assign,
+				  form@("Type mismatch: %t% (%e%) != %t% (%e%)") %
+				  f@(variant_field_type) % f@(left_expression) %
+				  f@(right_type) / f@(right_expression))
+			else
+			    assert false@Logical
+	  default
+	    call log@(compiler, field_expression.location,
+	      form@("%e% must be a simple field name") / f@(field_expression))
+      case at_sign
+	# {name_expression}.{type_expression} := {right_expression}
+	name_expression :@= binary_expression.left
+	type_expression :@= binary_expression.right
+	type :@= type_convert@(type_expression, compiler, level)
+	if type !== null@Type
+	    # We have the type:
+	    switch name_expression.kind
+	      case symbol
+		name :@= name_expression.symbol
+		typed_name_object :@=
+		  type_name_lookup@(compiler, name.value, type, assign)
+		if typed_name_object !== null@Typed_Name_Object
+		    switch typed_name_object.kind
+		      case global, external
+			# We have a global variable; how cute:
+			call string_append@(code_chunk,
+			  form@("%s%__%s% = %c%") % f@(base_name@(type)) %
+			  f@(name.value) / f@(right_code_chunk))
+		      case external_named
+			# We have a global variable; how cute:
+			external_named :@= typed_name_object.external_named
+			raw_string :@= string_convert@(external_named.string)
+			call string_append@(code_chunk, form@("%s% = %c%") %
+			  f@(raw_string) / f@(right_code_chunk))
+		      default
+			call log@(compiler, assign,
+			  form@("%s%@%t% is not a global/external variable") %
+			    f@(name) / f@(type))
+	      default
+		# No name:
+		call log@(compiler, name_expression.location,
+		  form@("%e% is not a simple name to left of '@'") /
+		  f@(name_expression))
+      default
+	call log@(compiler, left_expression.location,
+	  form@("%e% is not allowed to the left of an assignemt") /
+	    f@(left_expression))
+
+    if tracing
+	call put@(form@("%p%=>binary_assign_c_emit@Bin_Expr(%e% %s% %e%) => %c%\n\") %
+	  f@(level) % f@(left_expression) % f@(assign.value) %
+	  f@(right_expression) / f@(code_chunk), error@Out_Stream)
+    return code_chunk
+
+
+routine array_assign_c_emit@Binary_Expression
+    takes binary Binary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    left_expression :@= parenthesis_remove@Expression(binary.left)
+    assign :@= binary.operator
+    right_expression :@= parenthesis_remove@Expression(binary.right)
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>array_assign_c_emit@Bin_Expr(%e% %s% %e%)\n\") %
+	  f@(level) % f@(left_expression) % f@(assign.value) /
+	  f@(right_expression), error@Out_Stream)
+
+    switch assign.lexeme
+      case assign, define_assign
+	do_nothing
+      default
+	assert false@Logical
+
+    code_chunk :@= create@Code_Chunk()
+    assert left_expression.kind = bracket@Expression_Kind
+    bracket_expression :@= left_expression.bracket
+    open_bracket :@= bracket_expression.open_bracket
+    if open_bracket.lexeme = open_invoke@Lexeme
+	call log@(compiler, left_expression.location,
+	  form@("Can not assign to a routine invocation (%e%)") /
+	  f@(left_expression))
+    else
+	assert open_bracket.lexeme = open_bracket@Lexeme
+	right_code_chunk :@= c_emit@(right_expression, compiler, level + 1)
+
+	expression1 :@= bracket_expression.expression1
+	expression2 :@= bracket_expression.expression2
+	code_chunk1 :@= c_emit@(expression1, compiler, level + 1)
+	code_chunk2 :@= c_emit@(expression2, compiler, level + 1)
+	type1 :@= type@(code_chunk1, expression1)
+	type1_base :@= base_name@(type1)
+	type2 :@= type@(code_chunk2, expression2)
+	right_type :@= type@(right_code_chunk, right_expression)
+	if type1 !== null@Type &&
+	  type2 !== null@Type && right_type !== null@Type
+	    typed_name_object :@=
+	      type_name_routine_lookup@(compiler,
+	      "store1", type1, open_bracket)
+	    if typed_name_object !== null@Typed_Name_Object
+		# Found {routine}; now check types:
+		routine :@= typed_name_object.routine
+		c_array_access :@= c_array_access@(routine)
+		prototype :@= prototype_extract@(routine)
+		routine_type :@= prototype.routine
+		actual_takes_types :@= routine_type.takes_types
+		prototype := replace@(prototype,
+		  routine.typed_name.type, type1, assign, level + 1)
+		routine_type := prototype.routine
+
+		takes_types :@= routine_type.takes_types
+		return_types :@= routine_type.return_types
+		if takes_types.size != 3
+		    call log@(compiler, assign,
+		      form@("Routine store1@%t% has %d% arguments instead of 3") %
+		     f@(type1) / f@(takes_types.size))
+		else_if return_types.size != 0
+		    call log@(compiler, assign,
+		      form@("Routine store1@%t% has %d% returns instead of 0") %
+		      f@(type1) / f@(return_types.size))
+		else_if !equal@(takes_types[0], type1)
+		    call log@(compiler, assign,
+		      form@("Routine store1@%t% wants arg 1 to be %t% not %t%") %
+		      f@(type1) % f@(takes_types[0]) / f@(type1))
+		else_if !equal@(takes_types[1], type2)
+		    call log@(compiler, assign,
+		      form@("Routine store1@%t% wants arg 2 to be %t% not %t%") %
+		      f@(type1) % f@(takes_types[1]) / f@(type2))
+		else_if !equal@(takes_types[2], right_type)
+		    call log@(compiler, assign,
+		      form@("Routine store1%t% wants arg 3 to be %t% not %t%") %
+		      f@(type1) % f@(takes_types[2]) / f@(right_type))
+		else
+		    # Types match up:
+		    prefix :@= ""
+		    postfix :@= ""
+		    if equal@(actual_takes_types[2], takes_types[2])
+			do_nothing
+		    else_if is_scalar@Type(actual_takes_types[2])
+			prefix := "((CAST)("
+			postfix := ")).xpointer"
+		    else
+			prefix := "(void *)("
+			postfix := ")"
+
+		    code_chunk := create@Code_Chunk()
+		    if c_array_access
+			call string_append@(code_chunk,
+			  form@("%s%[%c%] = %c%") % f@(code_chunk1) %
+			  f@(code_chunk2) / f@(right_code_chunk))
+		    else
+			call string_append@(code_chunk,
+			  form@("%s%__store1(%c%, %c%, %s%%c%%s%)") %
+			  f@(type1_base) % f@(code_chunk1) % f@(code_chunk2) %
+			  f@(prefix) % f@(right_code_chunk) / f@(postfix))
+			code_chunk.contains_call := true@Logical
+
+	#else error already generated
+
+    if tracing
+	call put@(form@("%p%=>array_assign_c_emit@Bin_Expr(%e% %s% %e%)=>%c%\n\") %
+	  f@(level) % f@(left_expression) % f@(assign.value) %
+	  f@(right_expression) / f@(code_chunk), error@Out_Stream)
+    return code_chunk
+
+
+routine equal@Binary_Expression
+    takes binary_expression1 Binary_Expression
+    takes binary_expression2 Binary_Expression
+    returns Logical
+
+    # This routine will return {true@Logical} if {binary_expression1}
+    # is equal to {binary_expression2} and {false@Logical} otherwise.
+
+    result :@= equal@(binary_expression1.left, binary_expression2.left) &&
+      equal@(binary_expression1.operator, binary_expression2.operator) &&
+      equal@(binary_expression1.right, binary_expression2.right)
+    return result
+
+routine symbol_assign_c_emit@Binary_Expression
+    takes binary Binary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    left_expression :@= parenthesis_remove@Expression(binary.left)
+    assign :@= binary.operator
+    right_expression :@= parenthesis_remove@Expression(binary.right)
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>symbol_assign_c_emit@Bin_Expr(%e% %s% %e%)\n\") %
+	  f@(level) % f@(left_expression) % f@(assign.value) /
+	  f@(right_expression), error@Out_Stream)
+
+    switch assign.lexeme
+      case assign, define_assign
+	do_nothing
+      default
+	assert false@Logical
+
+    code_chunk :@= create@Code_Chunk()
+    assert left_expression.kind = symbol@Expression_Kind
+    symbol :@= left_expression.symbol
+    right_code_chunk :@= c_emit@(right_expression, compiler, level + 1)
+    variable_name :@= symbol.value
+    variable :@= variable_lookup@(compiler, variable_name)
+    if variable == null@Variable
+	call log@(compiler, symbol,
+	  form@("Argument/global/local %qv% is not defined") /
+	  f@(variable_name))
+    else
+	right_type :@= type@Code_Chunk(right_code_chunk, right_expression)
+	if right_type !== null@Type
+	    if !equal@(variable.type, right_type)
+		call log@(compiler, assign,
+		  form@("Variable %qv% type %t% != expression %e% type %dt%") %
+		  f@(variable_name) % f@(variable.type)% f@(right_expression) /
+		  f@(right_type))
+	    if variable.level = 0xffffffff
+		variable.level := compiler.level
+
+	    call string_append@(code_chunk, form@("%k% = %c%") %
+	      f@(variable_name) / f@(right_code_chunk))
+
+    if tracing
+	call put@(form@("%p%<=symbol_assign_c_emit@Bin_Expr(%e% %s% %e%)=>%c%\n\") %
+	  f@(level) % f@(left_expression) % f@(assign.value) %
+	  f@(right_expression) / f@(code_chunk), error@Out_Stream)
+    return code_chunk
+
+
+routine typed_name_access_c_emit@Binary_Expression
+    takes binary Binary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will return a {Code_Chunk} for a typed name in {binary}.
+
+    left_expression :@= parenthesis_remove@(binary.left)
+    at_sign :@= binary.operator
+    right_expression :@= parenthesis_remove@(binary.right)
+
+    code_chunk :@= null@Code_Chunk
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    #tracing := true@Logical
+    if tracing
+	call put@(form@("%p%=>typed_name_access_c_emit@Binary_Expression(%e% %s% %e%)\n\") %
+	  f@(level) % f@(left_expression) % f@(at_sign.value) /
+	  f@(right_expression), error@Out_Stream)
+
+    assert at_sign.lexeme = at_sign@Lexeme
+
+    switch left_expression.kind
+      case symbol
+	symbol :@= left_expression.symbol
+	left_name :@= symbol.value
+	right_type :@= type_convert@(right_expression, compiler, level + 1)
+
+	if tracing
+	    call put@(form@("%p%l_name=%ds% r_exp=%e% r_type=%t%\n\") %
+	      f@(level) % f@(left_name) % f@(right_expression) /
+	      f@(right_type), error@Out_Stream)
+
+	if right_type !== null@Type
+	    typed_name_object :@= type_name_lookup@(compiler,
+	      symbol.value, right_type, symbol)
+	    if typed_name_object == null@Typed_Name_Object
+		# Error already generated:
+		if tracing
+		    call put@("Lookup failed\n\", error@Out_Stream)
+	    else
+		full_name :@= new@String()
+		call string_append@(full_name, form@("%s%__%s%") %
+		  f@(base_name@(right_type)) / f@(left_name))
+
+		switch typed_name_object.kind
+		  all_cases_required
+		  case routine
+		    code_chunk := create@Code_Chunk()
+		    routine :@= typed_name_object.routine
+		    prototype :@= prototype_extract@(routine)
+		    assert prototype !== null@Type
+		    prototype := replace@(prototype,
+		      routine.typed_name.type,
+		      right_type, at_sign, level + 1)
+		    call type_append@(code_chunk, prototype)
+		    external_routine :@= external@(routine)
+		    if external_routine == null@String
+			call string_append@(code_chunk, full_name)
+		    else
+			call string_append@(code_chunk, external_routine)
+		  case external
+		    external :@= typed_name_object.external
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk, full_name)
+		    call type_append@(code_chunk, external.type)
+		  case external_named
+		    external_named :@= typed_name_object.external_named
+		    raw_string :@= string_convert@(external_named.string)
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk, raw_string)
+		  case global
+		    global :@= typed_name_object.global
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk, full_name)
+		    call type_append@(code_chunk, global.type)
+		  case constant
+		    # The constant is defined as a #define in the .h file:
+		    constant :@= typed_name_object.constant
+		    code_chunk := create@Code_Chunk()
+		    call typed_name_append@(code_chunk, constant.typed_name)
+		    call type_append@(code_chunk, constant.type)
+      default
+	call log@(compiler, left_expression.location,
+	  form@("%e% must a routine/global/external name") /
+	  f@(left_expression))
+
+    if tracing
+	call put@(form@("%p%<=typed_name_access_c_emit@Bin_Expr(%e% %s% %e%) => %x%\n\") %
+	  f@(level) % f@(left_expression) % f@(at_sign.value) %
+	  f@(right_expression) / f@(code_chunk), error@Out_Stream)
+    return code_chunk
+
+
+routine field_access_c_emit@Binary_Expression
+    takes binary Binary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will return the code for accessing a field in {binary}
+    # as a {Code_Chunk}.
+
+    left_expression :@= parenthesis_remove@(binary.left)
+    dot :@= binary.operator
+    right_expression :@= parenthesis_remove@(binary.right)
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>field_access_c_emit@Binary_Expression(%e% %s% %e%)\n\") %
+	  f@(level) % f@(left_expression) % f@(dot.value) /
+	  f@(right_expression), error@Out_Stream)
+
+    assert dot.lexeme = dot@Lexeme
+
+    code_chunk :@= null@Code_Chunk
+    left_code_chunk :@= c_emit@(left_expression, compiler, level + 1)
+    switch right_expression.kind
+      case symbol
+	symbol :@= right_expression.symbol
+	field_name :@= symbol.value
+	if tracing
+	    call put@(form@("%p%field=%s%\n\") %
+	      f@(level) / f@(field_name), error@Out_Stream)
+	left_type :@= type@(left_code_chunk, left_expression)
+	if left_type !== null@Type
+	    left_type_base :@= base_name@(left_type)
+	    define :@= lookup@(compiler.define_table, left_type_base)
+	    if define == null@Define_Declaration
+		call log@(compiler, left_expression.location,
+		  form@("Type %t% is not defined for %e%") %
+		  f@(left_type) / f@(left_expression))
+	    else_if is_registers@(define)
+		do_nothing
+		bit_byte_name :@= register_bit_byte_name@(define, field_name)
+		bit_name :@= register_bit_name@(define, field_name)
+		byte_name :@= register_byte_name@(define, field_name)
+		if bit_name !== null@String && bit_byte_name !== null@String
+		    # We have a bit register access:
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk,
+		      form@("((%s% & (1<<%s%)) != 0)") %
+		      f@(bit_byte_name) / f@(bit_name))
+		    call type_append@(code_chunk, compiler.type_logical)
+		else_if byte_name !== null@String
+		    # We have a byte register access:
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk, byte_name)
+		    call type_append@(code_chunk, compiler.type_byte)
+		else
+		    call log@(compiler, symbol,
+		      form@("%s% is not a valid register/bit name") /
+		      f@(field_name))
+	    else
+		# We have a type to match:
+		record_field_type :@= record_field_type@(define, field_name)
+		variant_field_type :@= variant_field_type@(define, field_name)
+		if record_field_type == null@Type &&
+		  variant_field_type == null@Type
+		    # Let's try for {field}_get@{left_type}:
+		    routine_name :@= new@String()
+		    call string_append@(routine_name,
+		      form@("%s%_get") / f@(field_name))
+		    routine_name := read_only_copy@(routine_name)
+		    typed_name_object :@= type_name_routine_lookup@(compiler,
+		      routine_name, left_type, dot)
+		    if typed_name_object !== null@Typed_Name_Object
+			if tracing
+			    call put@(form@("%p%Found %s%@%t%\n\") %
+			      f@(level) % f@(routine_name) /
+			      f@(left_type), error@Out_Stream)
+
+			routine :@= typed_name_object.routine
+			prototype :@= prototype_extract@(routine)
+			assert prototype !== null@Type
+			prototype := replace@(prototype,
+			  routine.typed_name.type, left_type, dot, level + 1)
+			if prototype == null@Type
+			    # An error has already been generated:
+			    do_nothing
+			else
+			    assert prototype.kind = routine@Type_Kind
+			    routine_type :@= prototype.routine
+			    if tracing
+				call put@(form@("%p%prototype=%t%\n\") %
+				  f@(level) / f@(prototype), error@Out_Stream)
+			    return_types :@= routine_type.return_types
+			    takes_types :@= routine_type.takes_types
+			    if return_types.size != 1
+				call log@(compiler, dot,
+				  form@("%s%@%t% returns %d% values (1 needed)") %
+				  f@(routine_name) % f@(left_type) /
+				  f@(return_types.size))
+			    else_if takes_types.size != 1
+				call log@(compiler, dot,
+				  form@("%s%@%t% takes %d% arguments (1 needed)") %
+				    f@(routine_name) % f@(left_type) /
+				    f@(takes_types.size))
+			    else
+				# Success:
+				return_type :@= return_types[0]
+				argument_type :@= takes_types[0]
+				if tracing
+				    call put@(form@("%p%arg_type=%t% return_type=%t%\n\") %
+				      f@(level) % f@(argument_type) / 
+				      f@(return_type), error@Out_Stream)
+				if !equal@(argument_type, left_type)
+				    call log@(compiler,
+				      left_expression.location,
+				      form@("%s%@%t% needs %t% (not %t%) as arg.") %
+				      f@(routine_name) % f@(left_type) %
+				      f@(argument_type) / f@(left_type))
+				else
+				    code_chunk := create@Code_Chunk()
+				    call string_append@(code_chunk,
+				      form@("%s%__%s%(%c%)") %
+				      f@(base_name@(left_type)) %
+				      f@(routine_name) / f@(left_code_chunk))
+				    call type_append@(code_chunk, return_type)
+				    code_chunk.contains_call := true@Logical
+		else_if record_field_type !== null@Type
+		    # Let's do a "e->field":
+		    record_field_name :@=
+		      record_field_name@(define, field_name)
+		    code_chunk := create@Code_Chunk()
+		    final_record_field_type :@= replace@(record_field_type,
+		      define.type, left_type, dot, level + 1)
+		    if tracing
+			call put@(form@("%p%record_type= %t% => %t%\n\") %
+			  f@(level) % f@(record_field_type) /
+			  f@(final_record_field_type), error@Out_Stream)
+		    if !equal@(record_field_type, final_record_field_type)
+			# Add the cast:
+			call string_append@(code_chunk, form@("(%s%)") /
+			  f@(base_name@(final_record_field_type)))
+
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk, form@("%c%->%k%") %
+		      f@(left_code_chunk) / f@(record_field_name))
+		    call type_append@(code_chunk, final_record_field_type)
+		else_if variant_field_type !== null@Type
+		    variant :@=
+		      variant_lookup@Define_Declaration(define, field_name)
+
+		    # Now generate the code:
+		    # ((%e%->%k% == %s%___s%) ? %e%->%s%__union.%k% : 
+		    # System__variant_fail(file, line_number))
+
+		    if tracing
+			call put@(form@("%p%variant_type=%t%\n\") %
+			  f@(level) / f@(variant_field_type), error@Out_Stream)
+
+		    #FIXME:  We are evaluating {left_code_chunk} twice!!!
+
+		    operator :@= binary.operator		
+		    label :@= "object"
+		    if is_scalar@Type(variant_field_type)
+		        label := "scalar"
+		    kind_name :@= variant.kind_name.value
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk,
+		      form@("((%c%->%k% == %s%___%s%) ? %c%->%k%__union.%k% : (%s%)System__variant_%s%_fail((String)%e%, %d%))") %
+		      f@(left_code_chunk) % f@(kind_name) %
+		      f@(base_name@(variant.kind_type)) % f@(field_name) %
+		      f@(left_code_chunk) % f@(kind_name) % f@(field_name) %
+		      f@(c_base_name@(variant_field_type)) % f@(label) %
+		      f@(operator.file.name) / f@(operator.line_number))
+		    call type_append@(code_chunk, variant_field_type)
+		else
+		    assert false@Logical
+      default
+	call log@(compiler, right_expression.location,
+	  form@("%e should be a simple field name") / f@(right_expression))
+
+    if code_chunk == null@Code_Chunk
+	code_chunk := create@Code_Chunk()
+
+    if tracing
+	call put@(form@("%p%<=field_access_c_emit@Binary_Expression(%e% %s% %e%) => %x%\n\") %
+	  f@(level) % f@(left_expression) % f@(dot.value) %
+	  f@(right_expression) / f@(code_chunk), error@Out_Stream)
+    return code_chunk
+
+
+routine location_get@Expression
+    takes expression Expression
+    returns Token
+
+    # This routine will return a location {Token} for {expression}.
+
+    location :@= null@Token
+    switch expression.kind
+      all_cases_required
+      case binary
+	binary_expression :@= expression.binary
+	location := binary_expression.operator
+      case bracket
+	bracket_expression :@= expression.bracket
+	location := bracket_expression.open_bracket
+      case character
+	location := expression.character
+      case float_number
+	location := expression.float_number
+      case number
+	location := expression.number
+      case list
+	list_expression :@= expression.list
+	location := list_expression.location
+      case parenthesis
+	parenthesis_expression :@= expression.parenthesis
+      case string
+	location := expression.string
+      case symbol
+	location := expression.symbol
+      case unary
+	unary_expression :@= expression.unary
+	location := unary_expression.operator
+      case error
+	error :@= expression.error
+	tokens :@= error.tokens
+	if tokens.size != 0
+	    location := tokens[0]
+    return location
+
+
+routine type_convert@Expression
+    takes expression Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Type
+
+    # This routine will treat {expression} as a {Type} and return it as such.
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>type_convert(%e%)\n\") %
+	  f@(level) / f@(expression), error@Out_Stream)
+
+    type :@= null@Type
+    switch expression.kind
+      case symbol
+	symbol :@= expression.symbol
+	type := new@Type()
+	type.simple := symbol
+      case bracket
+	bracket_expression :@= expression.bracket
+	expression1 :@= bracket_expression.expression1
+	open_bracket :@= bracket_expression.open_bracket
+	expression2 :@= bracket_expression.expression2
+	close_bracket :@= bracket_expression.close_bracket
+
+	errors :@= false@Logical
+	switch expression1.kind
+	  case symbol
+	    symbol := expression1.symbol
+	    if tracing
+		call put@(form@("%p%base_name=%s%\n\") %
+		  f@(level) / f@(symbol.value), error@Out_Stream)
+	    
+	    comma_types :@= new@Comma_Separated[Type]()
+	    sub_types :@= comma_types.sub_types
+	    commas :@= comma_types.commas
+	    switch expression2.kind
+	      case symbol
+		sub_symbol :@= expression2.symbol
+		if tracing
+		    call put@(form@("%p%symbol=%ds%\n\") %
+		      f@(level) / f@(sub_symbol.value), error@Out_Stream)
+		sub_type :@= type_convert@(expression2, compiler, level + 1)
+		assert sub_type !== null@Type
+		call append@(sub_types, sub_type)
+	      case bracket
+		if tracing
+		    call put@(form@("%p%bracket\n\") /
+		      f@(level), error@Out_Stream)
+		sub_type :@= type_convert@(expression2, compiler, level + 1)
+		if sub_type !== null@Type
+		    call append@(sub_types, sub_type)
+	      case list
+		list_expression :@= expression2.list
+		# Make sure each operator in {operators} is a {comma}:
+		if tracing
+		    call put@(form@("%p%list\n\") /
+		      f@(level), error@Out_Stream)
+		operators :@= list_expression.operators
+		size :@= operators.size
+		if size >= 2
+		    operator :@= operators[1]
+		    if operator.lexeme = comma@Lexeme
+			call append@(commas, operator)
+		    else
+			call log@(compiler, operator,
+			  form@("%e% does not separate parameters with commas") /
+			  f@(expression2))
+
+			if tracing
+			    call put@(form@("%p%comma error") /
+			      f@(level), error@Out_Stream)
+			errors := true@Logical
+
+		# Convert each expression in {expressions} to a {parsed_type}:
+		if !errors
+		    expressions :@= list_expression.expressions
+		    operators := list_expression.operators
+		    size := expressions.size
+		    index :@= 0
+		    while index < size
+			sub_expression :@= expressions[index]
+			if tracing
+			    call put@(form@("%p%[%d%]: %e%\n\") %
+			      f@(level) % f@(index) / f@(sub_expression),
+			      error@Out_Stream)
+
+			operator := operators[index]
+			if index != 0
+			    call append@(commas, operator)
+			sub_type := type_convert@(sub_expression,
+			  compiler, level + 1)
+			if sub_type == null@Type
+			    call log@(compiler, sub_expression.location,
+			      form@("%e% is not a correctly formed type") /
+			      f@(sub_expression))
+			    errors := true@Logical
+			call append@(sub_types, sub_type)
+			index := index + 1
+	      default
+		call log@(compiler, expression2.location,
+		  form@("%e% is not a correctly formed type") / f@(expression2))
+	    if !errors
+		parameterized_type :@= new@Parameterized_Type()
+		parameterized_type.name := symbol
+		parameterized_type.open_bracket := open_bracket
+		parameterized_type.sub_types := comma_types
+		parameterized_type.close_bracket := close_bracket
+		type := new@Type()
+		type.parameterized := parameterized_type
+	  default
+	    call log@(compiler, expression1.location,
+	      form@("%e% does not specify a base type") / f@(expression1))
+      default
+	call log@(compiler, expression.location,
+	  form@("%e% is not a valid type") / f@(expression))
+
+    if tracing
+	call put@(form@("%p%<=type_convert(%e%) => %t%\n\") %
+	  f@(level) % f@(expression) / f@(type), error@Out_Stream)
+
+    return type
+
+
+# {Bracket_Expression} routines:
+
+routine c_emit@Bracket_Expression
+    takes bracket Bracket_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will output the C code for {bracket] using {compiler}.
+
+    code_chunk :@= null@Code_Chunk
+    switch bracket.open_bracket.lexeme
+      case open_bracket
+	code_chunk := array_access_c_emit@(bracket, compiler, level)
+      case open_invoke
+	code_chunk := invoke_c_emit@(bracket, compiler, level)
+      case type_invoke
+	code_chunk := type_invoke_c_emit@(bracket, compiler, level)
+      default
+	assert false@Logical
+    return code_chunk
+
+
+routine equal@Bracket_Expression
+    takes bracket_expression1 Bracket_Expression
+    takes bracket_expression2 Bracket_Expression
+    returns Logical
+
+    # This routine will return {true@Logical} if {bracket_expression1} is
+    # equal to {bracket_expression2} and {false@Logical} otherwise.
+
+    result :@= 1t
+    result := equal@(bracket_expression1.expression1,
+      bracket_expression2.expression1) &&
+      equal@(bracket_expression1.open_bracket,
+      bracket_expression2.open_bracket) &&
+      equal@(bracket_expression1.expression2,
+      bracket_expression2.expression2) &&
+      equal@(bracket_expression1.close_bracket,
+      bracket_expression2.close_bracket)
+    return 1t
+
+
+routine type_invoke_c_emit@Bracket_Expression
+    takes bracket Bracket_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will return a {Code_Chunk} for {bracket}, where bracket
+    # is an expression of the form "name@(arg1, ...)".
+
+    left_expression :@= bracket.expression1
+    open_bracket :@= bracket.open_bracket
+    right_expression :@= bracket.expression2
+    close_bracket :@= bracket.close_bracket
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@(
+	 "%p%=>type_invoke_c_emit@bracket_expression(%e% %s% %e% %s%)\n\") %
+	 f@(level) % f@(left_expression) % f@(open_bracket.value) %
+	 f@(right_expression) / f@(close_bracket.value), error@Out_Stream)
+
+    assert open_bracket.lexeme = type_invoke@Lexeme
+    assert close_bracket.lexeme = close_invoke@Lexeme
+
+    code_chunk :@= create@Code_Chunk()
+    switch left_expression.kind
+      case symbol
+	routine_name :@= left_expression.symbol
+	
+	right_expression := comma_listify@(right_expression)
+	list_expression :@= right_expression.list
+	expressions :@= list_expression.expressions
+	expressions_size :@= expressions.size
+	if expressions_size = 0
+	    call log@(compiler, open_bracket,
+	      form@("'%s%@(' must be followed by at least one argument") /
+	      f@(routine_name.value))
+	else
+	    expression0 :@= expressions[0]
+	    code_chunk0 :@= c_emit@(expression0, compiler, level + 1)
+	    type0 :@= type@(code_chunk0, expression0)
+	    if type0 !== null@Type
+		# Lookup the routine:
+
+		typed_name :@= compiler.typed_name
+		typed_name.name := routine_name
+		typed_name.type := type0
+		typed_name_object :@= typed_name_lookup@(compiler,
+		  typed_name, open_bracket)
+		if typed_name_object == null@Typed_Name_Object
+		    # Error message already done:
+		    do_nothing
+		else_if typed_name_object.kind !=
+		  routine@Typed_Name_Object_Kind
+		    call log@(compiler, open_bracket,
+		      form@("%t% is not a routine") / f@(typed_name))
+		else
+		    routine :@= typed_name_object.routine
+		    prototype :@=
+		      prototype_extract@Routine_Declaration(routine)
+		    assert prototype !== null@Type
+		    prototype := replace@(prototype,
+		      routine.typed_name.type,
+		      type0, open_bracket, level + 1)
+
+		    left_code_chunk :@= create@Code_Chunk()
+		    scalar_cast :@= scalar_cast@(routine)
+		    external :@= external@(routine)
+		    if external !== null@String
+			if tracing
+			    call d@(form@("%p%external=%v%\n\") %
+			      f@(level) / f@(external))
+		    	call string_append@(left_code_chunk, external)
+			call routine_call@(compiler, left_expression,
+			  prototype.routine, left_code_chunk, open_bracket,
+			  expressions, code_chunk, level + 1)
+		    else_if scalar_cast !== null@Type
+			if tracing
+			    call d@(form@("%p%scalar=%t%\n\") %
+			      f@(level) / f@(scalar_cast))
+			if expressions_size != 1
+			    call log@(compiler, open_bracket, form@(
+			      "%s@(...) must be called with only 1 argument") /
+			      f@(routine_name.value))
+			else
+			    call string_append@(code_chunk,
+			      form@("((%s%)(%c%))") %
+			      f@(base_name@(scalar_cast)) / f@(code_chunk0))
+			    call type_append@(code_chunk, scalar_cast)
+		    else
+			if tracing
+			    call d@(form@("%p%routine=%v%\n\") %
+			      f@(level) / f@(routine_name.value))
+			call string_append@(left_code_chunk,
+			  form@("%s%__%s%") % f@(base_name@(type0)) /
+			  f@(routine_name.value))
+			call routine_call@(compiler, left_expression,
+			  prototype.routine, left_code_chunk, open_bracket,
+			  expressions, code_chunk, level + 1)
+
+
+      default
+	call log@(compiler, open_bracket,
+	  form@("%e% @(...) is not a routine name") / f@(left_expression))
+
+    if tracing
+	call put@(form@("%p%<=type_invoke_c_emit@bracket_expr(%e% %s% %e% %s%)=>%x%\n\") %
+	  f@(level) % f@(left_expression) % f@(open_bracket.value) %
+	  f@(right_expression) % f@(close_bracket.value) / f@(code_chunk),
+	  error@Out_Stream)
+
+    return code_chunk
+
+
+routine invoke_c_emit@Bracket_Expression
+    takes bracket Bracket_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will return a {Code_Chunk} for {bracket}.
+
+    left_expression :@= bracket.expression1
+    open_bracket :@= bracket.open_bracket
+    right_expression :@= bracket.expression2
+    close_bracket :@= bracket.close_bracket
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>invoke_c_emit@bracket_expression(%e% %s% %e% %s%)\n\") %
+	  f@(level) % f@(left_expression) % f@(open_bracket.value) %
+	  f@(right_expression) / f@(close_bracket.value), error@Out_Stream)
+
+    assert open_bracket.lexeme = open_invoke@Lexeme
+    assert close_bracket.lexeme = close_invoke@Lexeme
+
+    code_chunk :@= create@Code_Chunk()
+    left_code_chunk :@= c_emit@(left_expression, compiler, level + 1)
+    left_type :@= type@(left_code_chunk, left_expression)
+    right_expression := comma_listify@(right_expression)
+    list_expression :@= right_expression.list
+    expressions :@= list_expression.expressions
+    expressions_size :@= expressions.size
+    if left_type !== null@Type
+	switch left_type.kind
+	  case routine
+	    call routine_call@(compiler, left_expression,
+	      left_type.routine, left_code_chunk, open_bracket,
+	      expressions, code_chunk, level + 1)
+	  default
+	    call log@(compiler, left_expression.location,
+	      form@("%qe% is not a routine") / f@(left_expression))
+
+    if tracing
+	call put@(form@("%p%<=invoke_c_emit@bracket_expression(%e% %s% %e% %s%) => %x%\n\") %
+	  f@(level) % f@(left_expression) % f@(open_bracket.value) %
+	  f@(right_expression) % f@(close_bracket.value) / f@(code_chunk),
+	  error@Out_Stream)
+
+    return code_chunk
+
+
+routine routine_call@Compiler
+    takes compiler Compiler
+    takes left_expression Expression
+    takes routine_type Routine_Type
+    takes left_code_chunk Code_Chunk
+    takes open_bracket Token
+    takes expressions Array[Expression]
+    takes code_chunk Code_Chunk
+    takes level Unsigned
+    returns_nothing
+
+    # This routine performs the back-end checking and code generation for a
+    # routine call.  It is shared by {invoke_c_emit@Bracket_Expression()}
+    # and {type_invoke_c_emit@Bracket_Expression()}.
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@(
+	  "%p%=>routine_call@Compiler(*, %e%, %r%, %c%, %qv%, *, *)\n\") %
+	  f@(level) % f@(left_expression) % f@(routine_type) %
+	  f@(left_code_chunk) / f@(open_bracket.value), error@Out_Stream)
+    level1 :@= level + 1
+
+    return_types :@= routine_type.return_types
+    return_types_size :@= return_types.size
+    takes_types :@= routine_type.takes_types
+    takes_types_size :@= takes_types.size
+    return_type :@= null@Type
+    expressions_size :@= expressions.size
+    temporary_name :@= ""
+
+    if takes_types_size = expressions_size
+	need_close_parenthesis :@= false@Logical
+	need_close_cast :@= false@Logical
+	if return_types_size = 1
+	    return_type := return_types[0]
+	    if return_type.replaced
+		if tracing
+		  call d@(form@("%p%return_replaced\n\") / f@(level))
+		if is_parameter@(compiler.current_routine, return_type)
+		    if tracing
+			call d@(form@("%p%parameter\n\") / f@(level))
+		    call string_append@(code_chunk, "((void *)")
+		else_if is_scalar@(return_type)
+		    # Routine is returning a (void *) and we need to
+		    # treat it like a scalar.  We generate the code
+		    # "(temp = (void **)exp, *(scalar *)(&temp))",
+		    # which is real ugly and hard to understand, but
+		    # it works 100% of the time:
+		    if tracing
+			call d@(form@("%p%scalar\n\") / f@(level))
+		    call string_append@(code_chunk, "((void *)")
+		    temporary_name := variable_temporary@(compiler,
+		      compiler.type_pointer_pointer)
+		    call string_append@(code_chunk,
+		      form@("(%s% = (Pointer_Pointer)(") / f@(temporary_name))
+		    need_close_cast := true@Logical
+		else
+		    if tracing
+			call d@(form@("%p%default\n\") / f@(level))
+		    call string_append@(code_chunk, "((")
+		    call string_append@(code_chunk,
+		      base_name@(return_type))
+		    call string_append@(code_chunk, ")")
+		need_close_parenthesis := true@Logical
+
+	call chunk_append@(code_chunk, left_code_chunk)
+	call string_append@(code_chunk, "(")
+	prefix :@= ""
+	index :@= 0
+	while index < expressions_size
+	    take_type :@= takes_types[index]
+	    sub_expression :@= expressions[index]
+	    
+	    # We allow simple enumeration names as arguments, provided they
+	    # do not conflict with a variable/argument name.
+	    sub_code_chunk :@= null@Code_Chunk
+	    switch sub_expression.kind
+	      case symbol
+		symbol :@= sub_expression.symbol
+		symbol_name :@= symbol.value
+		variable :@= variable_lookup@(compiler, symbol_name)
+		if variable == null@Variable
+		    # Not an argument or variable:
+		    typed_name_object :@= type_name_lookup@(compiler,
+		      symbol_name, take_type, null@Token)
+		    if typed_name_object !== null@Typed_Name_Object
+			# We scored a {Typed_Name_Object}:
+
+			#FIXME: We should probably repartition with
+			# {typed_name_access_c_emit@Binary_Expression()}!!!
+
+			switch typed_name_object.kind
+			  case constant
+			    constant :@= typed_name_object.constant
+			    constant_expression :@= constant.expression
+			    sub_code_chunk := 
+			      constant_evaluate@(constant_expression,
+			      compiler, level1)
+			    actual_type :@= type@(sub_code_chunk,
+			      constant_expression)
+			    if actual_type == null@Type ||
+			      !equal@(constant.type, actual_type)
+				# Oops, type problems. forget it!!!
+				sub_code_chunk := null@Code_Chunk
+			    #else all is well!!
+	    if sub_code_chunk == null@Code_Chunk
+		# Must not be an enumeration constant:
+		sub_code_chunk := c_emit@(sub_expression, compiler, level1)
+
+	    sub_type :@= null@Type
+	    if sub_code_chunk !== null@Code_Chunk
+		sub_type := type@(sub_code_chunk, sub_expression)
+	    if sub_type !== null@Type
+		if equal@(take_type, sub_type)
+		    # Life is good:
+		    call string_append@(code_chunk, prefix)
+		    prefix := ", "
+
+		    #call string_append@(code_chunk, "(")
+		    if is_routine@(sub_type) &&
+		      is_replaced@Type(take_type)
+			# We have to cast the routine:
+			call string_append@(code_chunk, "((")
+			call string_append@(code_chunk,
+			  replaced_c_type@Type(take_type,
+			  null@String))
+			call string_append@(code_chunk, ")(")
+			call chunk_append@(code_chunk,
+			  sub_code_chunk)
+			call string_append@(code_chunk, "))")
+		    else_if take_type.replaced
+			if is_scalar@(take_type)
+			    call string_append@(code_chunk, "((CAST)(")
+			    call chunk_append@(code_chunk, sub_code_chunk)
+			    call string_append@(code_chunk, ")).xpointer")
+			else
+			    call string_append@(code_chunk, "((void *)(")
+			    call chunk_append@(code_chunk, sub_code_chunk)
+			    call string_append@(code_chunk, "))")
+		    else
+			call chunk_append@(code_chunk, sub_code_chunk)
+		    #call string_append@(code_chunk, ")")
+		else
+		    call log@(compiler, open_bracket,
+		      form@("Argument %d% needs %t% but got %t% instead") %
+		      f@(index + 1) % f@(take_type) / f@(sub_type))
+		    break
+	    index := index + 1
+	call string_append@(code_chunk, ")")
+	code_chunk.contains_call := true@Logical
+	if need_close_parenthesis
+	    call string_append@(code_chunk,")")
+	if need_close_cast
+	    call string_append@(code_chunk,
+	      form@("), *(%s% *)(&%s%))") %
+	      f@(base_name@(return_type)) /  f@(temporary_name))
+	call comma_types_append@(code_chunk, return_types)
+    else
+	call log@(compiler, open_bracket,
+	  form@("%qe% expects %d% arguments, but got %d% arguments instead") %
+	  f@(left_expression) % f@(takes_types_size) / f@(expressions_size))
+
+    if tracing
+	call put@(form@("%p%<=routine_call@Compiler(*, %e%, %r%, %c%, %qv%, *, *)\n\") %
+	  f@(level) % f@(left_expression) % f@(routine_type) %
+	  f@(left_code_chunk) / f@(open_bracket.value), error@Out_Stream)
+
+
+routine array_access_c_emit@Bracket_Expression
+    takes bracket Bracket_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will return a {Code_Chunk} for {bracket}.
+
+    left_expression :@= bracket.expression1
+    open_bracket :@= bracket.open_bracket
+    right_expression :@= bracket.expression2
+    close_bracket :@= bracket.close_bracket
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>array_access_c_emit@Bracket_Expression(%e% %s% %e% %s%)\n\") %
+	  f@(level) % f@(left_expression) % f@(open_bracket.value) %
+	  f@(right_expression) / f@(close_bracket.value), error@Out_Stream)
+
+    code_chunk :@= create@Code_Chunk()
+    left_code_chunk :@= c_emit@(left_expression, compiler, level + 1)
+    right_code_chunk :@= c_emit@(right_expression, compiler, level + 1)
+    left_type :@= type@(left_code_chunk, left_expression)
+
+    current_routine :@= compiler.current_routine
+
+    #FIXME: deal with multiple array indices!!!
+    right_type :@= type@(right_code_chunk, right_expression)
+    if left_type !== null@Type && right_type !== null@Type
+	typed_name_object :@=
+	  type_name_routine_lookup@Compiler(compiler,
+	  "fetch1", left_type, open_bracket)
+	if typed_name_object !== null@Typed_Name_Object
+	    routine :@= typed_name_object.routine
+	    prototype :@= prototype_extract@Routine_Declaration(routine)
+	    c_array_access :@= c_array_access@(routine)
+	    assert prototype !== null@Type
+	    prototype := replace@Type(prototype, routine.typed_name.type,
+	      left_type, left_expression.location, level + 1)
+	    if prototype !== null@Type
+		routine_type :@= prototype.routine
+		takes_types :@= routine_type.takes_types
+		return_types :@= routine_type.return_types
+		if takes_types.size != 2
+		    call log@(compiler, left_expression.location,
+		      form@("fetch1@%t% takes %d% arguments instead of 2") %
+		      f@(left_type) / f@(takes_types.size))
+		else_if return_types.size != 1
+		    call log@(compiler, left_expression.location,
+		      form@("fetch1@%t% returns %d% values instead of 1") %
+		      f@(left_type) / f@(return_types.size))
+		else
+		    return_type :@= return_types[0]
+		    argument_type0 :@= takes_types[0]
+		    argument_type1 :@= takes_types[1]
+		    if !equal@(argument_type0, left_type)
+			call log@(compiler, left_expression.location,
+			  form@("fetch1@%t% takes %t% as 1st arg, not %t%") %
+			  f@(left_type) % f@(argument_type0) / f@(left_type))
+		    else_if !equal@(argument_type1, right_type)
+			call log@(compiler, left_expression.location,
+			  form@("fetch1@%t% takes %t% as 2nd arg, not %t%") %
+			  f@(left_type) % f@(argument_type1) / f@(right_type))
+		    else
+			code_chunk := create@Code_Chunk()
+			#FIXME: is this needed!!!
+			need_cast :@= false@Logical
+			post_fix :@= ""
+			temporary_name :@= ""
+			if return_type.replaced
+			    if is_parameter@Routine_Declaration(current_routine,
+			      return_type)
+				call string_append@(code_chunk, "((void *)")
+				post_fix := ")"
+			    else_if is_scalar@(return_type)
+				temporary_name := variable_temporary@(compiler,
+				  compiler.type_pointer_pointer)
+				call string_append@(code_chunk, form@(
+				  "(%s% = (Pointer_Pointer)(") /
+				  f@(temporary_name))
+				need_cast := true@Logical
+			    else
+				call string_append@(code_chunk, "((")
+				call string_append@(code_chunk,
+				  base_name@(return_type))
+				call string_append@(code_chunk, ")")
+				post_fix := ")"
+
+			if c_array_access
+			    call string_append@(code_chunk, form@("%c%[%c%]") %
+			      f@(left_code_chunk) / f@(right_code_chunk))
+			else
+			    call string_append@(code_chunk,
+			      form@("%s%__fetch1(%c%, %c%)%s%") %
+			      f@(base_name@(left_type)) %
+			      f@(left_code_chunk) % f@(right_code_chunk) /
+			      f@(post_fix))
+
+			if need_cast
+			    call string_append@(code_chunk,
+			      form@("), *(%s% *)(&%s%))") %
+			      f@(base_name@(return_type)) / f@(temporary_name))
+
+			call type_append@(code_chunk, return_type)
+			code_chunk.contains_call := true@Logical
+    if tracing
+	call put@(form@("%p%<=array_access_c_emit@Bracket_Expr(%e% %s% %e% %s%) => %x%\n\") %
+	  f@(level) % f@(left_expression) % f@(open_bracket.value) %
+	  f@(right_expression) % f@(close_bracket.value) / f@(code_chunk),
+	  error@Out_Stream)
+
+    return code_chunk
+
+
+# {Expression} routines:
+
+routine c_emit@Expression
+    takes expression Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will emit the C code for {expression}.
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>c_emit@Expression(%e%)\n\") %
+	  f@(level) / f@(expression), error@Out_Stream)
+
+    code_chunk :@= null@Code_Chunk
+    switch expression.kind
+      all_cases_required
+      case binary
+	binary_expression :@= expression.binary
+	code_chunk := c_emit@(binary_expression, compiler, level + 1)
+      case bracket
+	bracket_expression :@= expression.bracket
+	code_chunk := c_emit@(bracket_expression, compiler, level + 1)
+      case character
+	character :@= expression.character
+	code_chunk :=
+	  character_c_emit@Expression(character, compiler, level + 1)
+      case error
+	do_nothing
+      case float_number
+	float_number :@= expression.float_number
+	code_chunk := create@Code_Chunk()
+
+	# Take a peek at the back end:
+	value :@= float_number.value
+	size :@= value.size
+	type :@= compiler.type_double
+	if size != 0
+	    suffix_character :@= value[size - 1]
+	    have_float_suffix :@=
+	      suffix_character = 'f' || suffix_character = 'F'
+	    have_double_suffix :@=
+	      suffix_character = 'd' || suffix_character = 'D'
+	    if have_double_suffix
+		value := writable_copy@(value)
+		call trim@(value, size - 1)
+	    if have_float_suffix
+		type := compiler.type_float
+	call string_append@(code_chunk, value)
+	call type_append@(code_chunk, type)
+      case list
+	list_expression :@= expression.list
+	code_chunk := c_emit@(list_expression, compiler, level + 1)
+      case number
+	number :@= expression.number
+	code_chunk := create@Code_Chunk()
+
+	# Take a peek at the back end:
+	value :@= number.value
+	size :@= value.size
+	type :@= compiler.type_unsigned
+	if size != 0
+	    # Deal with single character suffixes:
+	    suffix_character :@= value[size - 1]
+	    is_hex :@= size >= 2 && value[0] = '0' &&
+	      (value[1] = 'x' || value[1] = 'X')
+	    have_byte_suffix :@= !is_hex &&
+	      (suffix_character = 'b' || suffix_character = 'B')
+	    have_false_suffix :@= !is_hex &&
+	      (suffix_character = 'f' || suffix_character = 'F')
+	    have_integer_suffix :@=
+	      suffix_character = 'i' || suffix_character = 'I'
+	    have_short_suffix :@=
+	      suffix_character = 's' || suffix_character = 'S'
+	    have_true_suffix :@=
+	      suffix_character = 't' || suffix_character = 'T'
+	    have_unsigned_suffix :@=
+	      suffix_character = 'u' || suffix_character = 'U'
+	
+	    # Deal with 'lu' and 'li' suffixes:
+	    have_long_integer_suffix :@= 0f
+	    have_long_unsigned_suffix :@= 0f
+	    if have_integer_suffix || have_unsigned_suffix
+		if size >= 2
+		    suffix_character := value[size - 2]
+		    if suffix_character = 'l' || suffix_character = 'L'
+			have_long_integer_suffix := have_integer_suffix
+			have_long_unsigned_suffix := have_unsigned_suffix
+			have_integer_suffix := 0f
+			have_unsigned_suffix := 0f
+
+	    # Trim the suffix off the number:
+	    if have_byte_suffix || have_false_suffix || have_integer_suffix ||
+	      have_short_suffix || have_true_suffix || have_unsigned_suffix
+		value := writable_copy@(value)
+		call trim@(value, size - 1)
+	    else_if have_long_integer_suffix || have_long_unsigned_suffix
+		value := writable_copy@(value)
+		call trim@(value, size - 2)
+		if have_long_integer_suffix
+		    call string_append@(value, "ll")
+		else_if have_long_unsigned_suffix
+		    call string_append@(value, "ull")
+
+	    # Set {type} based on the suffix:
+	    if have_byte_suffix
+		type := compiler.type_byte
+	    else_if have_false_suffix
+		type := compiler.type_logical
+	    else_if have_integer_suffix
+		type := compiler.type_integer
+	    else_if have_long_integer_suffix
+		type := compiler.type_long_integer
+	    else_if have_long_unsigned_suffix
+		type := compiler.type_long_unsigned
+	    else_if have_short_suffix
+		type := compiler.type_short
+	    else_if have_true_suffix
+		type := compiler.type_logical
+	    else_if have_unsigned_suffix
+		type := compiler.type_unsigned
+
+	call string_append@(code_chunk, value)
+	call type_append@(code_chunk, type)
+      case parenthesis
+	parenthesis_expression :@= expression.parenthesis
+	sub_code_chunk :@=
+	  c_emit@(parenthesis_expression.expression, compiler, level + 1)
+	sub_type :@= type@(sub_code_chunk, parenthesis_expression.expression)
+	if sub_type !== null@Type
+	    code_chunk := create@Code_Chunk()
+	    call string_append@(code_chunk, "(")
+	    call chunk_append@(code_chunk, sub_code_chunk)
+	    call string_append@(code_chunk, ")")
+	    call type_append@(code_chunk, sub_type)
+      case string
+	string :@= expression.string
+	code_chunk := string_c_emit@Expression(string, compiler, level + 1)
+      case symbol
+	symbol :@= expression.symbol
+	code_chunk := symbol_c_emit@Expression(symbol, compiler, level + 1)
+      case unary
+	unary_expression :@= expression.unary
+	code_chunk := c_emit@(unary_expression, compiler, level + 1)
+
+    if tracing
+	call put@(form@("%p%<=c_emit@Expression(%e%) => %x%\n\") %
+	  f@(level) % f@(expression) / f@(code_chunk), error@Out_Stream)
+    return code_chunk
+
+
+routine character_c_emit@Expression
+    takes character Token
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will convert {character} into a {Code_Chunk} and return it.
+
+    #FIXME: Is the routine needed anymore!!!
+    code_chunk :@= null@Code_Chunk
+    raw_string :@= string_convert@(character)
+    raw_string_size :@= raw_string.size
+    if raw_string_size = 0
+	call log@(compiler, character,
+	  form@("Character literal %s% contains no character") /
+	  f@(character.value))
+    else_if raw_string_size > 1
+	call log@(compiler, character,
+	  form@("Character literal %s% contains multiple characters") /
+	  f@(character.value))
+    else
+	char :@= raw_string[0]
+	code :@= unsigned@(char)
+	code_chunk := create@Code_Chunk()
+	call string_append@(code_chunk, "((Character)")
+	if (code & 0x80) != 0
+	    # We have a Latin9 character:
+	    call decimal_append@(code_chunk, code)
+	    call string_append@(code_chunk, ")")
+	else
+	    call string_append@(code_chunk, "'")
+	    if is_printing@Character(char) && char != '\sq\' && char != '\bsl\'
+		call character_append@(code_chunk, char)
+	    else
+		call string_append@(code_chunk, "\bsl\")
+		code := unsigned@(char)
+		call character_append@(code_chunk,
+		  "01234567"[code >> 6])
+		call character_append@(code_chunk,
+		  "01234567"[(code >> 3) & 7])
+		call character_append@(code_chunk,
+		  "01234567"[code & 7])
+	    call string_append@(code_chunk, "')")
+
+	call type_append@(code_chunk, compiler.type_character)
+    return code_chunk
+
+
+routine constant_evaluate@Expression
+    takes expression Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will evaluate {expression} as a constant expression
+    # using {compiler}.
+
+    tracing :@= false@Logical
+    #tracing :@= true@Logical
+    if tracing
+	call d@(form@("%p%=>constant_evalute@Expression(%e%)\n\") %
+	  f@(level) / f@(expression))
+    level1 :@= level + 1
+
+    code_chunk :@= null@Code_Chunk
+    failure :@= null@String
+
+    switch expression.kind
+      all_cases_required
+      case binary
+	binary :@= expression.binary
+	left :@= binary.left
+	operator :@= binary.operator
+	right :@= binary.right
+	switch operator.lexeme
+	  case at_sign
+	    # We have left@right:
+	    switch left.kind
+	      case symbol
+		symbol :@= left.symbol
+		name :@= symbol.value
+		type :@= type_convert@(right, compiler, level1)
+		if type == null@Type
+		    failure := "binary:no type"
+		else
+		    typed_name_object :@=
+		      type_name_lookup@(compiler, name, type, operator)
+		    if typed_name_object == null@Typed_Name_Object
+			failure := "binary:no typed_name"
+		    else
+			switch typed_name_object.kind
+			  case constant
+			    constant :@= typed_name_object.constant
+			    code_chunk :=
+			      constant_evaluate@(constant.expression,
+			      compiler, level + 1)
+			  default
+			    failure := "binary:no constant"
+	      default
+		failure := "binary:no symbol"
+      case bracket
+	bracket :@= expression.bracket
+	expression1 :@= bracket.expression1
+	open_bracket :@= bracket.open_bracket
+	expression2 :@= bracket.expression2
+	switch open_bracket.lexeme
+	  case type_invoke
+	    switch expression1.kind
+	      case symbol
+		# We only allow type conversions:
+		symbol :@= expression1.symbol
+		symbol_value :@= symbol.value
+		type :@= scalar_lookup@(compiler, symbol_value)
+		if type == null@Type
+		    call log@(compiler, symbol,
+		      form@("%s%@() is not a scalar conversion") /
+		      f@(symbol_value))
+		constant_chunk :@=
+		  constant_evaluate@(expression2, compiler, level1)
+		code_chunk := create@Code_Chunk()
+		call string_append@(code_chunk,
+		  form@("((%c%)(%c%))") % f@(type) / f@(constant_chunk))
+		call type_append@(code_chunk, type)
+	      default
+		assert false@Logical
+	  default
+	    assert false@Logical
+      case character
+	character :@= expression.character
+	value :@= character.value
+	size :@= value.size
+	if size = 3 && value[0] = '\sq' && value[2] = '\sq\'
+	    # {value} already has the correct syntax for C:
+	    do_nothing
+	else_if size >= 5 && value[0] = '\sq\' && value[1] = '\bsl\' &&
+	  value[size - 1] = '\sq\' && value[size - 2] == '\bsl\'
+	    # We have '\...\':
+	
+	    # Strip off the "'\" and the "\'":
+	    temporary :@= compiler.temporary
+	    call trim@(temporary, 0)
+	    call string_append@(temporary, value)
+	    call trim@(temporary, size - 2)
+	    call lop@(temporary)
+	    call lop@(temporary)
+	    size := temporary.size
+	    assert size >= 1
+
+	    character_value :@= 0
+	    if size = 1 && is_decimal_digit@(temporary[0])
+		character_value := decimal_convert@(temporary[0])
+		call trim@(temporary, 0)
+	    else_if size = 2 && is_decimal_digit@(temporary[0]) &&
+	      is_decimal_digit@(temporary[1])
+		character_value := decimal_convert@(temporary[0]) * 10 +
+		  decimal_convert@(temporary[1])
+	    else_if equal@(temporary, "n")
+		character_value := unsigned@('\n\')
+	    else_if equal@(temporary, "t")
+		character_value := unsigned@('\t\')
+	    else_if equal@(temporary, "r")
+		character_value := unsigned@('\cr\')
+	    else
+		call log@(compiler, expression.location,
+		  form@("%e% is not recognized (compiler error?)") /
+		  f@(expression))
+
+	    # Format the final value:
+	    value := temporary
+	    call trim@(temporary, 0)
+	    call string_append@(temporary,
+	      form@("'\bsl\%o%'") / f@(character_value))
+	else
+	    call log@(compiler, expression.location,
+	      form@("Unrecognized character constant %e%") / f@(expression))
+	    value := "0"
+	code_chunk := create@Code_Chunk()
+	call string_append@(code_chunk, value)
+	call type_append@(code_chunk, compiler.type_character)
+      case error
+	do_nothing
+      case float_number
+	float_number :@= expression.float_number
+	code_chunk := create@Code_Chunk()
+	temporary :@= compiler.temporary
+	call trim@(temporary, 0)
+
+	value :@= float_number.value
+	call string_append@(temporary, value)
+	type :@= compiler.type_double
+	size :@= value.size
+	if size >= 2
+	    last :@= lower_case@(value[size - 1])
+	    if last = 'f'
+		type := compiler.type_float
+		call range_delete@(temporary, size - 1, 1)
+	    else_if last = 'd'
+		call range_delete@(temporary, size - 1, 1)
+	if type == compiler.type_float
+	    call string_append@(code_chunk, "((Float)")
+	else_if type == compiler.type_double
+	    call string_append@(code_chunk, "((Double)")
+	call string_append@(code_chunk, temporary)
+	call string_append@(code_chunk, ")")
+	call type_append@(code_chunk, type)
+	if tracing
+	    call d@(form@("constant_evaluate@(%e%) => %t%\n\") %
+	      f@(expression) / f@(type))
+      case list
+	#call d@("constant evaluate: list\n\")
+	list :@= expression.list
+	operators :@= list.operators
+	expressions :@= list.expressions
+	location :@= list.location
+	size :@= expressions.size
+	code_chunks :@= new@Array[Code_Chunk]()
+	types :@= new@Array[Type]()
+	index :@= 0
+	while index < size
+	    sub_expression :@= expressions[index]
+	    sub_code_chunk :@=
+	      constant_evaluate@(sub_expression, compiler, level1)
+	    if sub_code_chunk == null@Code_Chunk
+		failure := "list:no constant"
+		break
+	    call append@(code_chunks, sub_code_chunk)
+	    sub_type :@= type@(sub_code_chunk, sub_expression)
+	    if sub_type == null@Type
+		failure := "list:no type"
+		break
+	    call append@(types, sub_type)
+	    if index != 0
+		if !equal@(types[index - 1], sub_type)
+		    call log@(compiler, sub_expression.location,
+		      form@("Type %t% (%e%) differs from %t% (%e%)") %
+		      f@(types[index - 1]) % f@(expressions[index - 1]) % 
+		       f@(sub_type) / f@(sub_expression))
+		    failure := "list: type diff"
+		    break
+	    index := index + 1
+	if failure == null@String
+	    code_chunk := create@Code_Chunk()
+	    call string_append@(code_chunk, "(")
+	    index := 0
+	    while index < size
+		if index != 0
+		    call string_append@(code_chunk, " ")
+		    call string_append@(code_chunk, operators[index].value)
+		    call string_append@(code_chunk, " ")
+		call chunk_append@(code_chunk, code_chunks[index])
+		index := index + 1
+	    call string_append@(code_chunk, ")")
+	    call append@(code_chunk.types, types[0])
+      case number
+	number :@= expression.number
+	code_chunk := create@Code_Chunk()
+	temporary :@= compiler.temporary
+	call trim@(temporary, 0)
+	value :@= number.value
+	call string_append@(temporary, value)
+	type :@= compiler.type_unsigned
+	size :@= value.size
+	if size >= 2
+	    first :@= value[0]
+	    second :@= value[1]
+	    last :@= value[size - 1]
+	    if tracing
+		call d@(form@("first=%c% second=%c% last=%c%\n\") %
+		  f@(first) % f@(second) / f@(last))
+	    if first != '0' || second != 'x' && second != 'X'
+		# Not a hexadecimal:
+		trim :@= false@Logical
+		if last = 'b' || last = 'B'
+		    type := compiler.type_byte
+		    trim := true@Logical
+		else_if last = 'c' || last = 'C'
+		    type := compiler.type_character
+		    trim := true@Logical
+		else_if last = 'i' || last = 'I'
+		    type := compiler.type_integer
+		    trim := true@Logical
+		else_if last = 's' || last = 'S'
+		    type := compiler.type_short
+		    trim := true@Logical
+		else_if last = 'u' || last = 'U'
+		    type := compiler.type_unsigned
+		    trim := true@Logical
+		if trim
+		    call trim@(temporary, size - 1)
+	call string_append@(code_chunk, temporary)
+	call type_append@(code_chunk, type)
+	if tracing
+	    call d@(form@("constant_evaluate@(%e%) => %t%\n\") %
+	      f@(expression) / f@(type))
+      case parenthesis
+	parenthesis :@= expression.parenthesis
+	code_chunk :=
+	  constant_evaluate@(parenthesis.expression, compiler, level1)
+      case string
+	failure := "string"
+      case symbol
+	failure := "symbol"
+      case unary
+	unary :@= expression.unary
+	sub_code_chunk :=
+	  constant_evaluate@(unary.expression, compiler, level + 1)
+	code_chunk := create@Code_Chunk()
+	call type_append@(code_chunk, type@(sub_code_chunk, expression))
+
+	call string_append@(code_chunk, "(")
+	call string_append@(code_chunk, unary.operator.value)
+	call chunk_append@(code_chunk, sub_code_chunk)
+	call string_append@(code_chunk, ")")
+
+    if failure !== null@String
+	call log@(compiler, expression.location,
+	  form@("Unable to evaluate %e% as a constant (reason: %vs%)") %
+	    f@(expression) / f@(failure))
+
+    if tracing
+	call d@(form@("%p%<=constant_evalute@Expression(%e%) => %xc%\n\") %
+	  f@(level) % f@(expression) / f@(code_chunk))
+    return code_chunk
+
+
+routine equal@Expression
+    takes expression1 Expression
+    takes expression2 Expression
+    returns Logical
+
+    # This routine will return {true@Logical} if {expression1} is equal
+    # to {expression2} and {false@Logical} otherwise.
+
+    result :@= 0f
+    switch expression1.kind
+      all_cases_required
+      case binary
+	switch expression2.kind
+	  case binary
+	    result := equal@(expression1.binary, expression2.binary)
+      case bracket
+	switch expression2.kind
+	  case bracket
+	    result := equal@(expression1.bracket, expression2.bracket)
+      case character
+	switch expression2.kind
+	  case character
+	    result := equal@(expression1.character, expression2.character)
+      case float_number
+	switch expression2.kind
+	  case float_number
+	    result := equal@(expression1.float_number, expression2.float_number)
+      case list
+	switch expression2.kind
+	  case list
+	    result := equal@(expression1.list, expression2.list)
+      case number
+	switch expression2.kind
+	  case number
+	    result := equal@(expression1.number, expression2.number)
+      case parenthesis
+	switch expression2.kind
+	  case parenthesis
+	    result := equal@(expression1.parenthesis.expression, 
+	      expression2.parenthesis.expression)
+      case string
+	switch expression2.kind
+	  case string
+	    result := equal@(expression1.string, expression2.string)
+      case symbol
+	switch expression2.kind
+	  case symbol
+	    result := equal@(expression1.symbol, expression2.symbol)
+      case unary
+	switch expression2.kind
+	  case unary
+	    result := equal@(expression1.unary, expression2.unary)
+      case error
+	do_nothing
+    return result
+
+
+routine expression_list@Expression
+    takes expression Expression
+    returns Array[Expression]
+
+    # This routine will examine {expression} to see whether it is a
+    # comma separated list.  If it is, a list of the expressions
+    # is returned; otherwise, {expression} is returned as the only
+    # element in an expresion Array.
+
+    switch expression.kind
+      case list
+	list_expression :@= expression.list
+	operators :@= list_expression.operators
+	operators_size :@= operators.size
+	if operators_size != 0 &&
+	  operators[operators_size - 1].lexeme = comma@Lexeme
+	    return list_expression.expressions
+    expressions :@= new@Array[Expression]()
+    call append@(expressions, expression)
+    return expressions
+
+
+routine comma_listify@Expression
+    takes expression Expression
+    returns Expression
+
+    # This routine will return {expression} as a list expression.
+
+    new_expression :@= expression
+    listify :@= false@Logical
+    switch expression.kind
+      case list
+	list :@= expression.list
+	operators :@= list.operators
+	size :@= operators.size
+	if size = 0
+	    listify := false@Logical
+	else_if size = 1
+	    listify := true@Logical
+	else
+	    # {size} > 1:
+	    listify := operators[1].lexeme != comma@Lexeme
+      default
+	listify := true@Logical
+    if listify
+	list_expression :@= new@List_Expression()
+	call append@(list_expression.operators, null@Token)
+	call append@(list_expression.expressions, expression)
+	list_expression.location := expression.location
+	new_expression := new@Expression()
+	new_expression.list := list_expression
+    return new_expression
+
+
+routine macro_evaluate@Expression
+    takes expression Expression
+    takes compiler Compiler
+    takes result String
+    returns String
+
+    # This routine will do a macro based evaluation of {expression}
+    # using {compiler}.
+
+    tracing :@= false@Logical
+    #tracing :@= true@Logical
+    if tracing
+	call d@(form@("=>macro_evaluate@(%e%)\n\") / f@(expression))
+
+    if result == null@String
+	result := new@String()
+    switch expression.kind
+      all_cases_required
+      case binary
+	binary :@= expression.binary
+	switch binary.operator.lexeme
+	  case at_sign
+	    name_expression :@= binary.left
+	    type_expression :@= binary.right
+	    type :@= type_convert@(type_expression, compiler, 0)
+	    if type == null@Type
+		assert false@Logical
+	    else
+		switch name_expression.kind
+		  case symbol
+		    symbol :@= name_expression.symbol
+		    call string_append@(result, form@("%s%__%s%") %
+		      f@(base_name@(type)) / f@(symbol.value))
+		  default
+		    assert false@Logical
+	  default
+	    assert false@Logical
+      case bracket
+	bracket :@= expression.bracket
+	expression1 :@= bracket.expression1
+	open_bracket :@= bracket.open_bracket
+	expression2 :@= bracket.expression2
+	switch open_bracket.lexeme
+	  case type_invoke
+	    switch expression1.kind
+	      case symbol
+		# We only allow type conversions:
+		symbol :@= expression1.symbol
+		symbol_value :@= symbol.value
+		type :@= scalar_lookup@(compiler, symbol_value)
+		if type == null@Type
+		    call log@(compiler, symbol,
+		      form@("%s% is not a scalar conversion") /
+		      f@(symbol_value))
+		      
+		call string_append@(result, form@("((%c%)") / f@(type))
+		call macro_evaluate@(expression2, compiler, result)
+		call string_append@(result, ")")
+	      default
+		assert false@Logical
+	  default
+	    assert false@Logical
+      case character
+	assert false@Logical
+      case error
+	assert false@Logical
+      case list
+	list :@= expression.list
+	operators :@= list.operators
+	expressions :@= list.expressions
+	call string_append@(result, "(")
+	size :@= expressions.size
+	index :@= 0
+	while index < size
+	    if index != 0
+		call string_append@(result, operators[index - 1].value)
+	    sub_expression :@= expressions[index]
+	    call macro_evaluate@(sub_expression, compiler, result)
+	    index := index + 1
+	call string_append@(result, ")")
+      case float_number
+	float_number :@= expression.float_number
+	float_value :@= float_number.value
+	size :@= float_value.size
+	index :@= 0
+	while index < size
+	    character :@= lower_case@(float_value[index])
+	    if character = 'f' || character = 'd'
+		do_nothing
+	    else
+		call character_append@(result, character)
+	    index := index + 1
+      case number
+	number :@= expression.number
+	number_value :@= number.value
+	size :@= number_value.size
+
+	# Check for hexadecimal:
+	is_hex :@= false@Logical
+	if size >= 2
+	    character :@= number_value[1]
+	    if character = 'x' || character = 'X'
+		is_hex := true@Logical
+
+	# Slap the value onto the end of {result}:
+	call string_append@(result, number_value)
+
+	# Check for suffix character:
+	if !is_hex && size >= 2
+	    character1 :@= number_value[size - 1]
+	    character2 :@= number_value[size - 2]
+	    if is_letter@(character1)
+		# We have some sort of suffix (e.g. 'i', 'b', etc.):
+		if is_letter@(character2)
+		    # We have a 2 letter suffix 'li' or 'lu'; remove it:
+		    call trim@(result, result.size - 2)
+
+		    # Now figure out which C syntax suffix to replace it with:
+		    if character1 = 'i' || character1 = 'I'
+			# We have 'li', append C syntax suffix 'll':
+			call string_append@(result, "ll")
+		    else_if character1 = 'u' || character2 = 'U'
+			# We have 'lu', append C syntax suffix 'ull':
+			call string_append@(result, "ull")
+		    else
+			assert 0f
+		else
+		    # Strip off single letter suffix character:
+		    call trim@(result, result.size - 1)
+      case parenthesis
+	parenthesis :@= expression.parenthesis
+	call string_append@(result, "(")
+	call macro_evaluate@(parenthesis.expression, compiler, result)
+	call string_append@(result, ")")
+      case string
+	assert false@Logical
+      case symbol
+	assert false@Logical
+      case unary
+	unary :@= expression.unary
+	call string_append@(result, "(")
+	call string_append@(result, unary.operator.value)
+	call macro_evaluate@(unary.expression, compiler, result)
+	call string_append@(result, ")")
+	
+
+    if tracing
+	call d@(form@("<=macro_evaluate@(%e%) => %v%\n\") %
+	  f@(expression) / f@(result))
+    return result
+
+
+routine parenthesis_remove@Expression
+    takes expression Expression
+    returns Expression
+
+    # This routine will return {expression} without any surrounding
+    # parentheses.
+
+    while true@Logical
+	switch expression.kind
+	  case parenthesis
+	    parenthesis_expression :@= expression.parenthesis
+	    expression := parenthesis_expression.expression
+	  default
+	    break
+    return expression
+
+
+routine string_c_emit@Expression
+    takes string Token
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will return a {Code_Chunk} for {String}.
+
+    assert string.value[0] = '\dq\'
+
+    code_chunk :@= create@Code_Chunk()
+    raw_string :@= string_convert@Token(string)
+    size :@= raw_string.size
+    if size <= 250
+	#FIXME: This needs to be refactored!!!
+	call string_append@(code_chunk, "((String)\dq,bsl\")
+	call character_append@(code_chunk, "01234567"[size >> 6])
+	call character_append@(code_chunk,
+	  "01234567"[(size >> 3) & 7])
+	call character_append@(code_chunk, "01234567"[size & 7])
+
+	index :@= 0
+	while index < size
+	    char :@= raw_string[index]
+	    if char = ' '
+		call character_append@(code_chunk, ' ')
+	    else_if char = '\bsl\'
+		call string_append@(code_chunk, "\bsl,bsl\")
+	    else_if char = '\t\'
+		call string_append@(code_chunk, "\bsl\t")
+	    else_if char = '\n\'
+		call string_append@(code_chunk, "\bsl\n")
+	    else_if char = '"'
+		call string_append@(code_chunk, "\bsl,dq\")
+	    else_if is_printing@Character(char)
+		call character_append@(code_chunk, char)
+	    else
+		call character_append@(code_chunk, '\bsl\')
+		code :@= unsigned@(char)
+		call character_append@(code_chunk,
+		  "01234567"[(code >> 6) & 7])
+		call character_append@(code_chunk,
+		  "01234567"[(code >> 3) & 7])
+		call character_append@(code_chunk,
+		  "01234567"[code  & 7])
+	    index := index +  1
+	call string_append@(code_chunk, "\dq\)")
+	call type_append@(code_chunk, compiler.type_string)
+    return code_chunk
+
+
+routine symbol_c_emit@Expression
+    takes symbol Token
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will return a {Code_Chunk} for {symbol}.
+
+    temporary :@= compiler.temporary
+    code_chunk :@= null@Code_Chunk
+    symbol_name :@= symbol.value
+    variable :@=  variable_lookup@(compiler, symbol_name)
+    if variable == null@Variable
+	call log@(compiler, symbol,
+	  form@("%ds% is not a variable or argument") / f@(symbol_name))
+    else
+	code_chunk := create@Code_Chunk()
+	call string_append@(code_chunk, form@("%k%") / f@(symbol_name))
+	call type_append@(code_chunk, variable.type)
+
+	if variable.level = 0xffffffff
+	    call log@(compiler, symbol,
+	      form@("Variable/argument %ds% being used before being assigned to") /
+	      f@(symbol_name))
+    return code_chunk
+
+
+# {List_Expression} routines:
+
+routine c_emit@List_Expression
+    takes list List_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will emit the C code for {list} using {compiler}.
+
+    temporary :@= compiler.temporary
+    tracing :@= compiler.tracing
+    if tracing
+	call put@(form@("%p%=>c_emit@List_Expression(*)\n\") /
+	  f@(level), error@Out_Stream)
+
+    code_chunk :@= create@Code_Chunk()
+    expressions :@= list.expressions
+    operators :@= list.operators
+    size :@= expressions.size
+    assert operators.size = size
+
+    # Generate {sub_code_chunks} and associated {types} list:
+    calls :@= 0
+    code_generate :@= true@Logical
+    operator :@= null@Token
+    sub_code_chunks :@= new@Array[Code_Chunk]()
+    types :@= new@Array[Type]()
+    index :@= 0
+    while index < size
+	expression :@= expressions[index]
+	operator := operators[index]
+	sub_code_chunk :@= c_emit@(expression, compiler, level + 1)
+	sub_type :@= type@(sub_code_chunk, expression)
+	if sub_type == null@Type
+	    code_generate := false@Logical
+	else
+	    call append@(types, sub_type)
+	    call append@(sub_code_chunks, sub_code_chunk)
+	    if sub_code_chunk.contains_call
+		calls := calls + 1
+	index := index + 1
+
+    type :@= null@Type
+    is_conditional :@= false@Logical
+    types_match :@= false@Logical
+    number_check :@= false@Logical
+    integer_check :@= false@Logical
+    logical_check :@= false@Logical
+    is_divide_multiply_remainder :@= false@Logical
+    operator_name :@= null@String
+    if code_generate
+	assert size = types.size
+	assert size = sub_code_chunks.size
+
+	# Figure out appropriate type checking:
+	if size != 0
+	    lexeme :@= operator.lexeme
+	    switch lexeme
+	      case comma
+		# Leave {types} alone:
+		types_match := false@Logical
+	      case add, and, divide, minus, multiply, or, remainder, xor
+		types_match := true@Logical
+		number_check := true@Logical
+		is_divide_multiply_remainder := true@Logical
+	      case left_shift, right_shift
+		# We only return one type:
+		types_match := true@Logical
+		integer_check := true@Logical
+	      case conditional_and, conditional_or
+		types_match := true@Logical
+		logical_check := true@Logical
+		is_conditional := true@Logical
+	      default
+		call log@(compiler, operator,
+		  form@("Internal error: Not prepared for %l% operator") /
+		  f@(operator.lexeme))
+	        code_generate := false@Logical
+
+    # For the types of each sub expression to be the same:
+    if code_generate
+	# Generate the code:
+	code_chunk := create@Code_Chunk()
+	prefix_code_chunk :@= null@Code_Chunk
+
+	# We want to convert all but one of the calls to comma separated
+	# expression.  Thus, "a() + b + c() + d + e()" gets converted
+	# to "(t__1 = a(), t__2 = c(), t__1 + b + t__2 + d + e())".
+	if !is_conditional && calls >= 2 && types_match
+	    call string_append@(code_chunk, "(")
+	    index := 0
+	    while index < size && calls > 1
+		sub_code_chunk := sub_code_chunks[index]
+		type := types[index]
+	        if sub_code_chunk.contains_call
+		    temporary_name :@= variable_temporary@(compiler, type)
+		    call string_append@(code_chunk, temporary_name)
+		    call string_append@(code_chunk, " = ")
+		    call chunk_append@(code_chunk, sub_code_chunk)
+		    call string_append@(code_chunk, ", ")
+		    sub_code_chunk := create@Code_Chunk()
+		    call string_append@(sub_code_chunk, temporary_name)
+		    call type_append@(sub_code_chunk, type)
+		    sub_code_chunks[index] := sub_code_chunk
+		    calls := calls - 1
+		index := index + 1
+	    prefix_code_chunk := code_chunk
+	    code_chunk := create@Code_Chunk()
+
+	parenthesis_enclosed :@= false@Logical
+	index := 0
+	while index < size
+	    type := types[index]
+	    routine_name :@= null@String
+	    if index = 0
+		# The first expression in the list is always done:
+		sub_code_chunk :@= sub_code_chunks[index]
+		parenthesis_enclosed := true@Logical
+		call string_append@(code_chunk, "(")
+		call chunk_append@(code_chunk, sub_code_chunk)
+	    else
+		# Deal with remaining expressions and operations:
+		operator := operators[index]
+		routine :@= null@Routine_Declaration
+
+		if types_match
+		    # Verify that the types match:
+		    type_before :@= types[index - 1]
+		    if !equal@(type_before, type)
+			# Types do not match:
+			call log@(compiler, operator,
+			  form@("%e% %qv% %e% type mismatch (%t% != %t%)") %
+			  f@(expressions[index - 1]) % f@(operator.value) %
+			  f@(expressions[index]) % f@(type_before) / f@(type))
+			break
+
+		    # Look for an overload routine:
+		    switch operator.lexeme
+		      case add
+			routine_name := "add"
+		      case and
+			routine_name := "and"
+		      case divide
+			routine_name := "divide"
+		      case minus
+			routine_name := "minus"
+		      case or
+			routine_name := "or"
+		      case remainder
+			routine_name := "remainder"
+		      case xor
+			routine_name := "xor"
+
+		    if routine_name !== null@String
+			typed_name :@= compiler.typed_name
+			#FIXME: Do not call new@Token()!!!
+			typed_name.name := new@Token()
+			typed_name.name.value := routine_name
+			typed_name.type := type
+			typed_name_object :@=
+			  lookup@(compiler.xtyped_name_object_table, typed_name)
+			if typed_name_object !== null@Typed_Name_Object
+			    switch typed_name_object.kind
+			      default
+				call log@(compiler, operator,
+				  form@("%s%@%t% exists, but is not a routine") %
+				    f@(routine_name) / f@(type))
+				break
+			      case routine
+				routine := typed_name_object.routine
+		    if routine == null@Routine_Declaration
+			# There was no routine override:
+			# Do additional type checking:
+			type := types[index]
+			expression := expressions[index]
+			if number_check || integer_check
+			    if number_check && !is_number_scalar@Type(type)
+				call log@(compiler, operator,
+				  form@("%e% isn't Integer/Unsigned/Float/Double") /
+				  f@(expression))
+				break
+			    if integer_check &&
+			      !is_non_float_scalar@Type(type)
+				call log@(compiler, operator,
+				  form@("%e% is neither Integer nor Unsigned") /
+				  f@(expression))
+				break
+			else_if logical_check && !is_logical@Type(type)
+			    call log@(compiler, operator,
+			      form@("%e% is an not of type Logical") /
+			      f@(expression))
+			    break
+		    else
+			# We have a routine; it better match on all types:
+			prototype :@= prototype_extract@(routine)
+			routine_type :@= prototype.routine			
+			take_types :@= routine_type.takes_types
+			return_types :@= routine_type.return_types
+			if take_types.size != 2
+			    call log@(compiler, operator,
+			      form@("%s%@%t% routine has %d% arguments, not 2") %
+			      f@(routine_name) % f@(type) / f@(take_types.size))
+			    break
+			if return_types.size != 1
+			    call log@(compiler, operator,
+			      form@("%s%@%t% routine returns %d% values, not 1") %
+			      f@(routine_name) % f@(type) /
+			      f@(return_types.size))
+			    break
+			if !equal@(take_types[0], type)
+			    call log@(compiler, operator,
+			      form@("Argument 1 of %s%@%t% has type %t%, not %t%") %
+			      f@(routine_name) % f@(type) % f@(take_types[0]) /
+			      f@(type))
+			    break
+			if !equal@(take_types[1], type)
+			    call log@(compiler, operator,
+			      form@("Argument 2 of %s%@%t% has type %t%, not %t%") %
+			      f@(routine_name) % f@(type) % f@(take_types[1]) /
+			      f@(type))
+			    break
+			if !equal@(return_types[0], type)
+			    call log@(compiler, operator,
+			      form@("%s%@%t% returns type %t%, not %t%") %
+			      f@(routine_name) % f@(type) %
+			      f@(return_types[0]) / f@(type))
+			    break
+
+		if routine == null@Routine_Declaration
+		    call string_append@(code_chunk, operator.value)
+		    call chunk_append@(code_chunk, sub_code_chunks[index])
+		else
+		    if parenthesis_enclosed
+			call string_append@(code_chunk, ")")
+			parenthesis_enclosed := false@Logical
+		    sub_code_chunk :@= code_chunk
+		    code_chunk := create@Code_Chunk()
+		    call string_append@(code_chunk, base_name@(type))
+		    call string_append@(code_chunk, "__")
+		    call string_append@(code_chunk, routine_name)
+		    call string_append@(code_chunk, "(")
+		    call chunk_append@(code_chunk, sub_code_chunk)
+		    call string_append@(code_chunk,", ")
+		    call chunk_append@(code_chunk, sub_code_chunks[index])
+		    call string_append@(code_chunk,")")
+	    index := index + 1
+
+	# Do extra checking for formatting:
+        if is_divide_multiply_remainder && equal@(type, compiler.type_string)
+	    expression0 :@= expressions[0]
+	    switch expression0.kind
+	      case bracket
+		bracket :@= expression0.bracket
+		expression1 :@= bracket.expression1
+		expression2 :@= bracket.expression2
+		if expression1.kind == symbol@Expression_Kind &&
+		  equal@(expression1.symbol.value, "form") &&
+		  expression2.kind == string@Expression_Kind
+		    # We have form@String("...") as the first expression.
+		    string :@= expression2.string
+		    index := 1
+		    while index < size
+			expression := expressions[index]
+			operator := operators[index]
+			switch expression.kind
+			  case bracket
+			    bracket := expression.bracket
+			    expression1 := bracket.expression1
+			    expression2 := bracket.expression2
+			    if expression1.kind == symbol@Expression_Kind &&
+			      equal@(expression1.symbol.value, "f")
+				do_nothing
+			    else
+				call log@(compiler, operator,
+				  form@("Expression %e% should be f@(...) instead") /
+				  f@(expression))
+			    if index + 1 >= size &&
+			      operator.lexeme != divide@Lexeme
+				call log@(compiler, operator,
+				  form@("Last operator form@(%s%) is '%s%' not '/'") %
+				  f@(string.value) / f@(operator.value))
+			    if index + 1 < size &&
+			      operator.lexeme != remainder@Lexeme
+				call log@(compiler, operator,
+				  form@("Operator %d% after form@(%s%) is '%s%' not '%%'") %
+				  f@(index) % f@(string.value) /
+				  f@(operator.value))
+			index := index + 1
+
+		    # Now make sure we have the right number of everything:
+		    raw_string :@= string_convert@(string)
+		    raw_string_size :@= raw_string.size
+		    fields_count :@= 0
+		    index := 0
+		    while index < raw_string_size
+			character :@= raw_string[index]
+			if character = '%'
+			    if index + 1 < raw_string_size &&
+			       raw_string[index + 1] = '%'
+				index := index + 2
+			    else
+				index := index + 1
+				fields_count := fields_count + 1
+				while index < raw_string_size &&
+				   raw_string[index] != '%'
+				    index := index + 1
+				index := index + 1
+			else
+			    index := index + 1
+		    if fields_count != size - 1
+			call log@(compiler, string,
+			  form@("form@(%s%) has %d% fields, only %d% fields supplied") %
+			  f@(string.value) % f@(fields_count) / f@(size - 1))
+
+	    #FIXME: What is this!!!
+	    while index < size
+		call put@(form@("[%d%]: %e%\n\") %
+		  f@(index) / f@(expressions[index]), error@Out_Stream)
+		index := index + 1
+
+	if parenthesis_enclosed
+	    call string_append@(code_chunk, ")")
+
+	if prefix_code_chunk !== null@Code_Chunk
+	    call chunk_append@(prefix_code_chunk, code_chunk)
+	    code_chunk := prefix_code_chunk
+	    call string_append@(code_chunk, ")")
+
+	if types_match
+	    call trim@(types, 1)
+	call types_append@(code_chunk, types)
+
+    if tracing
+	call put@(form@("%p%<=c_emit@List_Expression(*) => %x%\n\") %
+	  f@(level) / f@(code_chunk), error@Out_Stream)
+
+    return code_chunk
+
+
+routine equal@List_Expression
+    takes list_expression1 List_Expression
+    takes list_expression2 List_Expression
+    returns Logical
+
+    # This routine will return {true@Logical} if {list_expression1} is equal
+    # to {list_expression2} and {false@Logical} otherwise.
+
+    result :@= 0f
+    operators1 :@= list_expression1.operators
+    operators2 :@= list_expression2.operators
+    expressions1 :@= list_expression1.expressions
+    expressions2 :@= list_expression2.expressions
+    result := equal@(operators1, operators2, equal@Token) &&
+      equal@(expressions1, expressions2, equal@Expression)
+    return result
+
+
+# {Unary_Expression} stuff:
+
+routine c_emit@Unary_Expression
+    takes unary_expression Unary_Expression
+    takes compiler Compiler
+    takes level Unsigned
+    returns Code_Chunk
+
+    # This routine will return a {Code_Chunk} for {unary_expression}.
+
+    expression :@= unary_expression.expression
+    operator :@= unary_expression.operator
+    code_chunk :@= create@Code_Chunk()
+    unary_code_chunk :@= c_emit@(expression, compiler, level + 1)
+    call string_append@(code_chunk, operator.value)
+    call chunk_append@(code_chunk, unary_code_chunk)
+    call type_append@(code_chunk, type@(unary_code_chunk, expression))
+    return code_chunk
+
+
+routine equal@Unary_Expression
+    takes unary_expression1 Unary_Expression
+    takes unary_expression2 Unary_Expression
+    returns Logical
+
+    # This routine will return {true@Logical} if {unary_expression1} is equal
+    # to {unary_expression2} and {false@Logical} otherwise.
+
+    result :@= 0f
+    result := equal@(unary_expression1.operator, unary_expression2.operator) &&
+      equal@(unary_expression1.expression, unary_expression2.expression)
+    return result
+

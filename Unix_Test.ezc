@@ -1,0 +1,57 @@
+easy_c 1.0
+
+library Easy_C
+library Unix
+
+routine main@Easy_C
+    takes arguments Array[String]
+    returns Unsigned
+
+    zero :@= 0i
+    o_creat :@= unix_file_o_creat@Unsigned
+    o_trunc :@= unix_file_o_trunc@Unsigned
+    o_wronly :@= unix_file_o_wronly@Unsigned
+    o_rdonly :@= unix_file_o_rdonly@Unsigned
+
+    create_flags :@= o_creat | o_trunc | o_wronly
+    read_flags :@= o_rdonly
+
+    mode :@= (6 << 6) | (4 << 3) | 4
+
+    # Test writing of a file:
+    fd :@= open@Unix("/tmp/foo.bar", create_flags, mode)
+    assert fd >= zero
+    assert write@Unix(fd, "Hello,", 0, 6) = 6i
+    buffer :@= new@String()
+    call string_append@(buffer, "World!\n\")
+    call character_prepend@(buffer, ' ')
+    assert write@Unix(fd, buffer, 0, buffer.size) = integer@(buffer.size)
+    assert close@Unix(fd) >= zero
+
+    # Now test reading of a file:
+    fd := open@Unix("/tmp/foo.bar", read_flags, 0)
+    assert fd >= zero
+    buffer := new@String()
+    assert read@Unix(fd, buffer, 0, 14) = 14i
+    assert buffer.size = 14
+    assert equal@(buffer, "Hello, World!\n\")
+    assert close@Unix(fd) >= zero
+
+    # Now delete the file:
+    assert unlink@Unix("/tmp/foo.bar") = zero
+
+    # Now it is time to exercise the network code:
+    
+    executable_directory :@= new@String()
+    assert !executable_directory_lookup@Unix("Unix_Test", executable_directory)
+    #call d@(form@("executable_directory=%v%\n\") / f@(executable_directory))
+    assert !executable_directory_lookup@Unix("ezcc", executable_directory)
+    #call d@(form@("executable_directory=%v%\n\") / f@(executable_directory))
+    assert !executable_directory_lookup@Unix("/home/wayne/bin/ezcc",
+       executable_directory)
+    #call d@(form@("executable_directory=%v%\n\") / f@(executable_directory))
+
+    call put@("Hello, World!\n\", standard@Out_Stream)
+    return 0
+
+

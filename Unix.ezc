@@ -1,0 +1,1445 @@
+easy_c 1.0
+
+# Copyright (c) 1998-2008 by Wayne C. Gramlich.
+# All rights reserved.
+
+library Easy_C
+require Unix_C
+include "fcntl.h"			# Unix File Control definitions
+include "sys/select.h"
+include "sys/socket.h"
+include "Unix_C.h"
+include "errno.h"
+
+defines_prefix unix_errno_ = E @ Unsigned	# Grab the "E" errno's:
+defines_prefix unix_file_f_ = F_ @ Integer	# Grab the "F_*" defines
+defines_prefix unix_file_o_ = O_ @ Unsigned	# Grab the "O_*" defines:
+defines_prefix unix_so_ = SO_ @ Integer		# Grab the "SO_*" defines
+
+
+define Unix_Directory_Stream			# DIR *
+    external
+
+define Unix_File_Set				# Unix File Set
+    external
+
+define Unix_SHA1_Context
+    external
+
+define Unix_Status				# struct stat
+    external
+
+# {Unix_SHA1_Context} routines:
+
+external null@Unix_SHA1_Context Unix_SHA1_Context
+
+routine new@Unix_SHA1_Context
+    takes_nothing
+    returns Unix_SHA1_Context
+    external Unix_SHA1_Context__new
+
+    # This routine will create and return a new {Unix_SHA1_Context}.
+
+
+routine f@Unix_SHA1_Context
+    takes context Unix_SHA1_Context
+    returns String
+
+    # This routine will format {context}.
+
+    value :@= field_next@Format()
+    call trim@(value, 0)
+
+    index :@= 0
+    while index < 20
+	call string_append@(value, form@("%'0'f2ry%") / f@(context[index]))
+	index := index + 1
+    return value
+
+
+routine fetch1@Unix_SHA1_Context
+    takes context Unix_SHA1_Context
+    takes index Unsigned
+    returns Byte
+    external Unix_SHA1_Context__fetch1
+
+    # This routine will return the {index}'th byte of digest in {context}.
+
+
+routine final@Unix_SHA1_Context
+    takes context Unix_SHA1_Context
+    returns_nothing
+    external Unix_SHA1_Context__final
+
+
+routine test@Unix_SHA1_Context
+    takes_nothing
+    returns Integer
+    external Unix_SHA1_Context__test
+
+    # This routine will test the SHA1 code.
+
+
+routine reset@Unix_SHA1_Context
+    takes context Unix_SHA1_Context
+    returns_nothing
+    external Unix_SHA1_Context__reset
+
+    # This routine will reset {context}.
+
+
+routine update@Unix_SHA1_Context
+    takes context Unix_SHA1_Context
+    takes buffer String
+    returns_nothing
+    external Unix_SHA1_Context__update
+
+    # This routine will process all of the bytes in {buffer} and apply
+    # Them to the SHA1 computation associated with {context}.
+
+
+# {Unix_Status} stuff:
+
+external null@Unix_Status Unix_Status		# Null object
+
+routine new@Unix_Status
+    takes_nothing
+    returns Unix_Status
+    external Unix_Status__new
+
+    # This routine will create and return a {Unix_Status} object.
+
+routine is_directory@Unix_Status
+    takes status Unix_Status
+    returns Logical
+    external Unix_Status__is_directory
+
+    # This routine will return {true@Logical} if {status} represents
+    # a directory.
+
+routine is_regular_file@Unix_Status
+    takes status Unix_Status
+    returns Logical
+    external Unix_Status__is_regular_file
+
+    # This routine will return {true@Logical} if {status} represents
+    # a regular_file
+
+routine is_symbolic_link@Unix_Status
+    takes status Unix_Status
+    returns Logical
+    external Unix_Status__is_symbolic_link
+
+    # This routine will return {true@Logical} if {status} represents
+    # a symbolic link.
+
+routine mode_get@Unix_Status
+    takes status Unix_Status
+    returns Unsigned
+    external Unix_Status__mode_get
+
+    # This routine will return the mode bits associated with {status}.
+
+routine modification_time_get@Unix_Status
+    takes status Unix_Status
+    returns Unsigned
+    external Unix_Status__modification_time_get
+
+    # This routine will return the mode bits associated with {status}.
+
+routine size_get@Unix_Status
+    takes status Unix_Status
+    returns Long_Unsigned
+    external Unix_Status__size_get
+
+    # This routine will return the file size associated with {status}.
+
+# {Unix_Directory_Stream} stuff:
+
+external null@Unix_Directory_Stream Unix_Directory_Stream
+
+routine close@Unix_Directory_Stream
+    takes directory_stream Unix_Directory_Stream
+    returns_nothing
+    external Unix_Directory_Stream__close
+
+    # This routine will close {directory_stream}.
+
+routine open@Unix_Directory_Stream
+    takes name String
+    returns Unix_Directory_Stream
+    external Unix_Directory_Stream__open
+
+    # This routine will open {name} as a directory and return the
+    # corresponding {Unix_Directory_Stream} object.
+    # {null@Unix_Directory_Stream} is returned if the open fails.
+    
+
+routine read@Unix_Directory_Stream
+    takes directory_stream Unix_Directory_Stream
+    takes temporary String
+    returns String
+    external Unix_Directory_Stream__read
+
+    # This routine will read in the name of the next directory entry
+    # in {directory_stream} and append it to {temporary}.  If {temporary}
+    # is {null@String}, a new {String} object is allocated and the
+    # directory entry name is appended to that.  In either, case the
+    # string that was appended to is returned.  If there are no more
+    # directory entry names in {directory_stream}, {null@String} is returned.
+
+# {Unix_File_Set} stuff:
+
+external null@Unix_File_Set Unix_File_Set
+
+routine new@Unix_File_Set
+    takes_nothing
+    returns Unix_File_Set
+    external Unix_File_Set__new
+
+    # This routine will return a new {Unix_File_Set} object.
+
+
+routine clear@Unix_File_Set
+    takes file_set Unix_File_Set
+    takes fd Integer
+    returns_nothing
+    external Unix_File_Set__clear
+
+    # This routine will clear {fd} from {file_set}.
+
+
+routine contents_copy@Unix_File_Set
+    takes to_file_set Unix_File_Set
+    takes from_file_set Unix_File_Set
+    returns_nothing
+    external Unix_File_Set__contents_copy
+
+    # This routine overwrite the contents of {to_file_set} with the
+    # contents of {from_file_set}.
+
+
+routine f@Unix_File_Set
+    takes file_set Unix_File_Set
+    returns String
+
+    # This routine will return a formatted version of {file_set}.
+
+    value :@= field_next@Format()
+    call trim@(value, 0)
+    call character_append@(value, '{')
+    prefix :@= ""
+    size :@= 0
+    maximum :@= file_set.maximum
+    if maximum >= 0i
+	size := unsigned@(maximum)
+    index :@= 0
+    while index <= size
+	if is_set@(file_set, integer@(index))
+	    call string_append@(value, prefix)
+	    prefix := ", "
+	    call string_append@(value, form@("%d%") / f@(index))
+	index := index + 1
+    call character_append@(value, '}')
+    return value
+
+
+routine is_set@Unix_File_Set
+    takes file_set Unix_File_Set
+    takes fd Integer
+    returns Logical
+    external Unix_File_Set__is_set
+
+    # This routine will return {true}@{Logical} if {fd} is set in {file_set}
+    # {false}@{Logical} otherwise.
+
+
+routine maximum_get@Unix_File_Set
+    takes file_set Unix_File_Set
+    returns Integer
+    external Unix_File_Set__maximum_get
+
+    # This routine will return the maximum fd set in {file_set} (or 0).
+
+
+routine set@Unix_File_Set
+    takes file_set Unix_File_Set
+    takes fd Integer
+    returns_nothing
+    external Unix_File_Set__set
+
+    # This routine will set {fd} from {file_set}.
+
+
+routine update@Unix_File_Set
+    takes file_set Unix_File_Set
+    returns_nothing
+    external Unix_File_Set__update
+
+    # This routine will update the {maximum} value for {file_set}.
+
+
+routine zero@Unix_File_Set
+    takes file_set Unix_File_Set
+    returns_nothing
+    external Unix_File_Set__zero
+
+    # This routine will zero out {file_set}.
+
+
+
+# System calls:
+
+routine accept@Unix
+    takes file_descriptor_number Integer
+    returns Integer
+    external Unix__accept
+    
+    # This procedure will accept a connection on the socket referred
+    # to by {file_descriptor_number}.  The internet address of the
+    # connection initiator is returned.  For now, this interface
+    # does not provide any way to get the port number.  A call to
+    # {status_get}@{unix_system}() will indicate how successful the
+    # operation is; the possible return values are {ok}, {bad_file},
+    # {not_socket}, {not_supported}, {bad_address}, or {try_again}.
+    #
+    # This procedure is equivalent to the accept(2) system call.
+
+
+routine bind@Unix
+    takes file_descriptor_number Integer
+    takes internet_address Unsigned
+    takes port_number Unsigned
+    returns Integer
+    external Unix__bind
+
+    # This procedure will bind {internet_address} and {port_number} to
+    # the socket referred to by {file_descriptor_number}.  On success
+    # 0 is returned; otherwise -1 is returned and the failure reason
+    # is in errno.  {status_get}@{unix_system}() will indicate how
+    # successful the operation is; the possible return values are {ok},
+    # {bad_file}, {invalid}, or {no_access}.
+    #
+    # This procedure is equivalent to the bind(2) system call.
+
+
+routine connect@Unix
+    takes file_descriptor_number Integer
+    takes internet_address Unsigned
+    takes port_number Unsigned
+    returns Integer
+    external Unix__connect
+
+    # This procedure will connect the socket referred to by
+    # {file_descriptor_number} to port {port_number} at the
+    # host identified by {internet_address}.  A call to
+    # {status_get}@(unix_system}() will indicate how successful
+    # the operation is; the possible return values are {ok}, and
+    # some other undocumented error values (sorry!).
+    #
+    # This procedure is equivalent to the connect(2) system call.
+
+
+routine close@Unix
+    takes file_descriptor_number Integer
+    returns Integer
+    external close
+
+    # This procedure will close {file_descriptor_number}.
+    #
+    # It is really important to check the return status of this call
+    # when writing out a file because sometimes the operating system
+    # does not realize that there is no disk space left until after a
+    # write(2) system call has successfully returned.  By verifying
+    # that the close call succeeded, there is assurances that the file
+    # was written successfully.
+    #
+    # This procedure is equivalent to the close(2) system call.
+
+
+routine current_working_directory@Unix
+    takes buffer String
+    returns Logical
+    external Unix__current_working_directory
+
+    # This routine will append the current working directory into {buffer}.
+    # {true@Logical} is returned if any error occurs and {false@Logical}
+    # otherwise.
+
+    
+#procedure directory_create@Unix
+#    takes new_directory_name String
+#    takes new_directory_mode unsigned
+#    returns Integer
+#    external Unix__directory_create
+#
+#    # This procedure will create a directory named {new_directory_name}
+#    # with access mode bits of {new_directory_mode}.  A call to
+#    # {status_get}@{unix_system}() will indicate how successful the
+#    # operation is; the possible return values are {file_exists},
+#    # {no_access}, {name_too_long}, {no_file}, {not_directory},
+#    # {no_mememory}, and {read_only}.
+#    #
+#    # This procedure is equivalent to the mkdir(2) system call.
+#
+#
+#procedure duplicate@unix_system
+#    takes
+#	unix_system unix_system
+#	file_descriptor_number unsigned
+#    returns unsigned
+#
+#    # This procedure will duplicate the {file_descriptor_number} and
+#    # return the duplicate file descriptor number.  A call to
+#    # {status_get}@{unix_system}() will return one of {ok}, {not_open},
+#    # and {none_available}.
+#    #
+#    # This procedure is equivalent to the dup(2) system call.
+#
+#    return file_control@(unix_system, file_descriptor_number, duplicate, 0)
+#
+#
+#procedure duplicate2@unix_system
+#    takes
+#	unix_system unix_system
+#	from_file_descriptor_number unsigned
+#	to_file_descriptor_number unsigned
+#    returns unsigned
+#    external unix_system__duplicate2
+#
+#    # This procedure will duplicate the {from_file_descriptor_number} to
+#    # {to_file_descriptor_number}, closing {to_file_descriptor_number} if
+#    # necessary.  A call to {status_get}@{unix_system}() will return one
+#    # of {ok}, {not_open}, and {none_available}.  This call is permitted
+#    # modify file descriptors 0, 1, and 2.
+#    #
+#    # This procedure is equivalent to the dup2(2) system call.
+
+
+routine environment_all@Unix
+    takes_nothing
+    returns Array[String]
+
+    # This routine will create and return an {array[String]} that
+    # contains the entire enviroment list for this process.
+
+    buffer :@= new@String()
+    environment :@= new@Array[String]()
+    index :@= 0
+    while 1t
+	if environment_fetch@Unix(index, buffer)
+	    break
+	call append@(environment, read_only_copy@(buffer))
+	index := index + 1
+    return environment
+
+
+routine environment_fetch@Unix
+    takes index Unsigned
+    takes buffer String
+    returns Logical
+    external Unix__environment_fetch
+
+    # This routine will append the contents of the {index}'th environment
+    # string to {buffer}.
+
+
+routine environment_lookup@Unix
+    takes name String
+    takes value String
+    returns Logical
+    external Unix__environment_lookup
+
+    # This routine will lookup {name} in the environment names of passed
+    # into the program and append the associated value into {value}.
+    # If {name} can not be found, {value} is emptied and {true@Logical}
+    # is returned.  Otherwise, {false@Logical} is returned for a successful
+    # lookup.
+
+
+routine environment_size@Unix
+    takes_nothing
+    returns Unsigned
+    external Unix__environment_size
+
+    # This routine will return the number of environment strings that
+    # were passed into the program.
+
+
+routine errno_convert@Unix
+    takes string String
+    takes error_number Unsigned
+    returns String
+    external Unix__errno_convert
+
+    # This routine will return a string containing a human readable
+    # version of {error_number}.  If {string} is {null}@{String},
+    # a new string is allocated using {new}@{String}().  Othewise,
+    # the error string is appended to {string}.  In all cases, the
+    # the error string is returned.
+
+
+routine errno@Unix
+    returns Unsigned
+    external Unix__errno
+
+    # Returns the current value of {errno}.
+
+
+routine executable_directory_lookup@Unix
+    takes executable_name String
+    takes executable_directory String
+    returns Logical
+
+    # This routine will figure out what directory {executable_name}
+    # would come from using the environment path variable.  This
+    # routine uses {real_path@Unix}() which has some potential for
+    # buffer overrun abuse. 
+
+    # Search {executable_name} for a '/':
+    result :@= true@Logical
+    size :@= executable_name.size
+    index :@= 0
+    while index < size
+	if executable_name[index] = '/'
+	    break
+	index := index + 1
+
+    if index < size
+	# {executable_name} contains a '/'; no $PATH required:
+	result := real_path@Unix(executable_name, executable_directory)
+    else
+	# No '/'; must use $PATH:
+	path :@= new@String()
+	assert !environment_lookup@Unix("PATH", path)
+	call trim@(executable_directory, 0)
+	size := path.size
+	index := 0
+	while index < size
+	    character :@= path[index]
+	    if character != ':'
+		call character_append@(executable_directory, character)
+	    #call d@(form@("dir=%v%\n\") / f@(executable_directory))
+	    if character = ':' || index + 1 = size
+		call character_append@(executable_directory, '/')
+		call string_append@(executable_directory, executable_name)
+		#call d@(form@("test=%v%\n\") / f@(executable_directory))
+		if !real_path@Unix(executable_directory,
+		  executable_directory)
+		    result := false@Logical
+		    break
+		call trim@(executable_directory, 0)
+	    index := index + 1
+
+    if !result
+	while true@Logical
+	    #call d@(form@("dir1=%v%\n\") / f@(executable_directory))
+	    size := executable_directory.size
+	    if size = 0
+		break
+	    character := executable_directory[size - 1]
+	    call trim@(executable_directory, size - 1)
+	    if character = '/'
+		break
+
+    #call d@(form@("executable_directory_lookup@Unix(%v%, %v%) => %l%\n\") %
+    #  f@(executable_name) % f@(executable_directory) / f@(result))
+
+    return result
+
+
+routine execve@Unix
+    takes file_name String
+    takes arguments Array[String]
+    takes environment Array[String]
+    returns Integer
+    external Unix__execve
+
+    # This procedure will execute the file named {file_name}
+    # with arguments of {arguments} and an environment of {environment}.
+    # This procedure will only return if an error occurs.
+    
+
+routine exit@Unix
+    takes status Integer
+    returns_nothing
+    external exit
+
+    # This procedure will cause the current process to immediately
+    # exit with a status of {status}.  This procedure never returns.
+    # This procedure invokes the _exit(2) system call.
+
+
+routine file_control@Unix
+    takes file_descriptor_number Integer
+    takes command Integer
+    takes argument Integer
+    returns Integer
+    external Unix__file_control
+
+    # This procedure will perform a fcntl(2) unix system call where
+    # {file_descriptor_number} is the file descriptor to operate on,
+    # {file_control_operation} is the operation to be performed, and
+    # {operation_argument} is an unsigned value to be passed into
+    # operation.  Not all operations need {operation_argument}.  Any
+    # return value from the operation is returned.
+
+
+routine fork@Unix
+    takes_nothing
+    returns Integer
+    external Unix__fork
+
+    # This procedure will perform a fork(2) unix system call.
+    # In general, this procudure is intended to be used right
+    # before calling the {execute}@{unix_system}() procedure.
+    # The child process will get a return value of 0.  The parent
+    # process will get the child process id.
+
+
+routine get_time_of_day@Unix
+    takes_nothing
+    returns Long_Integer
+    external Unix__get_time_of_day
+
+    # This routine will perform a gettimeofday(2) unix system call
+    # and convert the result into a "long long int" (i.e. {Long_Integer}).
+    # This is the number of microseconds since January 1, 1970.
+
+
+routine get_socket_option@Unix
+    takes socket_number Integer
+    takes socket_options Integer
+    returns Integer
+    external unix_system__get_socket_option
+
+    # This procedure will return the {socket_option} value for
+    # {socket_number}.
+
+
+routine host_lookup@Unix
+    takes internet_address Unsigned
+    takes host_name String
+    returns Logical
+    external Unix__host_lookup
+
+
+    # This procedure will lookup the system name for {internet_address}
+    # and store it into the writable string {host_name}.  If the lookup
+    # is successful, {true}@{logical} is returned; otherwise, {false} is
+    # returned.
+    #
+    # This procedure is equivalent to gethostbyaddr(2).
+
+
+routine internet_address_lookup@Unix
+    takes host_name String
+    returns Unsigned
+    external Unix__internet_address_lookup
+
+    # This procedure will lookup the internet address associated with
+    # {host_name}.  If {host_name} can not be successfully looked up,
+    # 0 is returned.
+    #
+    # This procedure is equivalent to gethostbyname(2).
+
+
+#procedure kernel_system_name@unix_system
+#    takes
+#	unix_system unix_system
+#	system_name string
+#    returns_nothing
+#    external unix_system__kernel_system_name
+#
+#    # This procedure will store the kernel system name into the writable
+#    # string {system_name}.
+#    #
+#    # This procedure is equivalent to uname(2).sysname.
+#
+#
+#procedure kernel_node_name@unix_system
+#    takes
+#	unix_system unix_system
+#	node_name string
+#    returns_nothing
+#    external unix_system__kernel_node_name
+#
+#    # This procedure will store the kernel system name into the writable
+#    # string {node_name}.
+#    #
+#    # This procedure is equivalent to uname(2).nodename.
+#
+#
+#procedure kernel_domain_name@unix_system
+#    takes
+#	unix_system unix_system
+#	domain_name string
+#    returns_nothing
+#
+#    # This procedure will store the kernel system name into the writable
+#    # string {domain_name}.
+#    #
+#    # This procedure is equivalent to uname(2).domainname.
+#
+#    #FIXME: How is this done with the new glibc!!!
+#    assert false
+#
+#
+#procedure kill@unix_system
+#    takes
+#	unix_system unix_system
+#	process_number unsigned
+#	signal_number unsigned
+#    returns_nothing
+#    external unix_system__kill
+#
+#    # This procedure will send signal {signal_number} to process
+#    # {process_number}.
+
+
+routine listen@Unix
+    takes file_descriptor_number Integer
+    takes queue_length Integer
+    returns Integer
+    external listen
+
+    # This routine will cause the operating system to start listening
+    # for connections on the socket referred to by {file_descriptor_number}.
+    # Up to {queue_length} connections can be pending for accepts before
+    # the operating system will start refusing connections.  A call to
+    # {status_get}@{unix_system}() will indicate how successful the
+    # operation is; the possible return values are {ok}, {bad_file},
+    # {not_socket}, or {not_supported}.
+    #
+    # This procedure is equivalient to the listen(2) system call.
+
+
+routine lstat@Unix
+    takes path String
+    takes status Unix_Status
+    returns Integer
+    external Unix__lstat
+
+    # This routine will cause lookup file meta data for {path} and
+    # store it into {status}.  If {path} refers to a symbolic link,
+    # information about the symbolic link is returned rather than
+    # the target of the symbolic link.  This routine returns 0i on
+    # success and -1i on failure.
+
+
+routine mkdir@Unix
+    takes new_directory_name String
+    takes mode Unsigned
+    returns Integer
+    external Unix__mkdir
+
+    # This routine will create a new directory named {new_directory_name}
+    # with access bits specified by {mode}.  0 is returned on success
+    # an -1 on failure.  Read mkdir(2) for all the possible error modes.
+
+routine open@Unix
+    takes pathname String
+    takes flags Unsigned
+    takes mode Unsigned
+    returns Integer
+    external Unix__open
+
+    # This routine will open and return a file_descriptor number for
+    # for {pathname}.  The {flags} argument specifies how to perform
+    # the open. The {mode} specifies the access bits if {pathanme}
+    # is actually created.
+    #
+    # Read the open(2) system call for more details.
+
+
+#procedure pipe@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned, unsigned
+#
+#    # This procedure will invoke the unix pipe(2) system call and
+#    # return two file descriptors that correspond to either end of
+#    # the pipe.  The first file descriptor number is the read pipe
+#    # number and the second file descriptor number is the write pipe
+#    # number.  If any error occurs, 0xffffffff is returned for both
+#    # file descriptor numbers.
+#
+#    read_file_descriptor_number :@= 0xffffffff
+#    write_file_descriptor_number :@= 0xffffffff
+#    pipe_actual@(unix_system)
+#    if unix_system.status = ok
+#	read_file_descriptor_number :@= unix_system.pipe_read
+#	write_file_descriptor_number :@= unix_system.pipe_write
+#    return read_file_descriptor_number, write_file_descriptor_number
+#
+#
+#procedure pipe_actual@unix_system
+#    takes
+#	unix_system unix_system
+#    returns_nothing
+#    external unix_system__pipe_actual
+#
+#    # This procedure will perform the actual unix pipe(2) system call.  The
+#    # read file descriptor is obtained via {pipe_read_get}@{unix_system}()
+#    # procedure call.  The write file descriptor is obtained via
+#    # {pipe_write_get}@{unix_system}() procedure call.
+#    #
+#    # Note: This procedure should only be called from {pipe}@{unix_system}().
+#
+#
+#procedure pipe_read_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__pipe_read_get
+#
+#    # This procedure will return the read file descriptor for the last
+#    # pipe created via a call to the {pipe_actual}@{unix_system}()
+#    # procedure.
+#    #
+#    # Note: This procedure should only be called from {pipe}@{unix_system}().
+#
+#
+#procedure pipe_write_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__pipe_write_get
+#
+#    # This procedure will return the write file descriptor for the last
+#    # pipe created via a call to the {pipe_actual}@{unix_system}()
+#    # procedure.
+#    #
+#    # Note: This procedure should only be called from {pipe}@{unix_system}().
+#
+#
+#procedure print@unix_system
+#    takes
+#	unix_system unix_system
+#	out_stream out_stream
+#    returns_nothing
+#
+#    # This procedure will print {unix_system} to {out_stream}.
+#
+#    put@("unix_system", out_stream)
+
+
+routine read@Unix
+    takes file_descriptor_number Integer
+    takes buffer String
+    takes offset Unsigned
+    takes amount Unsigned
+    returns Integer
+    external Unix__read
+
+    # This procedure will attempt to insert {amount} bytes of data
+    # from {file_descriptor_number} into {buffer} starting at {offset}.
+    # The actual number of bytes read is returned.  -1 is returned
+    # for an error.
+    #
+    # Read the read(2) system call for more information.
+
+
+routine readlink@Unix
+    takes symbolic_link String
+    takes value String
+    returns Integer
+    external Unix__readlink
+
+    # This routine will read the contents of the {symbolic_link}
+    # and store the result in {value}.  On success, 0 is returned,
+    # otherwise -1 is returned.  Check readlink(2) for the various
+    # error responses.
+
+
+routine real_path@Unix
+    takes path String
+    takes resolved_path String
+    returns Logical
+    external Unix__real_path
+
+    # This routine will copy the real file path for {path} into
+    # {resolved_path}.  {true@Logical} is returned if there are any
+    # problems, and {false@Logical} otherwise.  This routine use the
+    # realpath(3) routine which is unfortunately susceptible to
+    # buffer overrun abuse in some impelmentations.
+
+
+routine rename@Unix
+    takes old_file_name String
+    takes new_file_name String
+    returns Integer
+    external Unix__rename
+
+    # This routine will create rename {old_file_name} to {new_file_name}.
+    # 0 is returned on success and -1 on failure.  Read rename(2) for all
+    # the possible error modes.
+
+
+#procedure resource_user_time_seconds_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_user_time_seconds_get
+#
+#    # This procedure will return the number of user time seconds
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_user_time_microseconds_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_user_time_microseconds_get
+#
+#    # This procedure will return the number of user time microseconds
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_system_time_seconds_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_system_time_seconds_get
+#
+#    # This procedure will return the number of system time seconds
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_system_time_microseconds_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_system_time_microseconds_get
+#
+#    # This procedure will return the number of system time microseconds
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_maximum_resident_set_size_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_maximum_resident_size_get
+#
+#    # This procedure will return the maximum resident set size
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_maximum_shared_memory_size_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_maximum_shared_memory_size_get
+#
+#    # This procedure will return the maximum shared memory size
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_maximum_unshared_data_size_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_unshared_data_size_get
+#
+#    # This procedure will return the maximum unshared data size
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_maximum_unshared_stack_size_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_maximum_unshared_stack_size_get
+#
+#    # This procedure will return the maximum unshared stack size
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_minor_page_faults_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_minor_page_faults_get
+#
+#    # This procedure will return the number of minor page faults
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_major_page_faults_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_major_page_faults_get
+#
+#    # This procedure will return the number of major page faults
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_swaps_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_swaps_get
+#
+#    # This procedure will return the number of swaps
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_input_blocks_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_input_blocks_get
+#
+#    # This procedure will return the number of input blocks
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_output_blocks_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_output_blocks_get
+#
+#    # This procedure will return the number of output blocks
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_message_sends_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_message_sends_get
+#
+#    # This procedure will return the number of message send
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_message_receives_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_message_receives_get
+#
+#    # This procedure will return the number of message receives
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_signals_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_signals_get
+#
+#    # This procedure will return the number of signals
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_voluntary_context_switches_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_voluntary_context_switches_get
+#
+#    # This procedure will return the number of voluntary context switches
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure resource_involuntary_context_switches_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__resource_involuntary_context_switches_get
+#
+#    # This procedure will return the number of involuntary context switches
+#    # associated with {unix_system}.  This value is set via a call
+#    # to either {resources_obtain}@{unix_system}() or via a call
+#    # {wait}@{unix_system}().
+#
+#
+#procedure seek@unix_system
+#    takes
+#	unix_system unix_system
+#	file_descriptor_number unsigned
+#	offset unsigned
+#    returns unsigned
+#    external unix_system__seek
+#
+#    # This procedure will cause the I/O pointer for {file_descriptor_number}
+#    # to be positioned to {offset}.  A call to {status_get}@{unix_system}()
+#    # return an indication of how successful the operation is.  The
+#    # possible return values are {ok}, {bad_file}, {illegal_seek}, or
+#    # {invalid}.
+#    #
+#    # This command is equivalent to the lseek(2) command.
+
+
+routine set_socket_option@Unix
+    takes socket_number Integer
+    takes socket_option Integer
+    takes value Integer
+    returns Integer
+    external Unix__set_socket_option
+
+    # This procedure will set the {socket_option} value for
+    # {socket_number} to {value}.
+
+
+routine select@Unix
+    takes read_file_set Unix_File_Set
+    takes write_file_set Unix_File_Set
+    takes exception_file_set Unix_File_Set
+    takes seconds Unsigned
+    takes microseconds Unsigned
+    returns Integer
+    external Unix__select
+
+    # This procedure will wait for data to be ready for reading on
+    # {read_file_set}, data ready for writing on {write_file_set},
+    # some sort of problem  for {exception_file_set}, or a timeout
+    # of {seconds} plus {micorseconds}.  A value of {null@Unix_File_Set}
+    # can be passed for any three of the file sets to indictate the
+    # empty set.  Any {file_set} objects that are not {null@Unix_File_Set}
+    # will be *modified* to indicate which file descriptors are ready
+    # for input or output or exception processing.  Specifying 0 as
+    # the value for both {seconds} and {nanoseconds} means that the
+    # select should *not* timeout.  Specifying a value of {seconds}
+    # to be 0xffffffff will disable the timeout and force a block.
+    # The number of bits set in all three {File_Set} objects (that
+    # are not equal to {null@Unix_File_Set}) is returned.  Thus, a return
+    #value of 0 means that a timeout has occured.  A return value of
+    # -1 indicates some error occured.
+    #
+    # This routine provides functional accesss to the select(2)
+    # system call.
+
+
+routine stat@Unix
+    takes path String
+    takes status Unix_Status
+    returns Integer
+    external Unix__lstat
+
+    # This routine will cause lookup file meta data for {path} and
+    # store it into {status}.  This routine returns 0i on success and
+    # -1i on failure.
+
+
+##procedure status@unix_system
+##    takes
+##	file_descriptor_number unsigned
+##	file_status file_status
+##    returns_nothing
+##    external unix_system__status
+##
+##    # This procedure will obtain the file information pertaining to
+##    # {file_descriptor_number} and store the results into file_status.
+##    # This is equivalent to the fstat(2) system call.
+
+
+routine socket_stream_create@Unix
+    takes_nothing
+    returns Integer
+    external Unix__socket_stream_create
+
+    # This procedure will create and return a file descriptor number for
+    # use as a network TCP/IP stream.
+    #
+    # There is currently no interface for datagrams.
+    #
+    # The procedure is basically a call to the socket(2) system call
+    # configured for TCP streams.
+
+
+routine symlink@Unix
+    takes existing_file_name String
+    takes new_file_name String
+    returns Integer
+    external Unix__symlink
+
+    # This routine will create a symbolic link to {existing_file_name} from
+    # {new_file_name}.  0 is returned on success and -1 on failure.  Read
+    # symlink(2) for all the possible error modes.
+
+
+routine system@Unix
+    takes command String
+    returns Integer
+    external Unix__system
+
+    # This routine will execute {command} in a shell.
+
+
+#procedure truncate@unix_system
+#    takes
+#	unix_system unix_system
+#	file_descriptor_number unsigned
+#	length unsigned
+#    returns_nothing
+#    external unix_system__truncate
+#
+#    # This procedure will truncate the file refered to by
+#    # {file_descriptor_number} to no more than {length} bytes.
+#    # This is equivalent to the ftruncate(2) system call.
+#    #
+#    # Eventually, there needs to be a version of this call
+#    # that takes a 64-bit number.
+#
+#
+
+routine unlink@Unix
+    takes path_name String
+    returns Integer
+    external Unix__unlink
+
+    # This routine will unlink (i.e. delete/remove) {path_name}.
+    # 0 is return on success and -1 on failure.
+    #
+    # Read the unlink(2) system call for more information.
+
+
+#procedure wait@unix_system
+#    takes
+#	unix_system unix_system
+#	process_number unsigned
+#	no_hang logical
+#	stopped_too logical
+#    returns unsigned
+#    external unix_system__wait
+#
+#    # This procedure will perform a unix wait4(2) system call.
+#    # If {process_number} is 0, the procedure will wait until
+#    # any child process exits/stops; in which case the process
+#    # id of the child process that exited/stopped is returned.
+#    # If {process_number} is non-zero, the procedure will wait for
+#    # the specified child process to exit/stop.  If {no_hang}
+#    # is {true}, this procedure will not block waiting for the child
+#    # process exit/stop, instead it will return immediately with
+#    # a value of 0xffffffff if specified child process is not
+#    # exited/stopped.  If {stopped_too} is {true}, stopped processes
+#    # are reported in addition to exited processes; otherwise, only
+#    # exited processes are reported.  There are a number of
+#    # {wait_*_get}@{unix_system} procedures for figuring out whether
+#    # a process exited normally, via a signal, or is just stopped
+#    # (i.e. {stopped_too} is {true}.)  Finally, the resource usage
+#    # information for the exited/stopped process can be obatianed
+#    # via the {resource_*_get}@{unix_system} procedures.
+#
+#
+#procedure wait_exited_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns logical
+#    external unix_system__wait_exited_get
+#
+#    # This procedure will return {true}@{logical} if the last call
+#    # to {wait}@{unix_system}() resulted in a child process that
+#    # exited normally; otherwise, {false} is returned.
+#
+#
+#procedure wait_exit_status_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__exit_status_get
+#
+#    # This procedure will return the least significant 8 bits of
+#    # the return code for exiting process.  These 8 bits are only
+#    # valid if {wait_exited_get}@{unix_system} returned {true}.
+#
+#
+#procedure wait_signaled_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns logical
+#    external unix_system__signaled_get
+#
+#    # This procedure will return {true}@{logical} if the last call
+#    # to {wait}@{unix_system}() resulted in a child process that
+#    # exited because of a signal; otherwise {false} is returned.
+#
+#
+#procedure wait_signal_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__signaled_get
+#
+#    # This procedure will return the signal value that caused the
+#    # the last process to exit.  The signal value is only valid if
+#    # {wait_signaled_get}@{unix_system} returned {true}.
+#
+#
+#procedure wait_stopped_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns logical
+#    external unix_system__stopped_get
+#
+#    # This procedure will return {true}@{logical} if the last call
+#    # to {wait}@{unix_system}() resulted in a child process that
+#    # exited because of a signal; otherwise {false} is returned.
+#
+#
+#procedure wait_stop_get@unix_system
+#    takes
+#	unix_system unix_system
+#    returns unsigned
+#    external unix_system__stopget
+#
+#    # This procedure will return the signal value that caused the
+#    # the last process to stop.  The signal value is only valid if
+#    # {wait_stopped_get}@{unix_system} returned {true}.
+
+
+routine write@Unix
+    takes file_descriptor_number Integer
+    takes buffer String
+    takes offset Unsigned
+    takes amount Unsigned
+    returns Integer
+    external Unix__write
+
+    # This routine will attempt to write {amount} bytes of data
+    # from {buffer} starting at {offset} to {file_descriptor_number}.
+    # The actual number of bytes written is returned.  If an error
+    # occurs, -1 is returned and {errno} is the reason why.
+    #
+    # This is the write(2) system call.
+
+
+## Here are some trivial {open_flags} routines:
+#
+#procedure set1@open_flags
+#    takes
+#	open_flags1 open_flags
+#    returns unsigned
+#
+#    # This procedure will return a mask with {open_flags1} set.
+#
+#    return 1<<unsigned_convert@(open_flags1)
+#
+#
+#procedure set2@open_flags
+#    takes
+#	open_flags1 open_flags
+#	open_flags2 open_flags
+#    returns unsigned
+#
+#    # This procedure will return a mask with {open_flags1} and {open_flags2}
+#    # set.
+#
+#    return set1@(open_flags1) | set1@(open_flags2)
+#
+#
+#procedure set3@open_flags
+#    takes
+#	open_flags1 open_flags
+#	open_flags2 open_flags
+#	open_flags3 open_flags
+#    returns unsigned
+#
+#    # This procedure will return a mask with {open_flags1}, {open_flags2},
+#    # and {open_flags3} set.
+#
+#    return set2@(open_flags1, open_flags2) | set1@(open_flags3)
+#
+#    
+#procedure set4@open_flags
+#    takes
+#	open_flags1 open_flags
+#	open_flags2 open_flags
+#	open_flags3 open_flags
+#	open_flags4 open_flags
+#    returns unsigned
+#
+#    # This procedure will return a mask with {open_flags1}, {open_flags2},
+#    # {open_flags3}, and {open_flags4} set.
+#
+#    return set2@(open_flags1, open_flags2) | set2@(open_flags3, open_flags4)
+#
+#    
+#
+#define open_flags		# Bit positions of open(2) flags
+#    enumeration
+#	write_only		# O_CREAT = 1<<0
+#	read_write		# O_RDWR = 1<<1
+#	unused1			# 1<<2
+#	unused2			# 1<<3
+#	unused3			# 1<<4
+#	unused4			# 1<<5
+#	create			# O_CREAT = 1<<6
+#	exclusive		# O_EXCL = 1<<7
+#	no_control_tty		# O_NOCTTY = 1<<8
+#	truncate		# O_TRUNC = 1<<9
+#	append			# O_APPEND = 1<<10
+#	no_block		# O_NONBLOCK = O_NDELAY = 1<<11
+#	synchronous		# O_SYNC = 1<<12
+#
+#define file_control_operation	# File control (fcntl(2)) operation flags
+#    enumeration
+#	duplicate		# F_DUPFD(0) = Duplicate file descriptor
+#	get_close_on_execute	# F_GETFD(1) = Get close on execute flag
+#	set_close_on_execute	# F_SETFD(2) = Get close on execute flag
+#	get_flags		# F_GETFL(3) = Get file descriptor flags
+#	set_flags		# F_SETFL(4) = Set file_descriptor flags
+#	get_lock		# F_GETLK(5) = Get file descretionary lock
+#	set_lock		# F_GETLK(6) = Set file descretionary lock
+#	set_lock_wait		# F_GETLKW(7) = Set file descr. lock, wait
+#	get_owner		# F_GETOWN(8) = Get owner (for sockets)
+#	set_owner		# F_SETOWN(9) = Set owner (for sockets)
+#
+#define socket_options		# Socket options for setsockopt(2)
+#    enumeration
+#	unused1			# Unused 1
+#	debug			# SO_DEBUG(1) - Enable debugging
+#	reuse_address		# SO_REUSEADDR(2) - Enable local address reuse
+#	type			# SO_TYPE(3) - Get Socket type
+#	error			# SO_ERROR(4) - Get and clear socket error
+#	do_not_route		# SO_DONTROUTE(5) - Bypass output msg. routing
+#	broadcast		# SO_BROADCAST(6) - Enable broadcast messages
+#	send_buffer		# SO_SNDBUF(7) - Set send buffer size
+#	receive_buffer		# SO_RCVBUF(8) - Set receive buffer size
+#	keep_alive		# SO_KEEPALIVE(9) - Keep connection alive
+#	out_of_band		# SO_OOBINLINE(10) - Enable out of band data
+#	no_check		# SO_NO_CHECK(11) - ??
+#	priority		# SO_PRIORITY(12) - ??
+#	linger			# SO_LINGER(13) - Linger on close
+#	bsd_compatible		# SO_BSDCOMPAT(14) - ??
+#
+

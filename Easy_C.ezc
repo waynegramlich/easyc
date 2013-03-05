@@ -1,0 +1,4715 @@
+easy_c 1.0
+
+# Copyright (c) 2007-2010 by Wayne C. Gramlich
+# All rights reserved.
+
+include "Easy_C_C.h"
+require Easy_C_C
+
+# {Array} stuff:
+
+define Array[Element]
+    external
+
+routine append@Array[Element]
+    takes array Array[Element]
+    takes element Element
+    returns_nothing
+    external Array__append
+
+    # This routine will append {element} to {array}.
+
+
+routine array_append@Array[Element]
+    takes to_array Array[Element]
+    takes from_array Array[Element]
+    returns_nothing
+
+    # This routine will append all of the elements in {from_array} to
+    # the end of {to_array}.
+
+    from_size :@= from_array.size
+    if from_size != 0
+	element :@= from_array[0]
+	to_size :@= to_array.size
+	call range_insert@Array[Element](to_array, to_size, from_size, element)
+	call transfer@Array[Element](to_array,
+	  to_size, from_array, 0, from_size)
+
+
+#routine copy@Array[Element]
+#    takes array Array[Element]
+#    takes copy_routine [Element <= Element]
+#    returns Array[Element]
+#
+#    # This routine will return a copy of {array} using {copy_routine}
+#    # to copy each element in {array}.
+#
+#    result :@= new@Array[Element]()
+#    size :@= array.size
+#    index :@= 0
+#    while index < size
+#	call append@(result, copy_routine(array[index]))
+#	index := index + 1
+#    return result
+
+
+routine copy_shallow@Array[Element]
+    takes array Array[Element]
+    returns Array[Element]
+
+    # This routine will return a shallow copy of {array}.
+
+    result :@= new@Array[Element]()
+    size :@= array.size
+    index :@= 0
+    while index < size
+	call append@(result, array[index])
+	index := index + 1
+    return result
+
+
+routine delete@Array[Element]
+    takes array Array[Element]
+    takes index Unsigned
+    returns_nothing
+
+    # This routine will delete {index}'th element from {array}.
+
+    call range_delete@Array[Element](array, index, 1)
+
+
+routine equal@Array[Element]
+    takes array1 Array[Element]
+    takes array2 Array[Element]
+    takes element_equal [Logical <= Element, Element]
+    returns Logical
+
+    # This routine will return {true@Logical} if each {Element} in {array1}
+    # is equal to the correpsonding element in {array2} using {element_equal}
+    # to determine equality; otherwise, {false@Logical} is returned.
+
+    size1 :@= array1.size
+    size2 :@= array2.size
+    result :@= size1 = size2
+    if result
+	index :@= 0
+	while index < size1
+	    if !element_equal(array1[index], array2[index])
+		result := false@Logical	
+		break
+	    index := index + 1    
+    return result
+
+
+routine erase@Array[Element]
+    takes array Array[Element]
+    returns_nothing
+    external Array__erase
+
+    # This routine will erase {array}.
+    
+
+routine f@Array[Element]
+    takes array Array[Element]
+    takes f_routine [String <= Element]
+    returns String
+
+    # This procedure will format {array} using {f_routine} to format
+    # each element.
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>f@array[...]()\n\", error@Out_Stream)
+
+    value :@= field_next@Format()
+    control :@= read_only_copy@(value)
+
+    call trim@(value, 0)
+    call string_append@(value, "[")
+    prefix :@= ""
+    size :@= array.size
+    index :@= 0
+    while index < size
+	element :@= array[index]
+	call string_append@(value, prefix)
+	prefix := ", "
+
+	#FIXME: excecution order; should be!!!
+	# string_append@(value, divide@(form@(control), f_routine(element)))
+	form1 :@= form@(control)
+	form2 :@= f_routine(element)
+	call string_append@(value, divide@(form1, form2))
+	index := index + 1
+    call string_append@(value, "]")
+
+    #if trace
+    #	call put@("=>f@array[...]()=>'", error@Out_Stream)
+    #	call put@(value, error@Out_Stream)
+    #	call put@("'\n\", error@Out_Stream)
+
+    return value
+
+
+routine fetch1@Array[Element]
+    takes array Array[Element]
+    takes index Unsigned
+    returns Element
+    external Array__fetch1
+
+    # This routine will fetch and return the {index}'th element
+    # from {array}.
+
+
+routine hash@Array[Element]
+    takes array Array[Element]
+    takes element_hash [Unsigned <= Element]
+    returns Unsigned
+
+    # This routine will compute and return a hash value for {array}
+    # using {element_hash} to compute the hash value for each {Element}
+    # in {array}.
+
+    result :@= 0
+    size :@= array.size
+    index :@= 0
+    while index < size
+	result := result + element_hash(array[index])
+	index := index + 1
+    return result
+
+
+routine insert@Array[Element]
+    takes array Array[Element]
+    takes index Unsigned
+    takes element Element
+    returns_nothing
+
+    # This prodedure will insert {element} into {array} at
+    # {index} {count} types.
+
+    call range_insert@Array[Element](array, index, 1, element)
+
+
+routine lop@Array[Element]
+    takes array Array[Element]
+    returns Element
+
+    # This routine will remove and return the last element from {array}.
+
+    assert array.size != 0
+    result :@= array[0]
+    call delete@Array[Element](array, 0)
+    return result    
+
+
+routine new@Array[Element]
+    takes_nothing
+    returns Array[Element]
+    external Array__new
+
+    # This routine will return a new {Array} object.
+
+
+routine pop@Array[Element]
+    takes array Array[Element]
+    returns Element
+
+    # This routine will remove and return the first element of {array}.
+    # Note that that this operation is not particularly efficient for
+    # large arrays (i.e. O(n)):
+    
+    size :@= array.size
+    assert size != 0
+    size := size - 1
+    result :@= array[size]
+    call trim@Array[Element](array, size)
+    return result
+
+
+routine print@Array[Element]
+    takes array Array[Element]
+    takes out_stream Out_Stream
+    takes element_print [<= Element, Out_Stream]
+    returns_nothing
+
+    # This routine will print out {array} to {out_stream} using
+    # {element_print} to print out each individual element.
+
+    call put@String("[", out_stream)
+    prefix :@= ""
+    size :@= array.size
+    index :@= 0
+    while index < size
+	call put@String(prefix, out_stream)
+	prefix := ", "
+	element :@= array[index]
+	call element_print(element, out_stream)
+	index := index + 1
+    call put@String("]", out_stream)
+
+
+routine put@Array[Element]
+    takes array Array[Element]
+    takes out_stream Out_Stream
+    takes element_put [<= Element, Out_Stream]
+    returns_nothing
+
+    # This routine will print out {array} to {out_stream} using
+    # {element_print} to print out each individual element.
+
+    size :@= array.size
+    index :@= 0
+    while index < size
+	call element_put(array[index], out_stream)
+	index := index + 1
+
+
+routine range_delete@Array[Element]
+    takes array Array[Element]
+    takes index Unsigned
+    takes count Unsigned
+    returns_nothing
+    external Array__range_delete
+
+    # This routine will delete the {count} elements starting from
+    # {index} in {array}.
+
+
+routine range_insert@Array[Element]
+    takes array Array[Element]
+    takes index Unsigned
+    takes count Unsigned
+    takes element Element
+    returns_nothing
+    external Array__range_insert
+
+    # This prodedure will insert {element} into {array} at
+    # {index} {count} types.
+
+
+routine reverse@Array[Element]
+    takes array Array[Element]
+    returns_nothing
+
+    # This routine will reverse order of the elements in {array}.
+
+    size :@= array.size
+    if size != 0
+	index1 :@= 0
+	index2 :@= size - 1
+	while index1 < index2
+	    element :@= array[index1]
+	    array[index1] := array[index2]
+	    array[index2] := element
+	    index1 := index1 + 1
+	    index2 := index2 - 1
+
+
+routine size_get@Array[Element]
+    takes array Array[Element]
+    returns Unsigned
+    external Array__size_get
+
+    # This routine will return the size of {array}.
+
+
+routine sort@Array[Element]
+    takes array Array[Element]
+    takes compare_routine [Integer <= Element, Element]
+    returns_nothing
+
+    # This routine will sort the contents of {array} using {compare_routine}
+    # to compare elements in {array}.  This algorithm takes O(N log N).
+
+    size :@= array.size
+    power :@= 0
+    temp :@= 1
+    while temp < size
+	power := power + 1
+	temp := temp << 1
+
+    # We need a temporary area, so stash them on the end.
+    #predict@(array, size + size)
+    index :@= 0
+    while index < size
+	call append@Array[Element](array, array[index])
+	index := index + 1
+
+    # Figure out where to start sorting:
+    element1 :@= 0
+    element2 :@= 0
+    if power & 1 = 1
+	element1 := size
+	element2 := 0
+    else
+	element1 := 0
+	element2 := size
+
+    # Now sort pairs, then quads, then octettes, etc.
+    zero :@= 0i
+    step1 :@= 1
+    step2 :@= 2
+    index := power
+    while index != 0
+	index2 :@= element2
+	index1a :@= element1
+	index1b :@= element1 + step1
+	offset :@= 0
+	while offset < size
+	    count1a :@= step1
+	    count1b :@= step1
+	    temp := size - offset
+	    if temp < step1
+		count1a := temp
+		count1b := 0
+	    else
+		temp := temp - step1
+		if temp < step1
+		    count1b := temp
+	    while count1a != 0 && count1b != 0
+		if compare_routine(array[index1a], array[index1b]) < zero
+		    array[index2] := array[index1a]
+		    index1a := index1a + 1
+		    count1a := count1a - 1
+		else
+		    array[index2] := array[index1b]
+		    index1b := index1b + 1
+		    count1b := count1b - 1
+		index2 := index2 + 1
+	    while count1a != 0
+		array[index2] := array[index1a]
+		index1a := index1a + 1
+		count1a := count1a - 1
+		index2 := index2 + 1
+	    while count1b != 0
+		array[index2] := array[index1b]
+		index1b := index1b + 1
+		count1b := count1b - 1
+		index2 := index2 + 1
+	    index1a := index1a + step1
+	    index1b := index1b + step1
+	    offset := offset + step2
+	element_temp :@= element1
+	element1 := element2
+	element2 := element_temp
+	step1 := step1 << 1
+	step2 := step2 << 1
+	index := index - 1
+
+    call trim@Array[Element](array, size)
+ 
+    # Verify that we properly sorted:
+    #index := 1
+    #while index < size
+    #	assert compare_routine(array[index - 1], array[index]) <= 0i
+    #	index := index + 1
+
+
+routine store1@Array[Element]
+    takes array Array[Element]
+    takes index Unsigned
+    takes element Element
+    returns_nothing
+    external Array__store1
+
+    # This routine will store {element} into the {index}'th
+    # into {array}.
+
+
+routine transfer@Array[Element]
+    takes to_array Array[Element]
+    takes to_index Unsigned
+    takes from_array Array[Element]
+    takes from_index Unsigned
+    takes count Unsigned
+    returns_nothing
+    external Array__transfer
+
+    # This routine will transfer {count} elements from {from_array}
+    # starting at {from_index} to {to_array} starting at {to_index}.
+
+
+routine trim@Array[Element]
+    takes array Array[Element]
+    takes new_size Unsigned
+    returns_nothing
+    external Array__trim
+
+    # This routine will trim {array} to have no more than
+    # {new_size} elements in {array}.
+
+
+routine unique@Array[Element]
+    takes array Array[Element]
+    takes equal_routine [Logical <= Element, Element]
+    returns_nothing
+
+    # This routine will compress sequences of the same element as determined
+    # bytge {equal_routine} in {array} down to one unique occurance.
+
+    size :@= array.size
+    if size > 1
+	to_index :@= 1
+	from_index :@= 1
+	while from_index < size
+	    element1 :@= array[to_index - 1]
+	    element2 :@= array[from_index]
+	    if !equal_routine(element1, element2)
+		array[to_index] := element2
+		to_index := to_index + 1
+	    from_index := from_index + 1
+	call trim@Array[Element](array, to_index)
+
+
+routine xvisit@Array[Element]
+    takes array Array[Element]
+    takes visit_routine [ <= Element]
+    returns_nothing
+
+    # This routine will visit each {Element} in {array} call {visit_routine}
+    # using the {Element}.
+
+    size :@= array.size
+    index :@= 0
+    while index < size
+	call visit_routine(array[index])
+	index := index + 1
+
+
+# {Byte} Stuff:
+
+define Byte
+    external
+
+external null@Byte Byte
+
+routine character@Byte
+    takes byte Byte
+    returns Character
+    scalar_cast Character
+
+    # This routine will return {byte} cast into a {Character} and return it.
+
+
+routine f@Byte
+    takes number Byte
+    returns String
+
+    # This procedure will format {number}...
+
+    return f@(unsigned@(number))
+
+
+routine float@Byte
+    takes byte Byte
+    returns Float
+    scalar_cast Float
+
+    # This routine will return {byte} cast into a {Float} and return it.
+
+
+routine integer@Byte
+    takes byte Byte
+    returns Integer
+    scalar_cast Integer
+
+    # This routine will return {byte} cast into an {Integer} and return it.
+
+
+routine long_integer@Byte
+    takes byte Byte
+    returns Long_Integer
+    scalar_cast Long_Integer
+
+    # This routine will return {byte} cast into a {Long_Integer} and return it.
+
+
+routine long_unsigned@Byte
+    takes byte Byte
+    returns Long_Unsigned
+    scalar_cast Long_Unsigned
+
+    # This routine will return {byte} cast into a {Long_Unsigned} and return it.
+
+
+routine short@Byte
+    takes byte Byte
+    returns Short
+    scalar_cast Short
+
+    # This routine will return {byte} cast into a {Short} and return it.
+
+
+routine unsigned@Byte
+    takes byte Byte
+    returns Unsigned
+    scalar_cast Unsigned
+
+    # This routine will return {byte} cast into an {Unsigned} and return it.
+
+
+# {Character} stuff:
+
+define Character
+    external
+
+external null@Character Character
+
+routine buffer_append@Character
+    takes character Character
+    takes buffer String
+    returns_nothing
+
+    # This routine will append {character} to {buffer}.
+
+    call character_append@String(buffer, character)
+
+routine byte@Character
+    takes character Character
+    returns Byte
+    scalar_cast Byte
+
+    # This routine will convert {character} to a {Byte} and return it.
+
+
+routine compare@Character
+    takes character1 Character
+    takes character2 Character
+    returns Integer
+
+    # This routine will return -1, 0, or 1 depending upon whether
+    # {character1} is less than, equal to or greater than {character2}.
+
+    result :@= zero@Integer
+    if character1 < character2
+	result := negative_one@Integer
+    else_if character1 > character2
+	result := one@Integer
+    return result
+
+
+routine decimal_convert@Character
+    takes character Character
+    returns Unsigned
+
+    # This routine will convert {character} from a hexadecimal
+    # character into a numerical digit and return it.
+
+    result :@= 0xffffffff
+    if '0' <= character && character <= '9'
+	result := unsigned@(character - '0')
+    return result
+
+
+routine double@Character
+    takes character Character
+    returns Double
+    scalar_cast Double
+
+    # This routine will convert {character} into a {Double} and return it.
+
+
+routine erase@Character
+    takes character Character
+    returns_nothing
+
+    # This routine will "erase" {character}; in really it does nothing.
+
+    do_nothing
+
+
+routine f@Character
+    takes character Character
+    returns String
+
+    # This procedure will format {character} for the next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "l" => lower case, "u" => upper_case,
+    # "c" => plain character, "a" => ANSI-C mode, and "v" => visual mode.
+
+    # Figure out what mode to use:
+    c_mode :@= false@Logical
+    visual_mode :@= false@Logical
+    value :@= field_next@Format()
+    size :@= value.size
+    index :@= 0
+    while index < size
+	mode_character :@= value[index]
+	if mode_character = 'a'
+	    c_mode := true@Logical
+	else_if mode_character = 'l'
+	    character := lower_case@(character)
+	else_if mode_character = 'u'
+	    character := upper_case@(character)
+	else_if mode_character = 'v'
+	    visual_mode := true@Logical
+	index := index + 1
+    call trim@(value, 0)
+
+    # Peform the format:
+    if c_mode
+	call character_append@(value, '\sq\')
+	call c_character_append@(value, character)
+	call character_append@(value, '\sq\')
+    else_if visual_mode
+	call character_append@(value, '\sq\')
+	if visual_character_append@(value, false@Logical, character)
+	    call character_append@(value, '\bsl\')
+	call character_append@(value, '\sq\')
+    else
+	call character_append@(value, character)
+
+    return value
+
+
+routine float@Character
+    takes character Character
+    returns Float
+    scalar_cast Float
+
+    # This routine will convert {character} into a {Float} and return it.
+
+
+routine hexadecimal_convert@Character
+    takes character Character
+    returns Unsigned
+
+    # This routine will convert {character} from a hexadecimal
+    # character into a numerical digit and return it.
+
+    result :@= 0
+    if '0' <= character && character <= '9'
+	result := unsigned@(character - '0')
+    else_if 'a' <= character && character <= 'f'
+	#result := unsigned@(character - 'a') + 10
+	result := unsigned@(character) - 97 + 10
+    else_if 'A' <= character && character <= 'F'
+	result := unsigned@(character) - 65 + 10
+    else
+	assert false@Logical
+    return result
+
+
+routine integer@Character
+    takes character Character
+    returns Integer
+    scalar_cast Integer
+
+    # This routine will convert {character} into an {Integer} and return it.
+
+
+routine long_integer@Character
+    takes character Character
+    returns Long_Integer
+    scalar_cast Long_Integer
+
+    # This routine will convert {character} into a {Long_Integer} and return it.
+
+
+routine long_unsigned@Character
+    takes character Character
+    returns Long_Unsigned
+    scalar_cast Long_Unsigned
+
+    # This routine will convert {character} into a {Long_Unsigned}
+    # and return it.
+
+
+routine is_alpha_numeric@Character
+    takes character Character
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {character} is
+    # a letter and {false}@{Logical} otherwise.
+
+    return 'a' <= character && character <= 'z' ||
+      'A' <= character && character <= 'Z' ||
+      '0' <= character && character <= '9'
+
+
+routine is_decimal_digit@Character
+    takes character Character
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {character} is
+    # a decimal character and {false}@{Logical} otherwise.
+
+    return '0' <= character && character <= '9'
+
+
+routine is_letter@Character
+    takes character Character
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {character} is
+    # a letter and {false}@{Logical} otherwise.
+
+    return 'a' <= character && character <= 'z' ||
+      'A' <= character && character <= 'Z'
+
+
+routine is_white_space@Character
+    takes character Character
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {character} is
+    # a space or tab.
+
+    return character = ' ' || character <= '\t\'
+
+
+routine is_hex_digit@Character
+    takes character Character
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {character} is
+    # a hexadecimal character and {false}@{Logical} otherwise.
+
+    return '0' <= character && character <= '9' ||
+      'a' <= character && character <= 'f' ||
+      'A' <= character && character <= 'F'
+
+
+routine is_lower_case@Character
+    takes character Character
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {character} is
+    # a lower case ASCII character and {false}@{Logical} otherwise.
+
+    return 'a' <= character && character <= 'z'
+
+
+routine is_printing@Character
+    takes character Character
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {character} is
+    # printable -- excluding control characters like horizontal
+    # tab, form feed, line feed (new line), and carriage return.
+    # Otherwise, {false}@{Character} is returned.
+
+    return ' ' <= character && character <= '~'
+
+
+routine is_upper_case@Character
+    takes character Character
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {character} is
+    # an upper case ASCII character and {false}@{Logical} otherwise.
+
+    return 'A' <= character && character <= 'Z'
+
+
+routine lower_case@Character
+    takes character Character
+    returns Character
+
+    # This routine will return {character} converted to lower case.
+
+    if is_upper_case@Character(character)
+	# ' ' = 32 (decimal):
+	character := character + ' '
+    return character
+
+
+routine put@Character
+    takes character Character
+    takes out_stream Out_Stream
+    returns_nothing
+    external Character__put
+
+    # This routine will output {character} ot {out_stream}.
+
+
+routine short@Character
+    takes character Character
+    returns Short
+    scalar_cast Short
+
+    # This routine will convert {character} into a {Short} and return it.
+
+
+routine upper_case@Character
+    takes character Character
+    returns Character
+
+    # This routine will return {character} converted to lower case.
+
+    if is_lower_case@Character(character)
+	# ' ' = 32 (decimal):
+	character := character - ' '
+    return character
+
+
+routine unsigned@Character
+    takes character Character
+    returns Unsigned
+    scalar_cast Unsigned
+
+    # This routine will convert {character} into an {Unsigned} and return it.
+
+
+
+# {Double} stuff:
+
+define Double
+    external
+
+external null@Double Double
+
+routine byte@Double
+    takes x Double
+    returns Byte
+    scalar_cast Byte
+
+    # This routine will convert {x} into a {Byte} and return it.
+
+
+routine character@Double
+    takes x Double
+    returns Character
+    scalar_cast Charactet
+
+    # This routine will convert {x} into a {Character} and return it.
+
+
+routine compare@Double
+    takes double1 Double
+    takes double2 Double
+    returns Integer
+
+    # This routine will return -1i, 0i, or 1i depending upon whether
+    # {double1} is less than, equal to, or greater than {double2}.
+
+    result :@= 0i
+    if double1 < double2
+	result := -1i
+    else_if double1 > double2
+	result := 1i
+    return result
+
+
+routine f@Double
+    takes x Double
+    returns String
+
+    # This routine will format {x} for the next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "d" => round to decimal,
+    # "f" => simple float (no exponent), "e" => exponential float,
+    # "g" => either f or g depending upon size of {x}.
+    # A number preceeding f/g/h specifies the precision after
+    # the decimal point.  If not present, a precision of 6 is used.
+    # The L/R/C commands are used to specify field width along with
+    # left/rigth/center control.
+
+    decimal :@= 0f
+    precision :@= 0xffffffff
+    have_precision :@= 0f
+    format :@= 'f'
+    value :@= field_next@Format()
+    number :@= 0
+    size :@= value.size
+    index :@= 0
+    while index < size
+	character :@= value[index]
+	if is_decimal_digit@(character)
+	    have_precision := 1t
+	    number := number * 10 + decimal_convert@(character)
+	else_if character = 'f' || character = 'e' || character = 'g'
+	    format := character
+	    if have_precision
+		precision := number
+	    have_precision := 0f
+	    number := 0
+	else_if character = 'd'
+	    decimal := 1t	    
+	index := index + 1
+    call trim@(value, 0)
+
+    # Now do the actual format:
+    if decimal
+	round :@= 0.5
+	if x < 0.0
+	    round := -0.5
+	call string_append@(value, form@("%d%") / f@(integer@(x + round)))
+    else
+	call f_helper@(x, precision, format, value)
+    return value
+
+
+routine f_helper@Double
+    takes x Double
+    takes precision Unsigned
+    takes format Character
+    takes result String
+    returns_nothing
+    external Double__f_helper
+
+
+routine float@Double
+    takes x Double
+    returns Float
+    scalar_cast Float
+
+    # This routine will convert {x} into a {Float} and return it.
+
+
+routine integer@Double
+    takes x Double
+    returns Integer
+    scalar_cast Integer
+
+    # This routine will convert {x} into a {Integer} and return it.
+
+
+routine long_integer@Double
+    takes x Double
+    returns Long_Integer
+    scalar_cast Long_Integer
+
+    # This routine will convert {x} into a {Long_Integer} and return it.
+
+
+routine long_unsigned@Double
+    takes x Double
+    returns Long_Unsigned
+    scalar_cast Long_Unsigned
+
+    # This routine will convert {x} into a {Long_Unsigned} and return it.
+
+
+routine short@Double
+    takes x Double
+    returns Short
+    scalar_cast Short
+
+    # This routine will convert {x} into a {Short} and return it.
+
+
+routine unsigned@Double
+    takes x Double
+    returns Unsigned
+    scalar_cast Unsigned
+
+    # This routine will convert {x} into a {Unsigned} and return it.
+
+
+# {Easy_C} stuff:
+
+define Easy_C
+    external
+
+routine fail@Easy_C
+    takes file_name String
+    takes line_number Unsigned
+    takes message String
+    returns_nothing
+
+    # This routine will print an error message and fail.
+
+    call d@(form@("File:%v%, Line:%d%: %s%\n\") %
+      f@(file_name) % f@(line_number) / f@(message))
+    call abort@System()
+
+
+# {Float} stuff:
+
+define Float
+    external
+
+external null@Float Float
+
+routine byte@Float
+    takes number Float
+    returns Byte
+    scalar_cast Byte
+
+    # This routine will convert {number} into a {Byte} and return it.
+
+routine character@Float
+    takes number Float
+    returns Character
+    scalar_cast Character
+
+    # This routine will convert {number} into a {Character} and return it.
+
+
+routine compare@Float
+    takes float1 Float
+    takes float2 Float
+    returns Integer
+
+    # This routine will return -1i, 0i, or 1i depending upon whether
+    # {float1} is less than, equal to, or greater than {float2}.
+
+    result :@= 0i
+    if float1 < float2
+	result := -1i
+    else_if float1 > float2
+	result := 1i
+    return result
+
+
+routine double@Float
+    takes number Float
+    returns Double
+    scalar_cast Double
+
+    # This routine will convert {number} into an {Double} and return it.
+
+
+routine f@Float
+    takes number Float
+    returns String
+
+    # This routine is the same as {f}@{Double} but for {Float} instead.
+
+    return f@(double@(number))
+
+
+routine hash@Float
+    takes number Float
+    returns Unsigned
+    external Float__hash
+
+    # This routine will return a hash of {Float}.
+
+
+routine integer@Float
+    takes number Float
+    returns Integer
+    scalar_cast Integer
+
+    # This routine will convert {number} into an {Integer} and return it.
+
+
+routine long_integer@Float
+    takes number Float
+    returns Long_Integer
+    scalar_cast Long_Integer
+
+    # This routine will convert {number} into a {Long_Integer} and return it.
+
+
+routine long_unsigned@Float
+    takes number Float
+    returns Long_Unsigned
+    scalar_cast Long_Unsigned
+
+    # This routine will convert {number} into a {Long_Unsigned} and return it.
+
+
+routine short@Float
+    takes number Float
+    returns Short
+    scalar_cast Short
+
+    # This routine will convert {number} into an {Short} and return it.
+
+
+routine unsigned@Float
+    takes number Float
+    returns Unsigned
+    scalar_cast Unsigned
+
+    # This routine will convert {number} into an {Unsigned} and return it.
+
+
+# {Format} routines:
+
+define Format
+    record
+	initialized Logical
+	available_fields Array[Format_Field]
+	available_frames Array[Format_Frame]
+	frames Array[Format_Frame]
+	frame_count Unsigned
+	field_count Unsigned
+
+routine frame_allocate@Format
+    takes format Format
+    returns Format_Frame
+
+    # This routine will allocate and return a new {Format_Frame} object
+    # from {format}.
+
+    frame :@= null@Format_Frame
+    available_frames :@= format.available_frames
+    if available_frames.size = 0
+	frame := create@Format_Frame()
+	format.frame_count := format.frame_count + 1
+    else
+	frame := pop@(available_frames)
+	frame.index := 0
+    call append@(format.frames, frame)
+    return frame
+
+
+routine frame_release@Format
+    takes format Format
+    takes frame Format_Frame
+    returns_nothing
+
+    assert frame == pop@(format.frames)
+
+    fields :@= frame.fields
+    size :@= fields.size
+    index :@= 0
+    while index < size
+	call field_release@(format, fields[index])
+	index := index + 1
+    call trim@(fields, 0)
+    frame.index := 0
+    call append@(format.available_frames, frame)
+
+
+routine field_allocate@Format
+    takes format Format
+    returns Format_Field
+
+    # This routine will allocate and return a {Format_Field} object from
+    # {format} for use.
+
+    available_fields :@= format.available_fields
+    size :@= available_fields.size
+    field :@= null@Format_Field
+    if size = 0
+	field := new@Format_Field()
+	field.before := new@String()
+	field.control := new@String()
+	field.value := new@String()
+	format.field_count := format.field_count + 1
+    else
+	field := pop@(available_fields)
+	call trim@(field.before, 0)
+	call trim@(field.control, 0)
+	call trim@(field.value, 0)
+    return field
+
+
+routine field_next@Format
+    takes_nothing
+    returns String
+
+    # This routine will return the next value field from the format string
+    # stashed away in {null}@{Format}.  The returned string has a copy
+    # of the control field string.
+
+    format :@= one_and_only@Format()
+    frames :@= format.frames
+    frames_size :@= frames.size
+    assert frames_size != 0
+    frame :@= frames[frames_size - 1]
+
+    fields :@= frame.fields
+    index :@= frame.index
+    fields_size :@= fields.size
+    assert index < fields_size
+
+    field :@= fields[index]
+    frame.index := index + 1
+
+    value :@= field.value
+    call string_append@(value, field.control)
+    return value
+
+
+routine field_release@Format
+    takes format Format
+    takes field Format_Field
+    returns_nothing
+
+    # This routine will release {field} back to {format} for future allocation.
+
+    #call trim@(field.before, 0)
+    #call trim@(field.control, 0)
+    #call trim@(field.value, 0)
+    call append@(format.available_fields, field)
+
+
+routine one_and_only@Format
+    takes_nothing
+    returns Format
+
+    format :@= null@Format
+    if !format.initialized
+	format.initialized := true@Logical
+	format.available_frames := new@Array[Format_Frame]()
+	format.frames := new@Array[Format_Frame]()
+	format.frame_count := 0
+	format.field_count := 0
+    return format
+
+
+# {Format_Frame} routines:
+
+define Format_Frame
+    record
+	fields Array[Format_Field]
+	index Unsigned
+	result String
+
+routine create@Format_Frame
+    takes_nothing
+    returns Format_Frame
+
+    frame :@= new@Format_Frame()
+    frame.result := new@String()
+    frame.index := 0
+    return frame
+
+
+# {Format_Field} routines:
+
+define Format_Field
+    record
+	before String
+	control String
+	value String
+
+
+# {Hash_Table} stuff:
+
+# A data structure for associating {key} with a {value}.
+
+define Hash_Table_Pair[Key, Value]
+    record
+	key Key		# Key
+	value Value	# Value
+	hash Unsigned	# Hash of {key}
+
+
+routine create@Hash_Table_Pair[Key, Value]
+    takes key Key
+    takes value Value
+    takes hash Unsigned
+    returns Hash_Table_Pair[Key, Value]
+
+    # This routine will create and return a enw {Hash_Table_Pair} object
+    # that contains {key}, {value}, and {hash}.
+
+    pair :@= new@Hash_Table_Pair[Key, Value]()
+    pair.key := key
+    pair.value := value
+    pair.hash := hash
+    return pair
+
+
+# One row from in a {Hash_Table}.  {mask} specifies the mask
+# used to sort pairs with.
+
+define Hash_Table_Row[Key, Value]
+    record
+	index Unsigned		# Row index (debugging only)
+	mask Unsigned		# Mask used for hash values
+	pairs Array[Hash_Table_Pair[Key, Value]]	# Pairs list
+
+
+routine create@Hash_Table_Row[Key, Value]
+    takes index Unsigned
+    returns Hash_Table_Row[Key, Value]
+
+    # This routine will create and return a new {Hash_Table_Row} object.
+
+    row :@= new@Hash_Table_Row[Key, Value]()
+    row.index := index
+    row.mask := 0
+    row.pairs := new@Array[Hash_Table_Pair[Key, Value]]()
+    return row
+
+
+# A dynamic hash table that grows in size as needed.
+
+define Hash_Table[Key, Value]
+    record
+	buffer String			# Temporary buffer (for tracing only)
+	key_equal [Logical <= Key, Key]	# Key equality routine
+	key_hash [Unsigned <= Key]	# Key hash routine
+	key_show [ <= Key, String]	# Key show routine
+	mask Unsigned			# Current mask
+	null_pair Hash_Table_Pair[Key, Value] # Null Pair object
+	power Unsigned			# Current power
+	rows Array[Hash_Table_Row[Key, Value]]	# Rows that make up table
+	size Unsigned			# Number of {Pairs} in table
+	trace_level Unsigned		# 0=no trace; 1=>simple; 2=>detailed
+	value_empty Value		# Empty Value
+	value_show [ <= Value, String]	# Value show routine
+
+# Invariants:
+# 1) rows.size = 2**power
+# 2) mask = 2**power - 1
+# 3) For each pair in hash_table.rows[I], pair.hash & hash_table.mask = I
+
+routine create@Hash_Table[Key, Value]
+    takes value_empty Value
+    takes key_hash [Unsigned <= Key]
+    takes key_equal [Logical <= Key, Key]
+    takes key_show [ <= Key, String]
+    takes value_show [ <= Value, String]
+    returns Hash_Table[Key, Value]
+
+    # This routine will create and return a new empty {Hash_Table}
+    # with {key_hash} and {key_equal} for the key hashing and key
+    # equality routines.
+ 
+    # Intialize two rows:
+    rows :@= new@Array[Hash_Table_Row[Key, Value]]()
+    call append@Array[Hash_Table_Row[Key, Value]](rows,
+      create@Hash_Table_Row[Key, Value](0))
+    call append@Array[Hash_Table_Row[Key, Value]](rows,
+      create@Hash_Table_Row[Key, Value](1))
+
+    # Create and return {Hash_Table} object:
+    hash_table :@= new@Hash_Table[Key, Value]()
+    hash_table.buffer := new@String()
+    hash_table.key_equal := key_equal
+    hash_table.key_hash := key_hash
+    hash_table.key_show := key_show
+    hash_table.mask := 1
+    hash_table.null_pair := new@Hash_Table_Pair[Key, Value]()
+    hash_table.power := 1
+    hash_table.rows := rows
+    hash_table.size := 0
+    hash_table.trace_level := 0
+    hash_table.value_empty := value_empty
+    hash_table.value_show := value_show
+
+    assert hash_table.mask < hash_table.rows.size
+
+    return hash_table
+
+
+routine delete@Hash_Table[Key, Value]
+    takes hash_table Hash_Table[Key, Value]
+    takes key Key
+    returns Logical
+
+    # This routine will delete the entry in {hash} table associated
+    # with {key}.  If there is no entry associated with {key},
+    # {true}@{Logical} is returned; otherwise {false}@{Logical} is
+    # returned.
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    #trace_level :@= hash_table.trace_level
+    #if trace_level > 5
+    #	buffer :@= new@String()
+    #	call string_append@(buffer, "delete@Hash_Table(")
+    #	call hash_table.key_show(key, buffer)
+    #	call string_append@(buffer, ")\n\")
+    #	call d@(buffer)
+    #	call show@(hash_table, error@Out_Stream)
+
+    result :@= false@Logical
+    key_equal :@= hash_table.key_equal
+    hash :@= hash_table.key_hash(key)
+    row :@= row_lookup@Hash_Table[Key, Value](hash_table, key, hash)
+    pairs :@= row.pairs
+    size :@= pairs.size
+    index :@= 0
+    while index < size
+	pair :@= pairs[index]
+	if pair.hash = hash && key_equal(pair.key, key)
+	    call delete@Array[Hash_Table_Pair[Key, Value]](pairs, index)
+	    result := true@Logical
+	    break
+	index := index + 1
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    #if trace_level > 5
+    #	call d@("delete_after:\n\")
+    #	call show@(hash_table, error@Out_Stream)
+
+    return result
+
+
+routine lookup@Hash_Table[Key, Value]
+    takes hash_table Hash_Table[Key, Value]
+    takes key Key
+    returns Value
+
+    # This routine will return the {value} associated with {key} in {table}.
+    # If there is no such association, the empty value for {table} is returned.
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    trace_level :@= hash_table.trace_level
+    value :@= hash_table.value_empty
+    key_equal :@= hash_table.key_equal
+    hash :@= hash_table.key_hash(key)
+    row :@= row_lookup@Hash_Table[Key, Value](hash_table, key, hash)
+    pairs :@= row.pairs
+    size :@= pairs.size
+    index :@= 0
+    while index < size
+	pair :@= pairs[index]
+	if pair.hash = hash && key_equal(pair.key, key)
+	    value := pair.value
+	    trace_level := trace_level + 1
+	    break
+	index := index + 1
+
+    if trace_level >= 2
+	buffer :@= hash_table.buffer
+	call trim@String(buffer, 0)
+	call buffer_append@String("lookup@Hash_Table(*, ", buffer)
+	call hash_table.key_show(key, buffer)
+	call buffer_append@String(") => ", buffer)
+	call hash_table.value_show(value, buffer)
+	call buffer_append@String("\n\", buffer)
+	call put@String(buffer, error@Out_Stream)
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    return value
+
+
+#FIXME: insert should call replace!!!
+
+routine insert@Hash_Table[Key, Value]
+    takes hash_table Hash_Table[Key, Value]
+    takes key Key
+    takes value Value
+    returns Logical
+    
+    # This routine will insert {value} into {table} indexed by {key}.
+    # {True}@{Logical} is returned if {key} was previously in {table};
+    # otherwise, {False}@{Logical} is returned.
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    # Scan the appropriate row looking for a match:
+    trace_level :@= hash_table.trace_level
+    result :@= false@Logical
+    key_equal :@= hash_table.key_equal
+    hash :@= hash_table.key_hash(key)
+    row :@= row_lookup@Hash_Table[Key, Value](hash_table, key, hash)
+    pairs :@= row.pairs
+    pairs_size :@= pairs.size
+    index :@= 0
+    while index < pairs_size
+	pair :@= pairs[index]
+	if pair.hash = hash && key_equal(pair.key, key)
+	    pair.value := value
+	    result := true@Logical
+	    break
+	index := index + 1
+
+    # Perform the insert:
+    if !result
+	pair := create@Hash_Table_Pair[Key, Value](key, value, hash)
+	call append@Array[Hash_Table_Pair[Key, Value]](pairs, pair)
+	size :@= hash_table.size
+	hash_table.size := size + 1
+
+	# See whether we need to grow the table:
+	rows :@= hash_table.rows
+	rows_size :@= rows.size
+	if size > (rows_size >> 1)
+	    # Grow the table rows by a factor of two:
+	    index := 0
+	    while index < rows_size
+		call append@Array[Hash_Table_Row[Key, Value]](rows,
+		  create@Hash_Table_Row[Key, Value](rows.size))
+		index := index + 1
+	hash_table.mask := hash_table.rows.size - 1
+	assert hash_table.mask < hash_table.rows.size
+
+    if trace_level >= 1
+	buffer :@= hash_table.buffer
+	call trim@String(buffer, 0)
+	call buffer_append@String("insert@Hash_Table(*, ", buffer)
+	call hash_table.key_show(key, buffer)
+	call buffer_append@String(", ", buffer)
+	call hash_table.value_show(value, buffer)
+	call buffer_append@String(") => ", buffer)
+	if result
+	    call buffer_append@String("true", buffer)
+	else
+	    call buffer_append@String("false", buffer)
+
+	#call buffer_append@String(" size:", buffer)
+	#call buffer_append@Unsigned(hash_table.size, buffer)
+	#call buffer_append@String(" rows.size:", buffer)
+	#call buffer_append@Unsigned(hash_table.rows.size, buffer)
+	#call buffer_append@String(" row.index:", buffer)
+	#call buffer_append@Unsigned(row.index, buffer)
+
+	call buffer_append@String("\n\", buffer)
+	call put@String(buffer, error@Out_Stream)
+
+    #assert hash_table.mask < hash_table.rows.size
+    return result
+
+
+
+routine is_in@Hash_Table[Key, Value]
+    takes hash_table Hash_Table[Key, Value]
+    takes key Key
+    returns Logical
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    result :@= false@Logical
+    key_equal :@= hash_table.key_equal
+    hash :@= hash_table.key_hash(key)
+    row :@= row_lookup@Hash_Table[Key, Value](hash_table, key, hash)
+    pairs :@= row.pairs
+    size :@= pairs.size
+    index :@= 0
+    while index < size
+	pair :@= pairs[index]
+	if pair.hash = hash && key_equal(pair.key, key)
+	    result := true@Logical
+	    break
+	index := index + 1
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    return result
+
+
+routine key_lookup@Hash_Table[Key, Value]
+    takes hash_table Hash_Table[Key, Value]
+    takes key Key
+    returns Key
+
+    # This routine will will find the {Key}/{Value} pair in {hash_table}
+    # that matches {key}.  The {Key} from the matching pair is returned.
+    # If no match occurs, {key} is returned.
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    result :@= key
+    key_equal :@= hash_table.key_equal
+    hash :@= hash_table.key_hash(key)
+    row :@= row_lookup@Hash_Table[Key, Value](hash_table, key, hash)
+    pairs :@= row.pairs
+    size :@= pairs.size
+    index :@= 0
+    while index < size
+	pair :@= pairs[index]
+	if pair.hash = hash && key_equal(pair.key, key)
+	    result := pair.key
+	    break
+	index := index + 1
+
+    return result
+
+
+routine replace@Hash_Table[Key, Value]
+    takes hash_table Hash_Table[Key, Value]
+    takes key Key
+    takes value Value
+    returns Value
+    
+    # This routine will replace {value} into {table} indexed by {key}.
+    # The previous value is returned.  If no previous value was
+    # in the table, the empty value is returned.
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    # Scan the appropriate row looking for a match:
+    trace_level :@= hash_table.trace_level
+    previous_value :@= hash_table.value_empty
+    null_pair :@= hash_table.null_pair
+    key_equal :@= hash_table.key_equal
+    hash :@= hash_table.key_hash(key)
+    row :@= row_lookup@Hash_Table[Key, Value](hash_table, key, hash)
+    pair :@= hash_table.null_pair
+    pairs :@= row.pairs
+    pairs_size :@= pairs.size
+    index :@= 0
+    while index < pairs_size
+	pair := pairs[index]
+	if pair.hash = hash && key_equal(pair.key, key)
+	    previous_value := pair.value
+	    break
+	pair := null_pair
+	index := index + 1
+
+    # Perform the insert:
+    new_pair :@= false@Logical
+    if pair == null_pair
+	# Not in table, creat pair:
+	pair := create@Hash_Table_Pair[Key, Value](key, value, hash)
+	new_pair := true@Logical
+    else
+	pair.key := key
+	pair.value := value
+	assert pair.hash == hash
+
+    if new_pair
+	call append@Array[Hash_Table_Pair[Key, Value]](pairs, pair)
+	size :@= hash_table.size
+	hash_table.size := size + 1
+
+	# See whether we need to grow the table:
+	rows :@= hash_table.rows
+	rows_size :@= rows.size
+	if size > (rows_size >> 1)
+	    # Grow the table rows by a factor of two:
+	    index := 0
+	    while index < rows_size
+		call append@Array[Hash_Table_Row[Key, Value]](rows,
+		  create@Hash_Table_Row[Key, Value](rows.size))
+		index := index + 1
+	hash_table.mask := hash_table.rows.size - 1
+	assert hash_table.mask < hash_table.rows.size
+
+    if trace_level >= 1
+	buffer :@= hash_table.buffer
+	call trim@String(buffer, 0)
+	call buffer_append@String("insert@Hash_Table(*, ", buffer)
+	call hash_table.key_show(key, buffer)
+	call buffer_append@String(", ", buffer)
+	call hash_table.value_show(value, buffer)
+	call buffer_append@String(") => ", buffer)
+	call hash_table.value_show(previous_value, buffer)
+
+	#call buffer_append@String(" size:", buffer)
+	#call buffer_append@Unsigned(hash_table.size, buffer)
+	#call buffer_append@String(" rows.size:", buffer)
+	#call buffer_append@Unsigned(hash_table.rows.size, buffer)
+	#call buffer_append@String(" row.index:", buffer)
+	#call buffer_append@Unsigned(row.index, buffer)
+
+	call buffer_append@String("\n\", buffer)
+	call put@String(buffer, error@Out_Stream)
+
+    #assert hash_table.mask < hash_table.rows.size
+    return previous_value
+
+
+routine show@Hash_Table[Key, Value]
+    takes hash_table Hash_Table[Key, Value]
+    takes out_stream Out_Stream
+    returns_nothing
+
+    buffer :@= new@String()
+    value_show :@= hash_table.value_show
+    key_show :@= hash_table.key_show
+    rows :@= hash_table.rows
+    size :@= rows.size
+    index :@= 0
+    while index < size
+	row :@= rows[index]
+	call string_append@(buffer, form@("Row[%d% index:%d% mask:%d%]: ") %
+	   f@(index) % f@(row.index) / f@(row.mask))
+	pairs :@= row.pairs
+	pairs_size :@= pairs.size
+	pairs_index :@= 0
+	while pairs_index < pairs_size
+	    pair :@= pairs[pairs_index]
+	    call string_append@(buffer, form@("(hash:%x% ") / f@(pair.hash))
+	    call key_show(pair.key, buffer)
+	    call string_append@(buffer, " ")
+	    call value_show(pair.value, buffer)
+	    call string_append@(buffer, ")")
+	    pairs_index := pairs_index + 1
+	call character_append@(buffer, '\n\')
+	index := index + 1
+    call put@(buffer, out_stream)
+
+
+routine row_lookup@Hash_Table[Key, Value]
+    takes hash_table Hash_Table[Key, Value]
+    takes key Key
+    takes hash Unsigned
+    returns Hash_Table_Row[Key, Value]
+
+    # This routine will return the row associated with {key} (and its
+    # associated {hash}) in {hash_table}.  This routine has the side
+    # effect of ensuring that all rows that can match {hash} are
+    # resorted according to invariant #3.
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    hash := hash_table.key_hash(key)
+    rows :@= hash_table.rows
+    table_mask :@= hash_table.mask
+
+    # See whether the row has already been resorted:
+    row :@= rows[hash & table_mask]
+    if row.mask != table_mask
+	# It has not been resorted;
+	# visit each row that matches {hash} and resort:
+	row_mask :@= table_mask
+	while row_mask != 0
+	    row_index :@= hash & row_mask
+	    row := rows[row_index]
+	    if row.mask != table_mask
+		# Visit each {pair} in {pairs}:
+		pairs :@= row.pairs
+		size :@= pairs.size
+		index :@= 0
+		while index < size
+		    pair :@= pairs[index]
+		    pair_index :@= table_mask & pair.hash
+		    if pair_index != row_index
+			# Move {pair} to {rows}[{pair_index}]
+			call append@Array[Hash_Table_Pair[Key,
+			  Value]](rows[pair_index].pairs, pair)
+			pairs[index] := pairs[size - 1]
+			size := size - 1
+			call trim@Array[Hash_Table_Pair[Key, Value]](pairs,
+			  size)
+		    else
+			# The current {pair} is on the correct {row}:
+			index := index + 1
+
+		# We are finished rearranging the current row:
+		row.mask := table_mask
+
+	    # Move onto next row:
+	    row_mask := row_mask >> 1
+
+    #assert hash_table.mask < hash_table.rows.size
+
+    # Return the row for {key}:
+    return rows[hash & table_mask]
+
+
+# {In_Stream} stuff:
+
+define In_Stream
+    external
+
+global null@In_Stream In_Stream
+
+global standard@In_Stream In_Stream
+
+routine Initialize@In_Stream
+    takes_nothing
+    returns_nothing
+    external In_Stream__Initialize
+
+
+routine all_read@In_Stream
+    takes in_stream In_Stream
+    takes contents String
+    returns String
+
+    # This routine will return the entire contents of {in_stream} as
+    # a single buffered {String}.
+
+    if contents == null@String
+	contents := new@String()
+    offset :@= 0
+    #FIXME: use break!!!
+    done :@= false@Logical
+    while !done
+	call range_nulls_insert@String(contents, offset, 1024)
+	amount_read :@= read@String(contents, offset, 1024, in_stream)
+	if amount_read = 1024
+	    # We got the full amount:
+	    offset := offset + 1024
+	else
+	    # We got a partial amount:
+	    call trim@String(contents, offset + amount_read)
+	    done := true@Logical
+    return contents
+
+
+routine byte_get@In_Stream
+    takes in_stream In_Stream
+    returns Unsigned
+
+    # This routine will read in a return the next byte from {in_stream}.
+    # 0xffffffff is returned if there are no more bytes to be had.
+
+    return unsigned@(character_read@(in_stream))
+
+
+routine character_read@In_Stream
+    takes in_stream In_Stream
+    returns Character
+    external In_Stream__character_read
+
+    # This routine will return the next character from {in_stream}.
+
+
+routine character_unread@In_Stream
+    takes in_stream In_Stream
+    takes character Character
+    external In_Stream__character_unread
+
+    # This routine will return will push {character} back into {in_stream}.
+    # Only one call after {character_read@In_Stream} is guaranteed.
+    # This is equivalent to ungetc(1).
+
+
+routine close@In_Stream
+    takes in_stream In_Stream
+    returns_nothing
+    external In_Stream__close
+
+    # This routine will close {In_Stream}.
+
+routine erase@In_Stream
+    takes in_stream In_Stream
+    returns_nothing
+
+    # This routine will "erase" {in_stream}.  In reality, this routine
+    # does nothing.
+
+    do_nothing
+
+
+routine fd_open@In_Stream
+    takes fd Integer
+    returns In_Stream
+    external In_Stream__fd_open
+
+    # This routine will return an {In_Stream} that is connected to the
+    # {fd} file descriptor.
+
+routine is_end_of_file@In_Stream
+    takes in_stream In_Stream
+    returns Logical
+    external feof
+
+
+routine line_read@In_Stream
+    takes in_stream In_Stream
+    takes line String
+    returns String
+
+    # This routine will read in a line from {in_stream} and return it.
+    # If {line} is not {null@String}, it is used as the line buffer.
+    # The trailing new line character is not read in.
+
+    if line == null@String
+	line := new@String()
+    else
+	call trim@(line, 0)
+    end_of_file :@= character@(0xffffffff)
+    character :@= ' '
+    while character != '\n\' && character != end_of_file
+	character := character_read@(in_stream)
+	if character != '\n\' && character != '\cr\' && character != end_of_file
+	    call character_append@(line, character)
+    return line
+
+
+routine little_endian_short_get@In_Stream
+    takes in_stream In_Stream
+    returns Unsigned
+
+    # This routine will read in and return a short (16-bits) from {in_stream}
+    # in little endian format (least significant byte first).  If two bytes
+    # information are not available, 0xffffffff is returned.
+
+    low_byte :@= byte_get@(in_stream)
+    high_byte :@= byte_get@(in_stream)
+    result :@= 0xffffffff
+    if high_byte != 0xffffffff
+	result := (high_byte << 8) | low_byte
+    return result
+
+
+routine open@In_Stream
+    takes file_name String
+    returns In_Stream
+    external In_Stream__open
+
+    # This routine will open the file named {file_name} and return
+    # a new {In_Stream} object.
+
+
+routine pipe_read@In_Stream
+    takes command String
+    returns In_Stream
+    external In_Stream__pipe_read
+
+    # This routine will open a pipe on a shell that is executing {command}
+    # return the resulting {In_Stream} object.
+
+
+routine xml_attribute_read@In_Stream
+    takes in_stream In_Stream
+    takes attribute_name String
+    takes attribute_value String
+    returns Logical
+
+    #: This procedure will read in an XML attribute from {in_stream}
+    #, and append the attribute name to {attribute_name} and the
+    #, attribute value in {attribute_value}.
+
+    # Read attribute name:
+    call trim@(attribute_name, 0)
+    call trim@(attribute_value, 0)
+
+    # We should have an attribute name:
+    first :@= true@Logical
+    character :@= '\0\'
+    while true@Logical
+	if first
+	    first := false@Logical
+	    character := xml_space_skip@(in_stream)
+	    if character = '>' || character = '/'
+		call character_unread@(in_stream, character)
+		return true@Logical
+	else
+	    character := character_read@(in_stream)
+	if !is_alpha_numeric@(character) && character != '_'
+	    break
+	call character_append@(attribute_name, character)
+
+    # Read equals:
+    if character != '='
+	character := xml_space_skip@(in_stream)
+    if character != '='
+	return true@Logical
+
+    # Read quote:
+    quote :@= xml_space_skip@(in_stream)
+    if quote != '\sq\' && quote != '\dq\'
+	return true@Logical
+
+    # Read attribute value:
+    while true@Logical
+	character := character_read@(in_stream)
+	if character = quote
+	    break
+	call character_append@(attribute_value, character)
+
+    return false@Logical
+
+
+routine xml_space_skip@In_Stream
+    takes in_stream In_Stream
+    returns Character
+
+    # This routine will skip over spaces, tabs and new lines until
+    # it encounters a printing character and returns it.
+
+    character :@= '\0\'
+    while true@Logical
+	character := character_read@(in_stream)
+	if character != ' ' && character != '\t\' &&
+	  character != '\n\' && character != '\cr\'
+	    break
+    return character
+
+
+routine xml_tag_read@In_Stream
+    takes in_stream In_Stream
+    takes tag_name String
+    returns Logical
+
+    # This procedure will read in an XML tag of the form "<{tag_name}" from
+    # {in_stream} and append the tag name to {tag_name}.  {true@Logical}
+    # is returned if '<' is not encountered.
+
+    # Skip over the spaces:
+    if xml_space_skip@(in_stream) != '<'
+	return true@Logical
+
+    # Read the tag name:
+    call trim@(tag_name, 0)
+
+    while true@Logical
+	character :@= character_read@(in_stream)
+	if character = ' ' || character = '\t\' || character = '>'
+	    call character_unread@(in_stream, character)
+	    break
+	call character_append@(tag_name, character)
+    return false@Logical
+
+
+routine xml_tag_end@In_Stream
+    takes in_stream In_Stream
+    takes single_tag Logical
+    returns Logical
+
+    #: This procedure will read in the end of a tag from {in_stream}.
+    #, If {single_tag} is {true}, the end of the tag must be preceeded
+    #, by a slash.  {true} is returned if there are any problems and
+    #, {false} otherwise.
+
+    result :@= true@Logical
+    character :@= xml_space_skip@(in_stream)
+    if single_tag
+	if character = '/'
+	    result := character_read@(in_stream) != '>'
+    else
+	result := character != '>'
+    return result
+    
+
+routine xml_tag_match@In_Stream
+    takes in_stream In_Stream
+    takes tag_name String
+    returns Logical
+
+    #: This procedure will ensure that the next XML tag matches {tag_name}.
+    #, If it matches, {false} is returned; otherwise, {true} is returned.
+
+    # Read the opening greater than:
+    if xml_space_skip@(in_stream) != '<'
+	return true@Logical
+
+    # Match the input tag:
+    size :@= tag_name.size
+    index :@= 0
+    while index < size
+	character :@= character_read@(in_stream)
+	if character != tag_name[index]
+	    return true@Logical
+	index := index + 1
+    return false@Logical
+
+
+# {Integer} stuff:
+
+define Integer
+    external
+
+external null@Integer Integer
+
+external zero@Integer Integer
+
+external one@Integer Integer
+
+external negative_one@Integer Integer
+
+external minimum@Integer Integer
+
+external maximum@Integer Integer
+
+routine byte@Integer
+    takes number Integer
+    returns Byte
+    scalar_cast Byte
+
+    # This routine will convert {number} into a {Byte} and return it.
+
+
+routine character@Integer
+    takes number Integer
+    returns Character
+    scalar_cast Character
+
+    # This routine will convert {number} into a {Character} and return it.
+
+
+routine compare@Integer
+    takes integer1 Integer
+    takes integer2 Integer
+    returns Integer
+
+    # This routine will return -1, 0, or 1 depending upon whether {integer1]
+    # is less than, greater than or equal to {integer2}.
+
+    result :@= 0i
+    if integer1 < integer2
+	result := -1i
+    else_if integer1 > integer2
+	result := 1i
+    return result
+
+
+routine double@Integer
+    takes number Integer
+    returns Double
+    scalar_cast Double
+
+    # This routine will convert {number} into a {Double} and return it.
+
+
+routine erase@Integer
+    takes number Integer
+    returns_nothing
+
+    # This routine will "erase" {Integer}; In reality it does nothing.
+
+    do_nothing
+
+
+routine f@Integer
+    takes number Integer
+    returns String
+
+    # This procedure will format {number} for next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "d" => decimal, "x"=>hexadecimal, "o"=>octal, ","=>comma separated.
+
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>f@Integer(", error@Out_Stream)
+    #	call put@("?", error@Out_Stream)
+    #	call put@(")\n\", error@Out_Stream)
+
+    comma_separated :@= false@Logical
+    fill_character :@= ' '
+    sign_force :@= false@Logical
+    left_width :@= 0
+    radix :@= 10i
+    right_width :@= 0
+    prefix :@= ""
+    upper_case :@= false@Logical
+
+    value :@= field_next@Format()
+    size :@= value.size
+    index :@= 0
+    constant :@= 0
+    while index < size
+	character :@= value[index]
+	if is_decimal_digit@(character)
+	    # Digit of constant:
+	    constant := constant * 10 + decimal_convert@(character)
+	else_if character = '\sq\'
+	    # Quoted character 'c':
+	    if index + 2 < size && value[index + 2] = '\sq\'
+		constant := unsigned@(value[index + 1])
+		index := index + 2
+	else_if character = 'c'
+	    # Comma seperated:
+	    comma_separated := true@Logical
+	else_if character = 'd'
+	    # Decimal Radix:
+	    radix := 10i
+	else_if character = 'h'
+	    # Hexadecimal radix (no prefix):
+	    radix := 16i
+	else_if character = 'f'
+	    # Fill character
+	    fill_character := character@(constant & 0xff)
+	    constant := 0
+	else_if character = 'l'
+	    # Left justify:
+	    left_width := constant
+	    constant := 0
+	else_if character = 'o'
+	    # Octal radix:
+	    prefix := "0"
+	    radix := 8i
+	else_if character = 'r'
+	    # Right justify:
+	    right_width := constant
+	    constant := 0
+	else_if character = 's'
+	    # Right justify:
+	    sign_force := true@Logical
+	else_if character = 'u'
+	    # Upper case:
+	    upper_case := true@Logical
+	else_if character = 'x'
+	    # Hexadecimal radix ("0x" prefix):
+	    prefix := "0x"
+	    radix := 16i
+	else_if character = 'y'
+	    # Hexadecimal radix (no prefix):
+	    radix := 16i
+	# else
+	#    assert false@Logical
+	index := index + 1
+    call trim@(value, 0)
+
+    if number < 0i
+	number := -number
+	call character_append@(value, '-')
+    else_if sign_force
+	call character_append@(value, '+')
+    call f_helper@(number, radix, value)
+
+    if comma_separated
+	size := value.size
+	index := 3
+	while index < size
+	    call character_insert@(value, size - index, ',')
+	    index := index + 3
+
+    if fill_character = ' '
+	call range_insert@(value, 0, prefix, 0, prefix.size)
+    prefix := ""
+    while value.size < right_width
+	call character_prepend@(value, fill_character)
+    while value.size < left_width
+	call character_append@(value, fill_character)
+    if prefix.size != 0
+	call range_insert@(value, 0, prefix, 0, prefix.size)
+    if upper_case
+	call upper_case@(value)
+
+    #if trace
+    #	call put@("<=f@Integer(?)=>'", error@Out_Stream)
+    #	call put@(value, error@Out_Stream)
+    #	call put@("'\n\", error@Out_Stream)
+
+    return value
+
+
+routine f_helper@Integer
+    takes number Integer
+    takes radix Integer
+    takes value String
+    returns_nothing
+
+    # This helper routine will append {number} to {value} as a number in
+    # base {radix}.
+
+    digit :@= 0i
+    if number < 0i
+	# Wierd situation {number} = 0x8000000:
+	digit := -(number % radix)
+	number := -(number / radix)
+	assert number >= 0i
+	call f_helper@(number, radix, value)
+    else_if number >= radix
+	digit := number % radix
+	call f_helper@(number / radix, radix, value)
+    else
+	digit := number
+    call character_append@(value, "0123456789abcdef"[unsigned@(digit)])
+
+
+routine float@Integer
+    takes number Integer
+    returns Float
+    scalar_cast Float
+
+    # This routine will convert {number} into a {Float} and return it.
+
+
+routine long_integer@Integer
+    takes number Integer
+    returns Long_Integer
+    scalar_cast Long_Integer
+
+    # This routine will return {number} into a {Long_Integer} and return it.
+
+    
+routine long_unsigned@Integer
+    takes number Integer
+    returns Long_Unsigned
+    scalar_cast Long_Unsigned
+
+    # This routine will return {number} into a {Long_Unsigned} and return it.
+
+    
+routine short@Integer
+    takes number Integer
+    returns Short
+    scalar_cast Short
+
+    # This routine will return {number} into a {Short} and return it.
+
+    
+routine unsigned@Integer
+    takes number Integer
+    returns Unsigned
+    scalar_cast Unsigned
+
+    # This routine will return {number} into an {Unsigned} and return it.
+
+    
+
+# {Logical} stuff:
+
+define Logical
+    external
+
+external null@Logical Logical
+
+external true@Logical Logical
+
+external false@Logical Logical
+
+routine erase@Logical
+    takes number Logical
+    returns_nothing
+
+    # This routine will "erase" {Logical}; In reality it does nothing.
+
+    do_nothing
+
+
+routine f@Logical
+    takes logical Logical
+    returns String
+
+    # This procedure will format {number} for next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "d" => decimal, "x"=>hexadecimal, "o"=>octal, ","=>comma separated.
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>f@Logical(", error@Out_Stream)
+    #	call put@("?", error@Out_Stream)
+    #	call put@(")\n\", error@Out_Stream)
+
+    # Figure out what format to use:
+    decimal_format :@= false@Logical
+    value :@= field_next@Format()
+    size :@= value.size
+    index :@= 0
+    while index < size
+	character :@= value[index]
+	if character = 'd'
+	    decimal_format := true@Logical
+	index := index + 1
+    
+    call trim@(value, 0)
+    if decimal_format
+	if logical
+	    call string_append@(value, "1")
+	else
+	    call string_append@(value, "0")
+    else
+	if logical
+	    call string_append@(value, "true")
+	else
+	    call string_append@(value, "false")
+
+    #if trace
+    #	call put@("<=f@Logical(?)=>'", error@Out_Stream)
+    #	call put@(value, error@Out_Stream)
+    #	call put@("'\n\", error@Out_Stream)
+
+    return value
+
+
+# {Long_Integer} stuff:
+
+define Long_Integer
+    external
+
+external null@Long_Integer Long_Integer
+
+external zero@Long_Integer Long_Integer
+
+external one@Long_Integer Long_Integer
+
+external negative_one@Long_Integer Long_Integer
+
+external minimum@Long_Integer Long_Integer
+
+external maximum@Long_Integer Long_Integer
+
+routine byte@Long_Integer
+    takes number Long_Integer
+    returns Byte
+    scalar_cast Byte
+
+    # This routine will convert {number} into a {Byte} and return it.
+
+
+routine character@Long_Integer
+    takes number Long_Integer
+    returns Character
+    scalar_cast Character
+
+    # This routine will convert {number} into a {Character} and return it.
+
+
+routine compare@Long_Integer
+    takes number1 Long_Integer
+    takes number2 Long_Integer
+    returns Integer
+
+    # This routine will return -1, 0, or 1 depending upon whether {number1}
+    # is less than, greater than or equal to {number2}.
+
+    result :@= 0i
+    if number1 < number2
+	result := -1i
+    else_if number1 > number2
+	result := 1i
+    return result
+
+
+routine double@Long_Integer
+    takes number Long_Integer
+    returns Double
+    scalar_cast Double
+
+    # This routine will convert {number} into a {Double} and return it.
+
+
+routine erase@Long_Integer
+    takes number Long_Integer
+    returns_nothing
+
+    # This routine will "erase" {Long_Integer}; In reality it does nothing.
+
+    do_nothing
+
+
+routine f@Long_Integer
+    takes number Long_Integer
+    returns String
+
+    # This procedure will format {number} for next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "d" => decimal, "x"=>hexadecimal, "o"=>octal, ","=>comma separated.
+
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>f@Long_Integer(", error@Out_Stream)
+    #	call put@("?", error@Out_Stream)
+    #	call put@(")\n\", error@Out_Stream)
+
+    comma_separated :@= false@Logical
+    fill_character :@= ' '
+    sign_force :@= false@Logical
+    left_width :@= 0
+    radix :@= 10li
+    right_width :@= 0
+    prefix :@= ""
+    upper_case :@= false@Logical
+
+    value :@= field_next@Format()
+    size :@= value.size
+    index :@= 0
+    constant :@= 0
+    while index < size
+	character :@= value[index]
+	if is_decimal_digit@(character)
+	    # Digit of constant:
+	    constant := constant * 10 + decimal_convert@(character)
+	else_if character = '\sq\'
+	    # Quoted character 'c':
+	    if index + 2 < size && value[index + 2] = '\sq\'
+		constant := unsigned@(value[index + 1])
+		index := index + 2
+	else_if character = 'c'
+	    # Comma seperated:
+	    comma_separated := true@Logical
+	else_if character = 'd'
+	    # Decimal Radix:
+	    radix := 10li
+	else_if character = 'h'
+	    # Hexadecimal radix (no prefix):
+	    radix := 16li
+	else_if character = 'f'
+	    # Fill character
+	    fill_character := character@(constant & 0xff)
+	    constant := 0
+	else_if character = 'l'
+	    # Left justify:
+	    left_width := constant
+	    constant := 0
+	else_if character = 'o'
+	    # Octal radix:
+	    prefix := "0"
+	    radix := 8li
+	else_if character = 'r'
+	    # Right justify:
+	    right_width := constant
+	    constant := 0
+	else_if character = 's'
+	    # Right justify:
+	    sign_force := true@Logical
+	else_if character = 'u'
+	    # Upper case:
+	    upper_case := true@Logical
+	else_if character = 'x'
+	    # Hexadecimal radix ("0x" prefix):
+	    prefix := "0x"
+	    radix := 16li
+	# else
+	#    assert false@Logical
+	index := index + 1
+    call trim@(value, 0)
+
+    if number < 0li
+	number := -number
+	call character_append@(value, '-')
+    else_if sign_force
+	call character_append@(value, '+')
+    call f_helper@(number, radix, value)
+
+    if comma_separated
+	size := value.size
+	index := 3
+	while index < size
+	    call character_insert@(value, size - index, ',')
+	    index := index + 3
+
+    if fill_character = ' '
+	call range_insert@(value, 0, prefix, 0, prefix.size)
+    prefix := ""
+    while value.size < right_width
+	call character_prepend@(value, fill_character)
+    while value.size < left_width
+	call character_append@(value, fill_character)
+    if prefix.size != 0
+	call range_insert@(value, 0, prefix, 0, prefix.size)
+    if upper_case
+	call upper_case@(value)
+
+    #if trace
+    #	call put@("<=f@Long_Integer(?)=>'", error@Out_Stream)
+    #	call put@(value, error@Out_Stream)
+    #	call put@("'\n\", error@Out_Stream)
+
+    return value
+
+
+routine f_helper@Long_Integer
+    takes number Long_Integer
+    takes radix Long_Integer
+    takes value String
+    returns_nothing
+
+    # This helper routine will append {number} to {value} as a number in
+    # base {radix}.
+
+    assert number >= 0li
+    if number >= radix
+	call f_helper@(number / radix, radix, value)
+	number := number % radix
+    call character_append@(value, "0123456789abcdef"[unsigned@(number)])
+
+
+routine float@Long_Integer
+    takes number Long_Integer
+    returns Float
+    scalar_cast Float
+
+    # This routine will convert {number} into a {Float} and return it.
+
+
+routine integer@Long_Integer
+    takes number Long_Integer
+    returns Integer
+    scalar_cast Integer
+
+    # This routine will convert {number} into an {Integer} and return it.
+
+
+routine long_unsigned@Long_Integer
+    takes number Long_Integer
+    returns Long_Unsigned
+    scalar_cast Long_Unsigned
+
+    # This routine will convert {number} into a {Long_Unsigned} and return it.
+
+
+routine short@Long_Integer
+    takes number Long_Integer
+    returns Short
+    scalar_cast Short
+
+    # This routine will return {number} into a {Short} and return it.
+
+    
+routine unsigned@Long_Integer
+    takes number Long_Integer
+    returns Unsigned
+    scalar_cast Unsigned
+
+    # This routine will return {number} into an {Unsigned} and return it.
+
+    
+
+# {Long_Unsigned} stuff:
+
+define Long_Unsigned
+    external
+
+external null@Long_Unsigned Long_Unsigned
+
+external zero@Long_Unsigned Long_Unsigned
+
+external one@Long_Unsigned Long_Unsigned
+
+external negative_one@Long_Unsigned Long_Unsigned
+
+external minimum@Long_Unsigned Long_Unsigned
+
+external maximum@Long_Unsigned Long_Unsigned
+
+routine byte@Long_Unsigned
+    takes number Long_Unsigned
+    returns Byte
+    scalar_cast Byte
+
+    # This routine will convert {number} into a {Byte} and return it.
+
+
+routine character@Long_Unsigned
+    takes number Long_Unsigned
+    returns Character
+    scalar_cast Character
+
+    # This routine will convert {number} into a {Character} and return it.
+
+
+routine compare@Long_Unsigned
+    takes number1 Long_Unsigned
+    takes number2 Long_Unsigned
+    returns Integer
+
+    # This routine will return -1, 0, or 1 depending upon whether {number1}
+    # is less than, greater than or equal to {number2}.
+
+    result :@= 0i
+    if number1 < number2
+	result := -1i
+    else_if number1 > number2
+	result := 1i
+    return result
+
+
+routine double@Long_Unsigned
+    takes number Long_Unsigned
+    returns Double
+    scalar_cast Double
+
+    # This routine will convert {number} into a {Double} and return it.
+
+
+routine erase@Long_Unsigned
+    takes number Long_Unsigned
+    returns_nothing
+
+    # This routine will "erase" {Long_Unsigned}; In reality it does nothing.
+
+    do_nothing
+
+
+routine f@Long_Unsigned
+    takes number Long_Unsigned
+    returns String
+
+    # This procedure will format {number} for next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "d" => decimal, "x"=>hexadecimal, "o"=>octal, ","=>comma separated.
+
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>f@Long_Unsigned(", error@Out_Stream)
+    #	call put@("?", error@Out_Stream)
+    #	call put@(")\n\", error@Out_Stream)
+
+    comma_separated :@= false@Logical
+    fill_character :@= ' '
+    sign_force :@= false@Logical
+    left_width :@= 0
+    radix :@= 10lu
+    right_width :@= 0
+    prefix :@= ""
+    upper_case :@= false@Logical
+
+    value :@= field_next@Format()
+    size :@= value.size
+    index :@= 0
+    constant :@= 0
+    while index < size
+	character :@= value[index]
+	if is_decimal_digit@(character)
+	    # Digit of constant:
+	    constant := constant * 10 + decimal_convert@(character)
+	else_if character = '\sq\'
+	    # Quoted character 'c':
+	    if index + 2 < size && value[index + 2] = '\sq\'
+		constant := unsigned@(value[index + 1])
+		index := index + 2
+	else_if character = 'c'
+	    # Comma seperated:
+	    comma_separated := true@Logical
+	else_if character = 'd'
+	    # Decimal Radix:
+	    radix := 10lu
+	else_if character = 'h'
+	    # Hexadecimal radix (no prefix):
+	    radix := 16lu
+	else_if character = 'f'
+	    # Fill character
+	    fill_character := character@(constant & 0xff)
+	    constant := 0
+	else_if character = 'l'
+	    # Left justify:
+	    left_width := constant
+	    constant := 0
+	else_if character = 'o'
+	    # Octal radix:
+	    prefix := "0"
+	    radix := 8lu
+	else_if character = 'r'
+	    # Right justify:
+	    right_width := constant
+	    constant := 0
+	else_if character = 's'
+	    # Right justify:
+	    sign_force := true@Logical
+	else_if character = 'u'
+	    # Upper case:
+	    upper_case := true@Logical
+	else_if character = 'x'
+	    # Hexadecimal radix ("0x" prefix):
+	    prefix := "0x"
+	    radix := 16lu
+	# else
+	#    assert false@Logical
+	index := index + 1
+    call trim@(value, 0)
+
+    if number < 0lu
+	number := -number
+	call character_append@(value, '-')
+    else_if sign_force
+	call character_append@(value, '+')
+    call f_helper@(number, radix, value)
+
+    if comma_separated
+	size := value.size
+	index := 3
+	while index < size
+	    call character_insert@(value, size - index, ',')
+	    index := index + 3
+
+    if fill_character = ' '
+	call range_insert@(value, 0, prefix, 0, prefix.size)
+    prefix := ""
+    while value.size < right_width
+	call character_prepend@(value, fill_character)
+    while value.size < left_width
+	call character_append@(value, fill_character)
+    if prefix.size != 0
+	call range_insert@(value, 0, prefix, 0, prefix.size)
+    if upper_case
+	call upper_case@(value)
+
+    #if trace
+    #	call put@("<=f@Long_Unsigned(?)=>'", error@Out_Stream)
+    #	call put@(value, error@Out_Stream)
+    #	call put@("'\n\", error@Out_Stream)
+
+    return value
+
+
+routine f_helper@Long_Unsigned
+    takes number Long_Unsigned
+    takes radix Long_Unsigned
+    takes value String
+    returns_nothing
+
+    # This helper routine will append {number} to {value} as a number in
+    # base {radix}.
+
+    assert number >= 0lu
+    if number >= radix
+	call f_helper@(number / radix, radix, value)
+	number := number % radix
+    call character_append@(value, "0123456789abcdef"[unsigned@(number)])
+
+
+routine float@Long_Unsigned
+    takes number Long_Unsigned
+    returns Float
+    scalar_cast Float
+
+    # This routine will convert {number} into a {Float} and return it.
+
+
+routine integer@Long_Unsigned
+    takes number Long_Unsigned
+    returns Integer
+    scalar_cast Integer
+
+    # This routine will convert {number} into an {Integer} and return it.
+
+
+routine long_integer@Long_Unsigned
+    takes number Long_Unsigned
+    returns Long_Integer
+    scalar_cast Long_Integer
+
+    # This routine will convert {number} into a {Long_Integer} and return it.
+
+
+routine short@Long_Unsigned
+    takes number Long_Unsigned
+    returns Short
+    scalar_cast Short
+
+    # This routine will return {number} into a {Short} and return it.
+
+    
+routine unsigned@Long_Unsigned
+    takes number Long_Unsigned
+    returns Unsigned
+    scalar_cast Unsigned
+
+    # This routine will return {number} into an {Unsigned} and return it.
+
+    
+
+# {Out_Stream} stuff:
+
+define Out_Stream
+    external
+
+external null@Out_Stream Out_Stream
+
+external standard@Out_Stream Out_Stream
+external error@Out_Stream Out_Stream
+
+routine big_endian_short_put@Out_Stream
+    takes out_stream Out_Stream
+    takes short_value Unsigned
+    returns_nothing
+
+    # This routine will output {short_value} to {out_stream} in big-endian
+    # format (most significant byte first):
+
+    call byte_put@(out_stream, (short_value >> 8) & 0xff)
+    call byte_put@(out_stream, short_value & 0xff)
+
+
+routine byte_put@Out_Stream
+    takes out_stream Out_Stream
+    takes byte_value Unsigned
+    returns_nothing
+
+    # This routine will output {byte_value} to {out_stream}.
+    
+    call put@(character@(byte_value), out_stream)
+
+
+routine little_endian_short_put@Out_Stream
+    takes out_stream Out_Stream
+    takes short_value Unsigned
+    returns_nothing
+
+    # This routine will output {short_value} to {out_stream} in little-endian
+    # format (least significant byte first):
+
+    call byte_put@(out_stream, short_value & 0xff)
+    call byte_put@(out_stream, (short_value >> 8) & 0xff)
+
+
+routine erase@Out_Stream
+    takes in_stream Out_Stream
+    returns_nothing
+
+    # This routine will "erase" {out_stream}.  In reality, this routine
+    # does nothing.
+
+    do_nothing
+
+routine Initialize@Out_Stream
+    takes_nothing
+    returns_nothing
+    external Out_Stream__Initialize
+
+routine close@Out_Stream
+    takes out_stream Out_Stream
+    returns_nothing
+    external Out_Stream__close
+
+    # This routine will close {Out_Stream}.
+
+
+routine fd_open@Out_Stream
+    takes fd Integer
+    returns Out_Stream
+    external Out_Stream__fd_open
+
+    # This routine will return an {Out_Stream} object that is connected
+    # to {fd} for output.
+    
+
+routine flush@Out_Stream
+    takes out_stream Out_Stream
+    returns_nothing
+    external Out_Stream__flush
+
+    # This routine will flush any buffers in {Out_Stream}.
+
+
+routine open@Out_Stream
+    takes file_name String
+    returns Out_Stream
+    external Out_Stream__open
+
+    # This routine will open the file named {file_name} and return
+    # a new {Out_Stream} object.
+
+
+routine pipe_write@Out_Stream
+    takes command String
+    returns Out_Stream
+    external Out_Stream__pipe_write
+
+    # This routine will open the shell and execute {command} to pipe
+    # data to.  The opened {Out_Stream} is returned.
+
+
+# {Short} stuff:
+
+define Short
+    external
+
+external null@Short Short
+
+routine byte@Short
+    takes short Short
+    returns Byte
+    scalar_cast Byte
+
+    # This routine will cast {short} into a {Byte} and return it.
+
+
+routine character@Short
+    takes short Short
+    returns Character
+    scalar_cast Character
+
+    # This routine will cast {short} into a {Character} and return it.
+
+
+routine double@Short
+    takes short Short
+    returns Double
+    scalar_cast Double
+
+    # This routine will cast {short} into a {Double} and return it.
+
+
+routine f@Short
+    takes number Short
+    returns String
+
+    # This procedure will format {number} for next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "d" => decimal, "x"=>hexadecimal, "o"=>octal, ","=>comma separated.
+
+    return f@(integer@(number))
+
+
+routine float@Short
+    takes short Short
+    returns Float
+    scalar_cast Float
+
+    # This routine will cast {short} into a {Float} and return it.
+
+
+routine integer@Short
+    takes short Short
+    returns Integer
+    scalar_cast Integer
+
+    # This routine will cast {short} into a {Integer} and return it.
+
+
+routine long_integer@Short
+    takes short Short
+    returns Long_Integer
+    scalar_cast Long_Integer
+
+    # This routine will cast {short} into a {Long_Integer} and return it.
+
+
+routine long_unsigned@Short
+    takes short Short
+    returns Long_Unsigned
+    scalar_cast Long_Unsigned
+
+    # This routine will cast {short} into a {Long_Unsigned} and return it.
+
+
+routine unsigned@Short
+    takes short Short
+    returns Unsigned
+    scalar_cast Unsigned
+
+    # This routine will cast {short} into a {Unsigned} and return it.
+
+
+# {String} stuff:
+
+define String
+    external
+
+external null@String String
+
+routine new@String
+    takes_nothing
+    returns String
+    external String__new
+
+    # This routine will return a new empty buffered {String} object.
+
+    
+routine address_get@String
+    takes string String
+    returns Unsigned
+    external String__address_get
+
+    # This routine will return the address of {String}.
+
+
+routine buffer_append@String
+    takes string String
+    takes buffer String
+    returns_nothing
+
+    # This routine will append {string} to {buffer}.
+
+    call string_append@String(buffer, string)
+
+
+routine c_character_append@String
+    takes string String
+    takes character Character
+    returns_nothing
+
+    # This routine will append a "C-style" verson of {character} to {string}.
+
+    backslash_or_quote :@= 
+      character = '\bsl\' || character = '\dq\' || character = '\sq\'
+    if is_printing@(character) && !backslash_or_quote
+	call character_append@(string, character)
+    else
+	call character_append@(string, '\bsl\')
+	if backslash_or_quote
+	    call character_append@(string, character)
+	else_if character = '\n\'
+	    call character_append@(string, 'n')
+	else_if character = '\t\'
+	    call character_append@(string, 't')
+	else_if character = '\cr\'
+	    call character_append@(string, 'r')
+	else
+	    call f_helper@(unsigned@(character), 8, string)
+
+
+routine character_append@String
+    takes string String
+    takes character Character
+    returns_nothing
+
+    # This routine will append{character} onto the end of {string}.
+
+    size :@= string.size
+    call range_nulls_insert@String(string, size, 1)
+    string[size] := character
+
+
+routine character_delete@String
+    takes string String
+    takes offset Unsigned
+    returns_nothing
+
+    # This routine will delete the character at {offset} in {string}.
+
+    assert offset < string.size
+    call range_delete@String(string, offset, 1)
+
+
+routine character_insert@String
+    takes string String
+    takes offset Unsigned
+    takes character Character
+    returns_nothing
+
+    # This routine will insert {character} into {string} at {offset}.
+    # All characters from {offset} on are moved over by one.
+
+    call range_nulls_insert@String(string, offset, 1)
+    string[offset] := character
+
+
+routine character_gap_insert@String
+    takes string String
+    takes character Character
+    returns_nothing
+
+    # This routine will insert {character} into {string} at the buffer
+    # gap in {string} (i.e. {front_size_get}@{String}({string})).
+    # All characters from {offset} on are moved over by one.
+
+    offset :@= string.front_size
+    call range_nulls_insert@String(string, offset, 1)
+    string[offset] := character
+    call gap_set@String(string, offset + 1)
+
+
+routine character_prepend@String
+    takes string String
+    takes character Character
+    returns_nothing
+
+    # This routine will insert {character} into the beginning of {string}.
+
+    call character_insert@String(string, 0, character)
+
+
+routine compare@String
+    takes string1 String
+    takes string2 String
+    returns Integer
+
+    # This routine will return -1, 0, or 1 depending upon whether {string1}
+    # is lexically less than, equal to, or greater than {string2}.
+
+    return range_compare@String(string1, 0, string1.size,
+      string2, 0, string2.size)
+
+
+routine d@String
+    takes string String
+    returns_nothing
+
+    # This routine will output {string} to the error console.
+
+    size :@= string.size
+    index :@= 0
+    while index < size
+	call put@Character(string[index], error@Out_Stream)
+	index := index + 1
+
+
+routine divide@String
+    takes left String
+    takes right String
+    returns String
+
+    # This routine indicates that the last formatting operation has taken
+    # place and causes the final formatted string to be produced and returnd.
+    # There is all sorts of information passing going on behind the scenes
+    # via the {null}@{Format} object.
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>divide@String('", error@Out_Stream)
+    #	call put@(left, error@Out_Stream)
+    #	call put@("', '", error@Out_Stream)
+    #	call put@(right, error@Out_Stream)
+    #	call put@("')\n\", error@Out_Stream)
+
+    format :@= one_and_only@Format()
+    frames :@= format.frames
+    frames_size :@= frames.size
+    assert frames_size != 0
+    frame :@= frames[frames_size - 1]
+
+    # Assemble the {result} string:
+    result :@= frame.result
+    call trim@(result, 0)
+    fields :@= frame.fields
+    size :@= fields.size
+    index :@= 0
+    while index < size
+	field :@= fields[index]
+	call string_append@(result, field.before)
+	call string_append@(result, field.value)
+	index := index + 1
+
+    # Return the frame to the {Frame} pool:
+    call frame_release@(format, frame)
+
+    if format.frames.size = 0
+	temporary :@= new@String()
+	if format.available_frames.size != format.frame_count
+	    call d@(form@("%d% != %d%\n\") %
+	      f@(format.available_frames.size) / f@(format.frame_count))
+	    assert false@Logical
+	assert format.available_fields.size = format.field_count
+
+    #if trace
+    #	call put@("<=divide@String('", error@Out_Stream)
+    #	call put@(left, error@Out_Stream)
+    #	call put@("', '", error@Out_Stream)
+    #	call put@(right, error@Out_Stream)
+    #	call put@("')=>'", error@Out_Stream)
+    #	call put@(result, error@Out_Stream)
+    #	call put@("'\n\", error@Out_Stream)
+
+    return result
+
+
+routine double_convert@String
+    takes string String
+    returns Double
+    external String__double_convert
+
+    # This routine will convert {string} to a {Double} and return it.
+
+
+routine erase@String
+    takes string String
+    returns_nothing
+    external String__erase
+
+    # This routine will empty {argument} (if it can).  Otherwise
+    # it does nothing.
+
+
+routine equal@String
+    takes string1 String
+    takes string2 String
+    returns Logical
+
+    #: This routine will return {true}@{Logical} if {string1} is equal
+    #, to {string2} and {false}@{Logical} otherwise.
+
+    return compare@String(string1, string2) = zero@Integer
+
+
+routine f@String
+    takes string String
+    returns String
+
+    # This procedure will format {string} for the next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "s" => plain string (default), "v"=> visual mode, "a"=>ANSI-C mode.
+    # "w" => white space mode
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>f@String(", error@Out_Stream)
+    #	call put@(string, error@Out_Stream)
+    #	call put@(")\n\", error@Out_Stream)
+
+    # Figure out what mode to use:
+    lower_mode :@= 0f
+    upper_mode :@= 0f
+    c_keyword_mode :@= 0f
+    c_mode :@= 0f
+    ezc_string :@= 0f
+    visual_mode :@= 0f
+    value :@= field_next@Format()
+    size :@= value.size
+    white_space_mode :@= 0f
+    index :@= 0
+    while index < size
+	mode_character :@= value[index]
+	if mode_character = 'a'
+	    c_mode := 1t
+	else_if mode_character = 'e'
+	    ezc_string := 1t
+	else_if mode_character = 'k'
+	    c_keyword_mode := 1t
+	else_if mode_character = 'l'
+	    lower_mode := 1t
+	else_if mode_character = 'u'
+	    upper_mode := 1t
+	else_if mode_character = 'v'
+	    visual_mode := 1t
+	else_if mode_character = 'w'
+	    white_space_mode := 1t
+	index := index + 1
+    call trim@(value, 0)
+
+    c_keyword :@= 0f
+    if c_keyword_mode
+	if lower_mode
+	    c_keyword := is_c_keyword@(form@("%l%") / f@(string))
+	else
+	    c_keyword := is_c_keyword@(string)
+
+    if ezc_string || c_mode || visual_mode
+	call character_append@(value, '\dq\')
+
+    if ezc_string
+	call c_character_append@(value, character@(string.size))
+
+    # Output the string:
+    in_white_space :@= 0f
+    backslash_mode :@= 0f
+    size := string.size
+    index :=  0
+    while index < size
+	character :@= string[index]
+	if lower_mode
+	    character := lower_case@(character)
+	else_if upper_mode
+	    character := upper_case@(character)
+	if white_space_mode && (is_white_space@(character) || character = '\n\')
+	    character := ' '
+
+	if c_mode
+	    call c_character_append@(value, character)
+	else_if visual_mode
+	    backslash_mode :=
+	      visual_character_append@(value, backslash_mode, character)
+	else_if white_space_mode
+	    if character = ' '
+		if !in_white_space
+		    call character_append@(value, ' ')
+		    in_white_space := 1t
+	    else
+		in_white_space := 0f
+		call character_append@(value, character)
+	else
+	    call character_append@(value, character)
+	index := index + 1
+    if backslash_mode
+	call character_append@(value, '\bsl\')
+    if ezc_string || c_mode || visual_mode
+	call character_append@(value, '\dq\')
+    if c_keyword
+	call string_append@(value, "___k")
+
+    #if trace
+    #	call put@("=>f@String(", error@Out_Stream)
+    #	call put@(string, error@Out_Stream)
+    #	call put@("'", error@Out_Stream)
+    #	call put@(value, error@Out_Stream)
+    #	call put@("'\n\", error@Out_Stream)
+
+    return value
+
+
+routine fetch1@String
+    takes string String
+    takes index Unsigned
+    returns Character
+    external String__fetch1
+
+    # This routine return the {index}'th character from {string}.
+
+
+routine float_convert@String
+    takes string String
+    returns Float
+    external String__float_convert
+
+    # This routine will convert {string} to a {Float} and return it.
+
+
+routine flush@String
+    takes buffer String
+    takes out_stream Out_Stream
+    returns_nothing
+
+    # This routine will output {buffer} to {out_stream} and then
+    # erase {buffer}.
+
+    call put@String(buffer, out_stream)
+    call flush@Out_Stream(out_stream)
+    call trim@String(buffer, 0)
+
+
+routine form@String
+    takes text String
+    returns String
+
+    # This routine will trigger the beginning of a string formatting session.
+    # {text} is returned as a place holder for the actual formatting
+    # taking place in {null}@{Format}.
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>form@string('", error@Out_Stream)
+    #	call put@(text, error@Out_Stream)
+    #	call put@("')\n\", error@Out_Stream)
+
+    format :@= one_and_only@Format()
+    frame :@= frame_allocate@(format)
+
+    size :@= text.size
+    index :@= 0
+    while index < size
+	field :@= field_allocate@(format)
+	call append@(frame.fields, field)
+	
+	# Grab a filler:
+	before :@= field.before
+	while index < size
+	    character :@= text[index]
+	    if character = '%'
+		if index + 1 < size && text[index + 1] = '%'
+		    # Quoted '%':
+		    index := index + 1
+		else
+		    break
+	    call character_append@(before, character)
+	    index := index + 1
+
+	# Grab a field:
+	control :@= field.control
+	if index < size
+	    character :@= text[index]
+	    if character = '%'
+		call character_append@(control, '%')
+		index := index + 1
+		while index < size
+		    character := text[index]
+		    call character_append@(control, character)
+		    index := index + 1
+		    if character = '%'
+			break
+
+    #if trace
+    #	call put@("<=form@string('", error@Out_Stream)
+    #	call put@(text, error@Out_Stream)
+    #	call put@("')\n\", error@Out_Stream)
+
+    return text
+
+
+routine format_begin@String
+    takes buffer String
+    returns Unsigned
+
+    # This routine will find the first occurrance of "%...%" in {buffer} where
+    # "..." are one or more formatting characters.  {buffer} must be a writable
+    # string.  Searching starts at {front_size_get}@{String}({buffer}).  Any
+    # occurance of "%%" is converted into "%".  Other code is responsible for
+    # inserting the the appropriate value into {buffer} after this routine
+    # returns.  The offset into {buffer} where the "%...%" starts is returned.
+    # This value should be passed back into {format_end}@{String}() for the
+    # final formatting operation and removale of "%...%".
+
+    found :@= false@Logical
+    size :@= buffer.size
+    anchor :@= size
+    index :@= buffer.front_size
+    #FIXME: use break!!!
+    while index < size && !found
+	character :@= buffer[index]
+	if character = '%'
+	    # The '%' is interesting:
+	    anchor := index
+	    index := index + 1
+	    if index < size
+		character := buffer[index]
+		if character = '%'
+		    # We have a "quoted" percent sign ("%%"):
+		    call character_delete@String(buffer, index)
+		    size := size - 1
+		    anchor := size
+		else
+		    # We have probably found some formating characters;
+		    # Look for the closing "%":
+		    while index < size && !found
+			character := buffer[index]
+			if character = '%'
+			    found := true@Logical
+			index := index + 1
+	else
+	    index := index + 1
+    if !found
+	anchor := size
+    call gap_set@String(buffer, anchor)
+    return anchor
+
+
+routine format_end@String
+    takes buffer String
+    takes anchor Unsigned
+    returns_nothing
+
+    # This routine will remove the "%...%" formating characters
+    # from {buffer} starting at {front_size_get}@{String}({buffer}).
+
+    size :@= buffer.size
+    front :@= buffer.front_size
+    index :@= front
+    if buffer[index] = '%'
+	# We have characters to delete:
+	anchor := index
+	index := index + 1
+	while index < size && buffer[index] != '%'
+	    index := index + 1
+	if buffer[index] = '%'
+	    index := index + 1
+	    call range_delete@String(buffer, anchor, index - front)
+
+
+routine format_prepare@String
+    takes buffer String
+    takes format String
+    returns_nothing
+
+    # This routine will prepare {buffer} for formatting operations
+    # by appending {format} to {buffer} and setting the gap to the beginning.
+
+    call trim@String(buffer, 0)
+    call string_append@String(buffer, format)
+    call gap_set@String(buffer, 0)
+
+
+routine front_size_get@String
+    takes string String
+    returns Unsigned
+    external String__front_size_get
+
+    # This routine will return the front size of {string}, where {string} is
+    # buffered; otherwise, the size is returned.
+
+
+routine gap_set@String
+    takes string String
+    takes gap Unsigned
+    external String__gap_set
+
+    # This routine will set the front of the buffer in {string} to {gap}.
+
+
+routine hash@String
+    takes string String
+    returns Unsigned
+
+    # This routine will return a hash value for {string}.
+
+    hash :@= 0
+    size :@= string.size
+    index :@= 0
+    while index < size
+	hash := hash + unsigned@(string[index])
+	index := index + 1
+    return hash
+
+
+routine integer_convert@String
+    takes string String
+    returns Integer
+
+    # This routine will convert {string} to an {Integer} and return it.
+
+    number :@= 0
+    size :@= string.size
+    index :@= 0
+    negative :@= false@Logical
+    if string[0] = '-'
+	negative := true@Logical
+	index := 1
+    while index < size
+	number := number * 10 + decimal_convert@Character(string[index])
+	index := index + 1
+    result :@= integer@(number)
+    if negative
+	result := -result
+    return result
+
+
+routine is_buffered@String
+    takes string String
+    returns Logical
+    external String__is_buffered
+
+    # This routine will return {true}@{logical} if {string} is buffered
+    # (i.e. can be written to).
+
+
+routine is_c_keyword@String
+    takes string String
+    returns Logical
+
+    #: This procedure will return {true} if {string} is a C keyword.
+    #, In fact it adds in a few keywords from GCC as well.
+
+    result :@= false@Logical
+    if string.size != 0
+	character :@= string[0]
+	code :@= unsigned@(character)
+	# 'a' = 97
+	# 'b' = 98
+	# 'c' = 99
+	# 'd' = 100
+	# 'e' = 101
+	# 'f' = 102
+	# 'g' = 103
+	# 'i' = 105
+	# 'l' = 108
+	# 'm' = 109
+	# 't' = 116
+	# 'r' = 114
+	# 's' = 115
+	# 't' = 116
+	# 'u' = 117
+	# 'v' = 118
+	# 'w' = 119
+	if 97 <= code && code <= 119
+	    # 'a' <= {character} <= 'w':
+	    if code <= 108
+		# 'a' <= {character} <= 'l':
+		if code <= 101
+		    # 'a' <= {character <= 'e':
+		    if code = 97
+			# {character} = 'a':
+			result := equal@String(string, "asm") ||
+			  equal@String(string, "auto")
+		    else_if code = 98
+			# {character} = 'b':
+			result := equal@String(string, "break")
+		    else_if code = 99
+			# {character} = 'c':
+			result := equal@String(string, "case") ||
+			  equal@String(string, "char") ||
+			  equal@String(string, "const") ||
+			  equal@String(string, "continue")
+		    else_if code = 100
+			# {character} = 'd':
+			result := equal@String(string,"default") ||
+			  equal@String(string, "do") ||
+			  equal@String(string, "double")
+		    else
+			# {character} = 'e':
+			result := equal@String(string, "else") ||
+			  equal@String(string, "enum") ||
+			  equal@String(string, "extern")
+		else
+		    # 'f' <= {character} <= 'l':
+		    if code = 102
+			# {character} = 'f':
+			result := equal@String(string, "float") ||
+			  equal@String(string, "for")
+		    else_if code = 103
+			# {character} = 'g':
+			result := equal@String(string, "goto")
+		    else_if code = 105
+			# {character} = 'i':
+			result := equal@String(string, "if") ||
+			  equal@String(string, "inline") ||
+			  equal@String(string, "int")
+		    else_if code = 108
+			# {character} = 'l':
+			result := equal@String(string, "long")
+	    else
+		# 'm' <= {character} <= 'w':
+		if code <= 116
+		    # 'm' <= {character} <= 't':
+		    if code = 114
+			# {character} = 'r'
+			result := equal@String(string, "register") ||
+			  equal@String(string, "return") ||
+			  equal@String(string, "restrict")
+		    else_if code = 115
+			# {character} = 's'
+			result := equal@String(string, "short") ||
+			  equal@String(string, "signed") ||
+			  equal@String(string, "sizeof") ||
+			  equal@String(string, "static") ||
+			  equal@String(string, "struct") ||
+			  equal@String(string, "switch")
+		    else_if code = 116
+			# {character} = 't'
+			result := equal@String(string, "typeof") ||
+			  equal@String(string, "typedef")
+		else
+		    # 'u' <= {character} <= 'w':
+		    if code = 117
+			# {character} = 'u':
+			result := equal@String(string, "union") ||
+			  equal@String(string, "unsigned")
+		    else_if code = 118
+			# {character} = 'v':
+			result := equal@String(string, "void") ||
+			  equal@String(string, "volitile")
+		    else
+			# {character} = 'w':
+			result := equal@String(string, "while")
+    return result
+
+
+routine is_literal@String
+    takes string String
+    returns Logical
+    external String__is_buffered
+
+    # This routine will return {true}@{logical} if {string} is a read
+    # only literal.
+
+
+routine limit_get@String
+    takes string String
+    returns Unsigned
+    external String__limit_get
+
+    # This routine will return the limit of {string}, where {string} is
+    # buffered; otherwise, the size is returned.
+
+
+routine lop@String
+    takes string String
+    returns Character
+
+    # This routine will remove the first character from the front
+    # of {string}.
+
+    character :@= string[0]
+    call range_delete@String(string, 0, 1)
+    return character
+
+
+routine lower_case@String
+    takes string String
+    returns_nothing
+
+    # This routine will convert {string} to lower case.
+
+    size :@= string.size
+    index :@= 0
+    while index < size
+	string[index] := lower_case@(string[index])
+	index := index + 1
+
+
+routine lower_case_append@String
+    takes to_string String
+    takes from_string String
+    returns_nothing
+
+    # This routine will append a lower case version of {from_string}
+    # to the end of {to_string}.  If {to_string} is {null}@{String},
+    # a new string allocated to append to.  The appended string is
+    # returned.
+
+    if to_string == null@String
+	to_string := new@String()
+    size :@= from_string.size
+    index :@= 0
+    while index < size
+	call character_append@String(to_string,
+	  lower_case@Character(from_string[index]))
+	index := index + 1
+
+
+routine p@String
+    takes string String
+    returns_nothing
+
+    # This routine will output {string} to the console.
+
+    size :@= string.size
+    index :@= 0
+    while index < size
+	call put@Character(string[index], standard@Out_Stream)
+	index := index + 1
+
+
+routine partial_match@String
+    takes string String
+    takes pattern String
+    returns Unsigned
+
+    # This routine will return the number of characters in {string} that
+    # match the beginning of {pattern}.  0 means that there are no matches.
+
+    pattern_size :@= pattern.size
+    string_size :@= string.size
+    index :@= 0
+    while index < pattern_size && index < string_size
+	string_character :@= string[index]
+	pattern_character :@= pattern[index]
+	if string_character != pattern_character
+	    break
+	index := index + 1
+    return index
+
+
+routine put@String
+    takes string String
+    takes out_stream Out_Stream
+    returns_nothing
+
+    # This routine will output {string} to {out_stream}.
+
+    size :@= string.size
+    index :@= 0
+    while index < size
+	call put@Character(string[index], out_stream)
+	index := index + 1
+
+
+routine range_append@String
+    takes to_string String
+    takes from_string String
+    takes from_offset Unsigned
+    takes count Unsigned
+    returns_nothing
+
+    # This routine will insert the {count} characters from {from_string}
+    # starting at {from_offset} onto the end of {to_string}.
+
+    to_size :@= to_string.size
+    call range_nulls_insert@String(to_string, to_size, count)
+    call range_copy@String(to_string, to_size, from_string, from_offset, count)
+
+
+routine range_compare@String
+    takes string1 String
+    takes offset1 Unsigned
+    takes count1 Unsigned
+    takes string2 String
+    takes offset2 Unsigned
+    takes count2 Unsigned
+    returns Integer
+
+    # This routine will return -1, 0, or 1 depending upon whether {string1}
+    # is lexically less than, equal to, or greater than {string2}.
+
+    result :@= zero@Integer
+    index :@= 0
+    while result = zero@Integer && count1 != 0 && count2 != 0
+	result := compare@Character(string1[offset1], string2[offset2])
+	offset1 := offset1 + 1
+	offset2 := offset2 + 1
+	count1 := count1 - 1
+	count2 := count2 - 1
+    if result = zero@Integer
+	if count1 != 0
+	    result := one@Integer
+	else_if count2 != 0
+	    result := negative_one@Integer
+    return result
+
+
+routine range_copy@String
+    takes to_string String
+    takes to_offset Unsigned
+    takes from_string String
+    takes from_offset Unsigned
+    takes count Unsigned
+    returns_nothing
+
+    # This routine will copy {count} characters from {from_string} starting
+    # at {from_offset} to {to_string} at {to_offset}.
+
+    while count != 0
+	to_string[to_offset] := from_string[from_offset]
+	count := count - 1
+	to_offset := to_offset + 1
+	from_offset := from_offset + 1
+
+
+routine range_delete@String
+    takes string String
+    takes offset Unsigned
+    takes count Unsigned
+    returns_nothing
+    external String__range_delete
+
+    # This routine will delete the {count} characters starting at
+    # {offset} in {string}.
+
+    
+routine range_equal@String
+    takes string1 String
+    takes offset1 Unsigned
+    takes count1 Unsigned
+    takes string2 String
+    takes offset2 Unsigned
+    takes count2 Unsigned
+    returns Logical
+
+    # This routine will return {true@Logical} if {string1} starting at {offset1}
+    # for {count1} characters is equal to {string2} starting at {offset2} for
+    # {count2} characters and {false@Logical} otherwise.
+
+    return range_compare@(string1,
+      offset1, count1, string2, offset2, count2) = 0i
+
+
+routine range_insert@String
+    takes to_string String
+    takes to_offset Unsigned
+    takes from_string String
+    takes from_offset Unsigned
+    takes count Unsigned
+    returns_nothing
+
+    # This routine will insert the {count} characters from {from_string}
+    # starting at {from_offset} into {to_string} at {to_offset}.
+
+    call range_nulls_insert@String(to_string, to_offset, count)
+    call range_copy@String(to_string,
+      to_offset, from_string, from_offset, count)
+
+
+routine range_nulls_insert@String
+    takes string String
+    takes offset Unsigned
+    takes count Unsigned
+    returns_nothing
+    external String__range_nulls_insert
+
+    # This routine will insert {count} null characters ('\0\') into
+    # {string} at {offset}.
+
+
+routine read@String
+    takes string String
+    takes offset Unsigned
+    takes amount Unsigned
+    takes in_stream In_Stream
+    returns Unsigned
+    external String__read
+
+    # This routine will read in up to {amount} bytes from {in_stream}
+    # into the {string} starting at {offset}.  The actual number of
+    # bytes read in is returned.
+
+
+routine read_only_copy@String
+    takes string String
+    returns String
+    external String__read_only_copy
+
+    # This routine will return a read only copy of {string}.  If
+    # {string} is already read-only, {string} is returned.
+
+
+routine remainder@String
+    takes left String
+    takes right String
+    returns String
+
+    # This routine actually just returns {left}.  It allows the user
+    # with the {null}@{Format} object to get the job done.
+
+    return left
+
+
+routine size_get@String
+    takes string String
+    returns Unsigned
+    external String__size_get
+
+    # This routine will return the size of {string}.
+
+
+routine store1@String
+    takes string String
+    takes index Unsigned
+    takes character Character
+    external String__store1
+
+    # This routine will store {character} into {index}'th slot of {string}.
+
+
+routine string_append@String
+    takes to_string String
+    takes from_string String
+    returns_nothing
+
+    # This routine will append {from_string} onto the end of {to_string}.
+
+    from_size :@= from_string.size
+    to_size :@= to_string.size
+    call range_nulls_insert@String(to_string, to_size, from_size)
+    call range_copy@String(to_string, to_size, from_string, 0, from_size)
+
+
+routine string_gap_insert@String
+    takes to_string String
+    takes from_string String
+    returns_nothing
+
+    # This routine will insert {from_string} into {to_string} at the gap.
+
+    offset :@= to_string.front_size
+    size :@= from_string.size
+    call range_nulls_insert@String(to_string, offset, size)
+    call range_copy@String(to_string, offset, from_string, 0, size)
+    call gap_set@String(to_string, offset + size)
+
+
+routine string_insert@String
+    takes to_string String
+    takes to_offset Unsigned
+    takes from_string String
+    returns_nothing
+
+    # This routine will insert {from_string} into {to_string} at {to_offset}.
+
+    from_size :@= from_string.size
+    to_size :@= to_string.size
+    call range_nulls_insert@String(to_string, to_offset, from_size)
+    call range_copy@String(to_string, to_offset, from_string, 0, from_size)
+
+
+routine string_prepend@String
+    takes to_string String
+    takes from_string String
+    returns_nothing
+
+    # This routine will prepend {from_string} to the front of {to_string}.
+
+    call string_insert@String(to_string, 0, from_string)
+
+
+routine suffix_match@String
+    takes suffix String
+    takes full String
+    returns Logical
+
+    # This routine will return {true@Logical} if {suffix} exactly
+    # matches the end of {full}.
+
+    suffix_size :@= suffix.size
+    full_size :@= full.size
+    result :@= 0f
+    if suffix_size < full_size
+	result := range_equal@(full, full_size - suffix_size, suffix_size,
+	  suffix, 0, suffix_size)
+    return result
+
+
+routine trim@String
+    takes string String
+    takes new_size Unsigned
+    returns_nothing
+
+    #: This routine will ensure that {string} is no longer than {new_size}.
+
+    size :@= string.size
+    if new_size < size
+	if new_size = 0
+	    call erase@String(string)
+	else
+	    call range_delete@String(string, new_size, size - new_size)
+    
+
+routine upper_case@String
+    takes string String
+    returns_nothing
+
+    # This routine cause {string} be turned into upper case.
+
+    size :@= string.size
+    index :@= 0
+    while index < size
+	string[index] := upper_case@(string[index])
+	index := index + 1
+
+
+routine upper_case_append@String
+    takes to_string String
+    takes from_string String
+    returns_nothing
+
+    # This routine will append a upper case version of {from_string}
+    # to the end of {to_string}.  If {to_string} is {null}@{String},
+    # a new string allocated to append to.  The appended string is
+    # returned.
+
+    if to_string == null@String
+	to_string := new@String()
+    size :@= from_string.size
+    index :@= 0
+    while index < size
+	call character_append@String(to_string,
+	  upper_case@Character(from_string[index]))
+	index := index + 1
+
+
+routine unsigned_convert@String
+    takes string String
+    returns Unsigned
+
+    # This argument will treat {string} as if it contains a decimal or
+    # hexadecimal number and return its value.
+
+    #call d@(form@("=>unsigned_convert@String(%v%)\n\") / f@(string))
+
+    # Skip over preceeding spaces and tabs:
+    size :@= string.size
+    index  :@= 0
+    while index < size
+	character :@= string[index]
+	if character != ' ' && character != '\t\'
+	    break
+	index := index + 1
+
+    # Figure out if we have a hexadeciaml.
+    radix :@= 10
+    if index + 2 <= size && string[index] = '0'
+	character := string[index + 1]
+	if character = 'x' || character = 'X'
+	    radix := 16
+	    index := index + 2
+
+    number :@= 0
+    while index < size
+	character :@= string[index]
+	digit :@= 0
+	if '0' <= character && character <= '9'
+	    digit := unsigned@(character - '0')
+	else_if 'a' <= character && character <= 'f'
+	    digit := unsigned@(character - 'a') + 10
+	else_if 'A' <= character && character <= 'F'
+	    digit := unsigned@(character - 'A') + 10
+	else
+	    break
+	number := number * radix + digit
+	index := index + 1
+
+    #call d@(form@("<=unsigned_convert@String(%v%)=>%d%\n\") %
+    #  f@(string) / f@(number))
+
+    return number
+
+
+routine visual_character_append@String
+    takes string String
+    takes backslash_mode Logical
+    takes character Character
+    returns Logical
+
+    # This routine will ...
+
+    backslash_or_quote :@= 
+      character = '\bsl\' || character = '\dq\' || character = '\sq\'
+    if is_printing@(character) && !backslash_or_quote
+	if backslash_mode
+	    backslash_mode := false@Logical
+	    call character_append@(string, '\bsl\')
+	call character_append@(string, character)
+    else
+	if backslash_mode
+	    call character_append@(string, ',')
+	else
+	    backslash_mode := true@Logical
+	    call character_append@(string, '\bsl\')
+
+	if character = '\bsl\'
+	    call string_append@(string, "bsl")
+	else_if character = '\sq\'
+	    call string_append@(string, "sq")
+	else_if character = '\dq\'
+	    call string_append@(string, "dq")
+	else_if character = '\n\'
+	    call character_append@(string, 'n')
+	else_if character = '\t\'
+	    call character_append@(string, 't')
+	else_if character = '\cr\'
+	    call string_append@(string, "cr")
+	else
+	    call f_helper@(unsigned@(character), 10, string)
+    return backslash_mode
+
+
+routine word_lop@String
+    takes string String
+    takes word String
+    returns String
+
+    # This routine will remove any characters from {string} that are
+    # not white space and append them to {word}, provided that {word}
+    # is not {null@String}.
+
+    if word == null@String
+	word := new@String()
+    else
+	call trim@(word, 0)
+    while string.size != 0
+	character :@= string[0]
+	if is_white_space@(character)
+	    break
+	else
+	    call lop@(string)
+	    call character_append@(word, character)
+    return word
+
+
+routine white_space_lop@String
+    takes string String
+    takes white_space String
+    returns_nothing
+
+    # This routine will remove preceeding white space of {string}
+    # and store it to {white_space}, if {white_space} is not {null@String}.
+
+    if white_space !== null@String
+	call trim@(white_space, 0)
+    while string.size != 0
+	character :@= string[0]
+	if is_white_space@(character)
+	    call lop@(string)
+	    if white_space !== null@String
+		call character_append@(white_space, character)
+	else
+	    break
+
+
+routine writable_copy@String
+    takes string String
+    returns String
+
+    # This routine will return a writable copy of {String}.
+
+    result :@= new@String()
+    call string_append@(result, string)
+    return result
+
+
+# {System} stuff:
+
+define System
+    record
+	error_out_stream Out_Stream	# Error output stream
+	standard_out_stream Out_Stream	# Standard output stream
+	standard_in_stream In_Stream	# Standard input stream
+	fail_routine [ <= String, String, Unsigned] # Failure routine
+	fail_routine_present Logical	# {true} => Failure routine is present
+
+
+routine abort@System
+    takes_nothing
+    returns_nothing
+    external System__abort
+
+    # This routine will cause an abnormal program termination.
+
+
+routine careful@System
+    takes call_through [ <= ]
+    returns Logical
+    external System__careful
+
+    # This routine will call {call_through}.  If nothing bad happens,
+    # {false@Logical} is returned; otherwise, if a failure of some sort
+    # occurs, {true@Logical} is returned.
+
+
+routine current_working_directory@System
+    takes file_name_buffer String
+    returns String
+
+    # This routine will return the current working directory.  If
+    # {file_name_buffer} is {null}@{String}, a read only {String} of
+    # the current working directory is returned; otherwise, the
+    # current working directory is appened to {file_name_buffer}.
+
+    assert false@Logical
+    return ""
+
+
+routine executable_directory@System
+    takes file_name_buffer String
+    returns String
+
+    # This routine will return the directory that contains the executable.
+    # If # {file_name_buffer} is {null}@{String}, a read only {String} of
+    # the executable directory is returned; otherwise, the executable
+    # directory is appended to {file_name_buffer}.
+
+    assert false@Logical
+    return ""
+
+
+routine execute@System
+    takes command String
+    returns Integer
+    external System__execute
+
+    # This routine will execute {command} and return the resulting return code.
+
+
+routine exit@System
+    takes result Unsigned
+    returns_nothing
+    external System__exit
+
+    # This routine will cause the program to exit with an exit code
+    # of {result}.
+
+
+routine assert_fail@System
+    takes file_name String
+    takes line_number Unsigned
+    returns_nothing
+
+    call fail@System("Assertion", file_name, line_number)
+
+
+routine fail@System
+    takes kind String
+    takes file_name String
+    takes line_number Unsigned
+    returns_nothing
+
+    # This routine will print out an assertion failure message containing
+    # {file_name} and {line_number}.
+
+    system :@= null@System
+    if system.fail_routine_present
+	call system.fail_routine(kind, file_name, line_number)
+    error_stream :@= error@Out_Stream
+    call put@String(kind, error_stream)
+    call put@String(" failure in '", error_stream)
+    call put@String(file_name, error_stream)
+    call put@String("' at line ", error_stream)
+    call decimal_put@Unsigned(line_number, error_stream)
+    call put@String("\n\", error_stream)
+    call flush@Out_Stream(error_stream)
+    call abort@System()
+
+
+routine fail_routine_set@System
+    takes fail_routine [ <= String, String, Unsigned]
+    returns_nothing
+
+    # This routine will set the {fail_routine} to be called each
+    # time there is a failure.
+
+    system :@= null@System
+    system.fail_routine := fail_routine
+    system.fail_routine_present := true@Logical
+
+
+routine file_real_path@System
+    takes original_file_name String
+    takes new_file_name String
+    returns String
+
+    # This routine will return the full path to {original_file_name}.
+    # If {new_file_name} is {null}@{String}, a new string buffer is
+    # returned containing the result; otherwise the result is inserted
+    # into {new_file_name} (and returned).
+
+    assert false@Logical
+    return ""
+
+routine variant_scalar_fail@System
+    takes file_name String
+    takes line_number Unsigned
+    returns Unsigned
+
+    # This routine will print out an assertion failure message containing
+    # {file_name} and {line_number}.
+
+    call fail@System("Variant", file_name, line_number)
+    return 0
+
+
+routine variant_object_fail@System
+    takes file_name String
+    takes line_number Unsigned
+    returns System
+
+    # This routine will print out an assertion failure message containing
+    # {file_name} and {line_number}.
+
+    call fail@System("Variant", file_name, line_number)
+    return null@System
+
+
+routine one_and_only@System
+    takes_nothing
+    returns System
+
+    # This routine will return the one and only {System} object.
+
+    return null@System
+
+
+routine reset@System
+    takes system System
+    returns_nothing
+
+    # This routine will reset System to use standard input,
+    # standard output, and standard error.
+
+    call Initialize@In_Stream()
+    call Initialize@Out_Stream()
+
+    system.error_out_stream := error@Out_Stream
+    system.standard_out_stream := standard@Out_Stream
+    system.standard_in_stream := standard@In_Stream
+
+
+# {System_Jump_Buffer}:
+
+define System_Jump_Buffer
+    external
+
+routine set_jump@System_Jump_Buffer
+    takes jump_buffer System_Jump_Buffer
+    returns Integer
+    external setjmp
+
+    # This routine will setup for a return from a long jump into {jump_buffer}.
+
+
+routine long_jump@System_Jump_Buffer
+    takes jump_buffer System_Jump_Buffer
+    takes value Integer
+    returns_nothing
+    external longjmp
+
+    # This routine will perform a long jump to {jump_buffer} causing {value}
+    # to be returned.
+
+
+# {Unsigned} stuff:
+
+define Unsigned
+    external
+
+external null@Unsigned Unsigned
+
+external maximum@Unsigned Unsigned
+
+routine buffer_append@Unsigned
+    takes number Unsigned
+    takes buffer String
+    returns_nothing
+
+    #: This routine will append a decimal representation of {number}
+    #, to {buffer}.
+
+    if number >= 10
+	call buffer_append@Unsigned(number/10, buffer)
+    call character_append@String(buffer, "0123456789"[number % 10])
+
+
+routine byte@Unsigned
+    takes number Unsigned
+    returns Byte
+    scalar_cast Byte
+
+    # This routine will convert {number} into a {Byte} and return it.
+
+
+routine character@Unsigned
+    takes number Unsigned
+    returns Character
+    scalar_cast Character
+
+    # This routine will convert {number} into a {Character} and return it.
+
+
+routine compare@Unsigned
+    takes number1 Unsigned
+    takes number2 Unsigned
+    returns Integer
+
+    # This routine will return -1, 0, or 1 depending upon whether {number1]
+    # is less than, greater than or equal to {number2}.
+
+    result :@= 0i
+    if number1 < number2
+	result := -1i
+    else_if number1 > number2
+	result := 1i
+    return result
+
+
+routine decimal_put@Unsigned
+    takes number Unsigned
+    takes out_stream Out_Stream
+    returns_nothing
+
+    if number >= 10
+	call decimal_put@Unsigned(number/10, out_stream)
+    call put@Character("0123456789"[number % 10], out_stream)
+
+
+routine double@Unsigned
+    takes number Unsigned
+    returns Double
+    scalar_cast Double
+
+    # This routine will convert {number} into a {Double} and return it.
+
+
+routine erase@Unsigned
+    takes number Unsigned
+    returns_nothing
+
+    # This routine will "erase" {number}.  In reality, this routine
+    # does nothing.
+
+    do_nothing
+
+
+routine f@Unsigned
+    takes number Unsigned
+    returns String
+
+    # This procedure will format {number} for next field in the
+    # {null}@{Format} object.  The format letters are:
+    # "d" => decimal, "x"=>hexadecimal (0x prefix), "h"=>hexadecimal
+    # (no prefix), "o"=>octal, ","=>comma separated, "p" => space pad,
+    # "u"=>upper case, "#l"=>left justify, "#r"=>right justify,
+    # "#f"=>fill character.
+
+    #trace :@= false@Logical
+    #trace := true@Logical
+    #if trace
+    #	call put@("=>f@Unsigned(", error@Out_Stream)
+    #	call put@("?", error@Out_Stream)
+    #	call put@(")\n\", error@Out_Stream)
+
+    # Figure out what radix to use:
+    comma_separated :@= false@Logical
+    fill_character :@= ' '
+    left_width :@= 0
+    radix :@= 10
+    right_width :@= 0
+    pad :@= false@Logical
+    prefix :@= ""
+    upper_case :@= false@Logical
+
+    value :@= field_next@Format()
+    size :@= value.size
+    index :@= 0
+    constant :@= 0
+    while index < size
+	character :@= value[index]
+	if is_decimal_digit@(character)
+	    # Digit of constant:
+	    constant := constant * 10 + decimal_convert@(character)
+	else_if character = '\sq\'
+	    # Quoted character 'c':
+	    if index + 2 < size && value[index + 2] = '\sq\'
+		constant := unsigned@(value[index + 1])
+		index := index + 2
+	else_if character = 'c'
+	    # Comma seperated:
+	    comma_separated := true@Logical
+	else_if character = 'd'
+	    # Decimal Radix:
+	    radix := 10
+	else_if character = 'h'
+	    # Hexadecimal radix (no prefix):
+	    radix := 16
+	else_if character = 'f'
+	    # Fill character
+	    fill_character := character@(constant & 0xff)
+	    constant := 0
+	else_if character = 'l'
+	    # Left justify:
+	    left_width := constant
+	    constant := 0
+	else_if character = 'o'
+	    # Octal radix:
+	    prefix := "0"
+	    radix := 8
+	else_if character = 'p'
+	    # Pad:
+	    pad := true@Logical
+	    number := number & 0xff
+	else_if character = 'r'
+	    # Right justify:
+	    right_width := constant
+	    constant := 0
+	else_if character = 'u'
+	    # Upper case:
+	    upper_case := true@Logical
+	else_if character = 'x'
+	    # Hexadecimal radix ("0x" prefix):
+	    prefix := "0x"
+	    radix := 16
+	else_if character = 'y'
+	    # Hexadecimal radix (no prefix):
+	    radix := 16
+	# else
+	#    assert false@Logical
+	index := index + 1
+    call trim@(value, 0)
+
+    if pad
+	while number != 0
+	    call character_append@(value, ' ')
+	    number := number - 1
+    else
+	call f_helper@(number, radix, value)
+	if comma_separated
+	    size := value.size
+	    index := 3
+	    while index < size
+		call character_insert@(value, size - index, ',')
+		index := index + 3
+	if fill_character = ' '
+	    call range_insert@(value, 0, prefix, 0, prefix.size)
+	    prefix := ""
+	while value.size < right_width
+	    call character_prepend@(value, fill_character)
+	while value.size < left_width
+	    call character_append@(value, fill_character)
+	if prefix.size != 0
+	    call range_insert@(value, 0, prefix, 0, prefix.size)
+	if upper_case
+	    call upper_case@(value)
+
+    #if trace
+    #	call put@("<=f@Unsigned(?)=>'", error@Out_Stream)
+    #	call put@(value, error@Out_Stream)
+    #	call put@("'\n\", error@Out_Stream)
+
+    return value
+
+
+routine hash@Unsigned
+    takes hash Unsigned
+    returns Unsigned
+
+    # This routine will return a hash of {hash}.
+
+    return hash
+
+
+routine f_helper@Unsigned
+    takes number Unsigned
+    takes radix Unsigned
+    takes value String
+    returns_nothing
+
+    # This helper routine will append {number} to {value} as a number in
+    # base {radix}.
+
+    if number >= radix
+	call f_helper@(number / radix, radix, value)
+	number := number % radix
+    call character_append@(value, "0123456789abcdef"[number])
+
+
+routine float@Unsigned
+    takes number Unsigned
+    returns Float
+    scalar_cast Float
+
+    # This routine will convert {number} into a {Float} and return it.
+
+
+routine integer@Unsigned
+    takes number Unsigned
+    returns Integer
+    scalar_cast Integer
+
+    # This routine will convert {number} into a {Integer} and return it.
+
+
+routine long_integer@Unsigned
+    takes number Unsigned
+    returns Long_Integer
+    scalar_cast Long_Integer
+
+    # This routine will convert {number} into a {Long_Integer} and return it.
+
+
+routine long_unsigned@Unsigned
+    takes number Unsigned
+    returns Long_Unsigned
+    scalar_cast Long_Unsigned
+
+    # This routine will convert {number} into a {Long_Unsigned} and return it.
+
+
+routine short@Unsigned
+    takes number Unsigned
+    returns Short
+    scalar_cast Short
+
+    # This routine will convert {number} into a {Short} and return it.
+
+

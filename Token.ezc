@@ -1,0 +1,1634 @@
+easy_c 1.0
+
+# Copyright (c) 2004-2010 by Wayne C. Gramlich.
+# All rights reserved.
+
+library Easy_C
+library Compiler
+library Parse
+
+define Tokenizer
+    record
+	buffer String			# Temporary buffer
+	contents String			# File contents
+	dispatch_table Array[Dispatch]	# Dispatch table
+	file File			# File to tokenize
+	index Unsigned			# Index into file contents
+	indents Array[Unsigned]		# Stack of indent levels
+	messages Messages		# Messages
+	previous Token			# Previous tokenes
+	tokens Array[Token]		# Extracted tokens
+	white_space String		# White space
+	white_spaces Array[String]	# Cache of white space strings
+
+define Dispatch
+    enumeration
+	apostrophe			# Apostrophe (''')
+	amphersand			# Amphersand ('&')
+	ascii				# Ascii printable character
+	asterisk			# Asterisk ('*')
+	at_sign				# At sign ('@')
+	back_slash			# Back slash ('\')
+	caret				# Caret ('^')
+	carriage_return			# Carriage return ('\r\')
+	close_brace			# Close brace ('}')
+	close_bracket			# Close bracket (']')
+	close_parenthesis		# Close parenthesis (')')
+	colon				# Colon (':')
+	comma				# Comman (',')
+	decimal_digit			# Decimal digit ('8', '9')
+	double_quote			# Double quote ('"')
+	dollar				# Dollar ('$')
+	e				# Letter E ('e', 'E')
+	equals				# Equals ('=')
+	exclamation_point		# Exclamation point ('!')
+	forward_slash			# Forward_slash ('/')
+	grave_accent			# Grave accent ('`')
+	greater_than			# Greater than ('>')
+	hash				# Hash ('#')
+	hex_letter			# Hex letter ('A'-'F', 'a'-'f')
+	hyphen				# Hyphen ('-')
+	illegal				# Illegal character
+	latin9				# Latin9 printable character
+	less_than			# Less than ('<')
+	letter				# Letter ('A-Z', 'a-z', Latin-1)
+	line_feed			# Line feed ('\n\')
+	open_brace			# Open brace ('{')
+	open_bracket			# Open brace ('[')
+	open_parenthesis		# Open parenthesis ('(')
+	octal_digit			# Octal digit ('0'-'7')
+	percent				# Percent ('%')
+	period				# Period ('.')
+	plus_sign			# Plus sign ('+')
+	question_mark			# Question mark ('?')
+	semicolon			# Semicolon (';')
+	space				# Space character (' ')
+	tab				# Tab ('\t\')
+	tilde				# Tilde ('~')
+	underscore			# Underscore ('_')
+	vertical_bar			# Vertical bar ('|')
+	x				# Letter X ('x', 'X')
+	zero				# Zero ('0')
+	
+define Define_Data			# Information about a #define
+    record
+	old_name String			# Old #define name
+	new_name String			# New #define name
+	value String			# New #define value
+	type_name String		# Type Name
+
+define File
+    record
+	define_datas Array[Define_Data]	# Data about #defines
+	contents String			# File contents
+	directory String		# Directory file comes from
+	name String			# File name
+	positions Array[Unsigned]	# File line feed positions
+	tokens Array[Token]		# Tokens of file
+	root Root			# Root of parse tree (or null)
+
+define Lexeme
+    enumeration
+	add				# Addition operator ('+')
+	and				# Bitwise AND operator ('&')
+	assign				# Assignment operator (':=')
+	at_sign				# At sign ('@')
+	character			# Character literal
+	close_brace			# Close brace ('}')
+	close_bracket			# Close bracket (']')
+	close_indent			# Close indentation level
+	close_invoke			# Close invoke parenethesis (')')
+	close_parenthesis		# Close parenthesis (')')
+	close_type			# Close type bracket (']')
+	colon				# Colon (':')
+	comma				# Comma (',')
+	comment				# Comment
+	concatenate			# Concatenate ('~')
+	conditional_and			# Conditional AND ('&&')
+	conditional_or			# Conditional OR ('||')
+	define_assign			# Assignment operator (':@=')
+	divide				# Divide ('/')
+	dot				# Dot ('.')
+	end				# Used by {Expression} parser
+	end_of_file			# End of file
+	end_of_line			# End of line ('\n\')
+	equals				# Equal operator ('=')
+	error				# Error
+	float_number			# Floating point number
+	greater_than			# Greater than operator ('>')
+	greater_than_or_equal		# Greater than or equal op ('>=')
+	identical			# Identical ('==')
+	left_shift			# Left shift ('<<')
+	less_than			# Less than operator ('<')
+	less_than_or_equal		# Less than or equal operator ('<=')
+	logical_not			# Logical NOT operator ('!')
+	number				# Hex/Decimal number
+	minus				# Minus operator ('-')
+	multiply			# Multiply operator ('*')
+	negative			# Unary negative ('-')
+	not				# Bitwise NOT operator ('~')
+	not_equal			# Not equal operator ('!=')
+	not_identical			# Identical ('!==')
+	open_brace			# Open brace ('{')
+	open_bracket			# Open bracket ('[')
+	open_indent			# Open indentation level
+	open_invoke			# Open invoke parenthesis ('(')
+	open_parenthesis		# Open parenthesis ('(')
+	open_type			# Open type bracket ('[')
+	or				# Bitwise OR operator ('|')
+	positive			# Unary positive ('+')
+	question_mark			# Question Mark ('?')
+	remainder			# Remainder operator ('%')
+	right_shift			# Right shift ('>>')
+	semicolon			# Semicolon (';')
+	set				# Assignement ahead on line
+	start				# Used by {Expression} parser
+	string				# String literal
+	symbol				# Symbol
+	type_invoke			# Type Invoke open Parent ('@(')
+	xor				# Bitwise XOR operator ('^')
+
+define Message
+    record
+	location Token			# Used for file and position
+	text String			# Message text
+	#next Message			# Next message for co-message
+	sequence Unsigned		# Message creation sequence
+
+define Messages
+    record
+	errors Array[Message]		# Error messages
+
+define Token
+    record
+	file File			# File containing {token}
+	lexeme Lexeme			# Lexeme kind
+	position Unsigned		# Position in file
+	value String			# Actual token value as a {String}
+	white_space String		# Preceeding white space as a {String}
+
+# {Array} stuff:
+
+routine buffer_append@Array[Sub_Type]
+    takes array Array[Sub_Type]
+    takes buffer String
+    takes buffer_append_routine [ <= Sub_Type, String]
+    returns_nothing
+
+    # This procedure will invoke {buffer_append_routine} for each {Sub_Type}
+    # in {array} to append its contents to {buffer}.
+
+    size :@= array.size
+    index :@= 0
+    while index < size
+	call buffer_append_routine(array[index], buffer)
+	index := index + 1
+
+
+# {Dispatch} stuff:
+
+routine f@Dispatch
+    takes dispatch Dispatch
+    returns String
+
+    value :@= field_next@Format()
+    call trim@(value, 0)
+    call string_append@(value, string_convert@(dispatch))
+    return value
+
+# {File} stuff:
+
+routine check@File
+    takes file File
+    takes tokens Array[Token]
+    returns Logical
+
+    #: This procedure will check that tokenization occured correctly for
+    #, {file}.  {true}@{Logical} is returned if any problems are encountered;
+    #, otherwise, {false}@{Logical} is returned.
+
+    trace :@= false@Logical
+    #trace := true@Logical
+
+    if trace
+	call d@(form@("=>check@File(%qv%, *)\n\") / f@(file.name))
+
+    result :@= false@Logical
+    contents :@= file.contents
+    contents_size :@= contents.size
+
+    compiler :@= one_and_only@Compiler()
+    contents_index :@= 0
+    size :@= tokens.size
+    index :@= 0
+    while index < size
+	token :@= tokens[index]
+	white_space :@= token.white_space
+	white_space_size :@= white_space.size
+	if !range_equal@(contents, contents_index, white_space_size,
+	  white_space, 0, white_space_size)
+	    call log@(compiler, token,
+	      form@("White space mismatch %v%") / f@(white_space))
+	    break
+	contents_index := contents_index + white_space_size
+	value :@= token.value
+	value_size :@= value.size
+	if !range_equal@(contents, contents_index, value_size,
+	  value, 0, value_size)
+	    call log@(compiler, token,
+	      form@("Value space mismatch %v%") / f@(value))
+	    break
+	contents_index := contents_index + value_size
+	index := index + 1
+    if contents_index != contents_size
+	call log@(compiler, tokens[size - 1], "Left over stuff")
+
+    if trace
+	call d@(form@("=>check@File(%qv%, *)=>%l%\n\") %
+	  f@(file.name) / f@(result))
+    return result
+
+
+routine create@File
+    takes file_name String
+    takes contents String
+    takes tokens Array[Token]
+    returns File
+
+    # This routine will read in the contents of {file_name} and
+    # return a corresponding {File} object.
+
+    positions :@= new@Array[Unsigned]()
+    size :@= contents.size
+    index :@= 0
+    while index < size
+	if contents[index] = '\n\'
+	    call append@(positions, index)
+	index := index + 1
+
+    file :@= new@File()
+    file.contents := contents
+    file.directory := null@String
+    file.name := read_only_copy@(file_name)
+    file.positions := positions
+    file.tokens := tokens
+    file.root := null@Root
+
+    return file
+
+
+routine line_number@File
+    takes file File
+    takes position Unsigned
+    returns Unsigned
+
+    # This routine will return the line number for {position} in {File}.
+
+    # Now do a binary search to find the line number:
+    positions :@= file.positions
+    size :@= positions.size
+    index :@= 0
+    if size = 0 || position > positions[size - 1]
+	index := 0xffffffff
+    else
+	left_index :@= 0
+	right_index :@= size
+	while true@Logical
+	    index := (left_index + right_index) >> 1
+	    #call d@(form@("left_index=%d% index=%d% bottom_index=%d%\n\") %
+	    #  f@(left_index) %f@(index) / f@(right_index))
+	    bottom :@= 0
+	    if index != 0
+		bottom := positions[index - 1] + 1
+	    top :@= 0xffffffff
+	    if index < size
+		top := positions[index]
+	    if bottom <= position && position <= top
+		index := index + 1
+		break
+	    if position < bottom
+		right_index := index
+	    else_if position > top
+		left_index := index
+	assert left_index <= right_index
+    return index
+
+	
+routine is_lexeme_string@Lexeme
+    takes name String
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {name} matches
+    # a lexeme.
+
+    return equal@(name, "at_sign") ||
+      equal@(name, "character") ||
+      equal@(name, "close_brace") ||
+      equal@(name, "close_bracket") ||
+      equal@(name, "close_indent") ||
+      equal@(name, "close_parenthesis") ||
+      equal@(name, "comma") ||
+      equal@(name, "comment") ||
+      equal@(name, "end_of_file") ||
+      equal@(name, "end_of_line") ||
+      equal@(name, "equals") ||
+      equal@(name, "float_number") ||
+      equal@(name, "less_than_or_equal") ||
+      equal@(name, "multiply") ||
+      equal@(name, "number") ||
+      equal@(name, "open_brace") ||
+      equal@(name, "open_bracket") ||
+      equal@(name, "open_indent") ||
+      equal@(name, "open_parenthesis") ||
+      equal@(name, "semicolon") ||
+      equal@(name, "set") ||
+      equal@(name, "string")
+    
+
+routine read@File
+    takes base_name String
+    takes middlefix String
+    takes suffix String
+    takes compiler Compiler
+    returns File
+
+    #: This procedure will read the source file with a base name of
+    #, {base_name} and a suffix of {suffix} and return the resulting
+    #, {file} object.  If {base_name}.{suffix} is not opened,
+    #, ??@{file} is returned.
+
+    temporary :@= compiler.temporary
+    trace :@= false@Logical
+    #trace := true@Logical
+    if trace
+	call d@(form@("=>read@file(%qv%, %qv%, %qv%, *)\n\") %
+	  f@(base_name) % f@(middlefix) / f@(suffix))
+
+    directory_separator :@= "/"
+    #windows_system := is_windows@System()
+    #if windows_system
+    #	directory_separator := "\bsl\"
+    temporary := compiler.temporary
+    call trim@(temporary, 0)
+    call buffer_append@(base_name, temporary)
+    call buffer_append@(middlefix, temporary)
+    call buffer_append@(suffix, temporary)
+    source_name :@= read_only_copy@(temporary)
+
+    file_table :@= compiler.file_table
+    file :@= lookup@(file_table, source_name)
+    if file == null@File
+	# File not read yet:
+	if trace
+	    call d@("Reading file\n\")
+
+	contents :@= null@String
+	#buffer := compiler.buffer
+	buffer :@= new@String()
+	searches :@= compiler.searches
+	size :@= searches.size
+	assert size != 0
+	match_index :@= 0xffffffff
+	match_directory :@= ""
+	match_contents :@= ""
+	index :@= 0
+	while index < size
+	    search :@= searches[index]
+	    call trim@(buffer, 0)
+	    call string_append@(buffer, search)
+	    call string_append@(buffer, directory_separator)
+	    call string_append@(buffer, source_name)
+
+	    in_stream :@= open@In_Stream(buffer)
+	    if in_stream !== null@In_Stream
+		contents := new@String()
+		call all_read@(in_stream, contents)
+		call close@(in_stream)
+		contents_size :@= contents.size
+		if contents_size = 0 || contents[contents_size - 1] != '\n\'
+		    call character_append@(contents, '\n\')
+
+		if match_index != 0xffffffff
+		    if !equal@(match_contents, contents)
+			temporary := new@String()
+			call d@(form@(
+			  "File %s%/%s% is different from %s%/%s%\n\") %
+			  f@(match_directory) % f@(source_name) %
+			  f@(search) / f@(source_name))
+			#return null@File
+		match_contents := contents
+		match_index := index
+		match_directory := search
+	    index := index + 1
+
+	if match_index = 0xffffffff
+	    #call d@(form@("Could not open file %qv%\n\") / f@(source_name))
+	    file := null@File
+	else
+	    # Create the {file} object:
+	    tokens :@= new@Array[Token]()
+	    file := create@File(source_name, match_contents, tokens)
+	    file.directory := searches[match_index]
+	
+	    if equal@(suffix, ".ezc") || equal@(suffix, ".ezg")
+		# Tokenize the file:
+
+		#call d@(form@("tokenize file %v% contents.size=%d%\n\") %
+		#  f@(file.name) / f@(contents.size))
+
+		call tokenize@(compiler.tokenizer, file)
+
+		assert tokens.size != 0
+
+	    # Update file table and list:
+	    file_table := compiler.file_table
+	    call insert@(file_table, source_name, file)
+    else
+	if trace
+	    call d@("Returning previous File object\n\")
+
+    if trace
+	call d@(form@("<=read@file(%qv%, %qv%, %qv%, *)\n\") %
+	  f@(base_name) % f@(middlefix) / f@(suffix))
+
+    return file
+
+
+routine show@File
+    takes file File
+    takes buffer String
+    returns_nothing
+
+    # This routine will append {file} to {buffer} in readable format.
+
+    call buffer_append@("<File:", buffer)
+    if file == null@File
+	call buffer_append@("null@File", buffer)
+    else
+	call buffer_append@("'", buffer)
+	call buffer_append@(file.name, buffer)
+	call buffer_append@("'", buffer)
+    call buffer_append@(">", buffer)
+
+
+# {Lexeme} stuff:
+
+routine f@Lexeme
+    takes lexeme Lexeme
+    returns String
+
+    # This routine will format {lexeme}.
+
+    value :@= field_next@Format()
+    call string_append@(value, string_convert@(lexeme))
+    return value
+
+
+routine format@Lexeme
+    takes lexeme Lexeme
+    takes buffer String
+    returns_nothing
+
+    anchor :@= format_begin@(buffer)
+    text :@= string_convert@(lexeme)
+    call string_gap_insert@(buffer, text)
+    call format_end@(buffer, anchor)
+
+
+routine is_continuation@Lexeme
+    takes lexeme Lexeme
+    returns Logical
+
+    # This routine will return {true}@{Logical} if {lexeme} is
+    # a continuation lexeme and {false}@{Logical} otherwise.
+
+    result :@= false@Logical
+    switch lexeme
+      case add, and, assign, at_sign, comma, conditional_and, conditional_or,
+       divide, dot, equals, greater_than, greater_than_or_equal, identical,
+       left_shift, less_than, less_than_or_equal, logical_not, minus,
+       multiply, negative, not, not_equal, not_identical, open_bracket,
+       open_invoke, open_parenthesis, open_type, or, positive, remainder,
+       right_shift, xor, define_assign, type_invoke
+	result := true@Logical
+    return result
+
+
+# {Message} stuff:
+
+routine buffer_append@Message
+    takes message Message
+    takes buffer String
+
+    # This routine will append a formatted version of {message} onto
+    # the end of {buffer}.
+
+    location :@= message.location
+    file :@= location.file
+    line_number :@= line_number@(file, location.position)
+
+    call trim@(buffer, 0)
+    call string_append@(buffer, form@("file:%v% line:%d% %s%\n\") %
+      f@(file.name) % f@(line_number) / f@(message.text))
+
+
+routine compare@Message
+    takes message1 Message
+    takes message2 Message
+    returns Integer
+
+    # This routine will compare {message1} to {message2} and return
+    # -1, 0, or 1 depending upon 
+
+    location1 :@= message1.location
+    location2 :@= message1.location
+    file1 :@= location1.file
+    file2 :@= location2.file
+
+    zero :@= 0i
+    result :@= compare@(file1.name, file2.name)
+    if result = zero
+	line_number1 :@= line_number@(file1, location1.position)
+	line_number2 :@= line_number@(file2, location2.position)
+	result := compare@(line_number1, line_number2)
+	if result = zero
+	    result := compare@(message1.sequence, message2.sequence)
+    return result
+
+
+routine create@Message
+    takes location Token
+    takes text String
+    takes sequence Unsigned
+    returns Message
+
+    # This routine will create and return a new {Message} object that contains
+    # {location}, {text}, and {sequence}.
+
+    message :@= new@Message()
+    message.location := location
+    message.text := read_only_copy@(text)
+    message.sequence := sequence
+    return message
+
+
+# {Messages} stuff:
+
+routine create@Messages
+    takes immediate_stream Out_Stream
+    returns Messages
+
+    # This procedure will create and return a new {Messages} object.
+
+    messages :@= new@Messages()
+    messages.errors := new@Array[Message]()
+    return messages
+
+
+routine dump@Messages
+    takes messages Messages
+    takes out_stream Out_Stream
+    returns Logical
+
+    # This routine will dump the contents of {messages} to {out_stream}.
+    # If there is more than one message output, {true@Logical} is returned;
+    # otherwise {false@Logical} is returned.
+
+    errors :@= messages.errors
+    call sort@(errors, compare@Message)
+
+    size :@= errors.size
+    index :@= 0
+    while index < size
+	message :@= errors[index]
+	location :@= message.location
+	file :@= location.file
+	line_number :@= line_number@(file, location.position)
+	call put@(form@("%s%:%d%: %s%\n\") %
+	  f@(file.name) % f@(line_number) / f@(message.text), out_stream)
+	index := index + 1
+    call trim@(errors, 0)
+    if size != 0
+	return 1t
+    return size != 0
+
+
+routine log@Messages
+    takes messages Messages
+    takes location Token
+    takes text String
+    returns_nothing
+
+    # This routine will start a new error message in {messages} with an
+    # error position of {location} and a format string of {format}.
+
+    errors :@= messages.errors
+    message :@= create@Message(location, text, errors.size)
+    call append@(errors, message)
+
+    compiler :@= one_and_only@Compiler()
+    if compiler.tracing
+	xbuffer :@= new@String()
+	call buffer_append@(message, xbuffer)
+	call d@(xbuffer)
+
+
+
+routine log2@Messages
+    takes messages Messages
+    takes location1 Token
+    takes location2 Token
+    takes text String
+    returns_nothing
+
+    file2 :@= location2.file
+    line_number2 :@= line_number@(file2, location2.position)
+    
+    call log@(messages, location1, form@("file:%v% line:%d%: %s%") %
+      f@(file2.name) % f@(line_number2) / f@(text))
+
+
+routine size_get@Messages
+    takes messages Messages
+    returns Unsigned
+
+    # This procedure will return the number of errors in {messages}.
+
+    return messages.errors.size
+
+
+# {Token} stuff:
+
+routine buffer_append@Token
+    takes token Token
+    takes buffer String
+    returns_nothing
+
+    # This routine will append {token} to {buffer}.
+
+    call buffer_append@(token.white_space, buffer)
+    call buffer_append@(token.value, buffer)
+
+
+routine create@Token
+    takes file File
+    takes position Unsigned
+    takes lexeme Lexeme
+    takes value String
+    returns Token
+
+    # This routine will return a new {Token} object that contains
+    # {file}, {position}, {lexeme}, and {value}.
+
+    token :@= new@Token()
+    token.file := file
+    token.lexeme := lexeme
+    token.value := value
+    token.white_space := ""
+    return token
+
+
+routine compare@Token
+    takes token1 Token
+    takes token2 Token
+    returns Integer
+
+    # This routine will and return -1, 0, 1 depending upon whether the lexical
+    # value of {token1} is less than, equal to or greater than than the
+    # lexical value of {token2}.
+    
+    return compare@(token1.value, token2.value)
+
+
+routine equal@Token
+    takes token1 Token
+    takes token2 Token
+    returns Logical
+
+    # This routine will return {true@Logical} if {token1} is equal to {token2}
+    # and {false@Logical} otherwise.
+
+    return equal@(token1.value, token2.value)
+
+
+routine hash@Token
+    takes token Token
+    returns Unsigned
+
+    # This routine will return a hash of {token}.
+
+    return hash@(token.value)
+
+
+routine f@Token
+    takes token Token
+    returns String
+
+    # This routine will format {token} and return it.
+
+    value :@= field_next@Format()
+    call trim@(value, 0)
+    call string_append@(value,
+      form@("[Token: space=%v% value=%v% lexeme=%s%]") %
+      f@(token.white_space) % f@(token.value) / f@(token.lexeme))
+    return value
+
+
+routine line_number_get@Token
+    takes token Token
+    returns Unsigned
+
+    # This routine will return the line number associated wity {token}.
+
+    file :@= token.file
+    line_number :@= 1
+    if token !== null@Token
+	line_number := line_number@(file, token.position)
+    return line_number
+
+
+routine source_name_get@Token
+    takes token Token
+    returns String
+
+    # This routine will return the line number associated wity {token}.
+
+    return token.file.name
+
+
+routine string_convert@Token
+    takes token Token
+    returns String
+
+    #: This procedure will return the encoded string value for {token}
+    #, using {tokenizer}.  {token} must be either a string or character
+    #, literal.
+
+    compiler :@= one_and_only@Compiler()
+    tracing :@= compiler.tracing
+    temporary :@= compiler.temporary
+
+    lexeme :@= token.lexeme
+    assert lexeme = character@Lexeme || lexeme = string@Lexeme
+
+    result :@= new@String()
+
+    text :@= token.value
+    size :@= text.size - 1
+    index :@= 1
+    while index < size
+	character :@= text[index]
+	if character = '\bsl\'
+	    # In backslash escape:
+	
+	    index := index + 1
+	    done :@= false@Logical
+	    while !done && index < size
+		# Process a symbol or a number:
+		character := text[index]
+		if is_decimal_digit@Character(character)
+		    # We have a number:
+		    number :@= 0
+		    radix :@= 10
+		    while index < size
+			character := text[index]
+			if is_hex_digit@Character(character)
+			    number := number * radix +
+			      hexadecimal_convert@(character)
+			    if tracing
+				call d@(form@("num:%d%\n\") / f@(number))
+			    index := index + 1
+			else_if character = ',' || character = '\bsl\'
+			    break
+			else_if	character = 'x' || character = 'X'
+			    radix := 16
+			    index := index + 1
+			else
+			    call log@(compiler, token,
+			      form@("Illegal character %v% in number %v%") %
+			      f@(character) / f@(text))
+			    break
+		    call character_append@(result, character@(number))
+		else
+		    # We have a symbol:
+		    symbol :@= new@String()
+		    while index < size
+			character := text[index]
+			if character = ',' || character = '\bsl\'
+			    break
+			call character_append@(symbol, character)
+			index := index + 1
+		    character := '!'
+		    if equal@String(symbol, "bsl")
+			character := '\bsl\'
+		    else_if equal@(symbol, "dq")
+			character := '"'
+		    else_if equal@(symbol, "sq")
+			character := '\sq\'
+		    else_if equal@(symbol, "t")
+			character := '\t\'
+		    else_if equal@(symbol, "n")
+			character := '\n\'
+		    else_if equal@(symbol, "bs")
+			character := '\bs\'
+		    else_if equal@(symbol, "cr")
+			character := '\cr\'
+
+		    if character = '!'
+			call log@(compiler, token,
+			  form@("Unrecognized character code '%qv%'") /
+			  f@(symbol))
+		    else
+			call character_append@(result, character)
+
+		# Figure out whether to escape backslash mode:
+		character := text[index]
+		if character = '\bsl\'
+		    done := true@Logical
+		else
+		    index := index + 1
+	else
+	    call character_append@(result, character)
+	index := index + 1
+    result := read_only_copy@(result)
+
+    return result
+
+
+routine string_gap_insert@Token
+    takes token Token
+    takes buffer String
+    returns_nothing
+
+    # This routine will insert {token} into {buffer}.
+
+    call string_gap_insert@(buffer, token.value)
+
+
+# {Tokenizer} stuff:
+
+routine create@Tokenizer
+    takes messages Messages
+    returns Tokenizer
+
+    # This routine will create and return a new {Tokenizer} object
+
+    dispatch_table :@= new@Array[Dispatch]()
+    count :@= 256
+    while count != 0
+	call append@(dispatch_table, illegal@Dispatch)
+	count := count - 1
+
+    tokenizer :@= new@Tokenizer()
+    tokenizer.dispatch_table := dispatch_table
+    tokenizer.messages := messages
+
+    # Set up {dispatch_table}:
+    call dispatch_range@(tokenizer, 'G', 'Z', letter@Dispatch)
+    call dispatch_range@(tokenizer, 'A', 'F', hex_letter@Dispatch)
+    call dispatch_range@(tokenizer, 'g', 'z', letter@Dispatch)
+    call dispatch_range@(tokenizer, 'a', 'f', hex_letter@Dispatch)
+    call dispatch_range@(tokenizer, '1', '7', octal_digit@Dispatch)
+    call dispatch_range@(tokenizer, '8', '9', decimal_digit@Dispatch)
+
+    # Deal with Latin-15:
+    call dispatch_range@(tokenizer, '\188\', '\190\', latin9@Dispatch)
+    call dispatch_range@(tokenizer, '\192\', '\255\', latin9@Dispatch)
+    tokenizer['\166\'] := latin9@Dispatch
+    tokenizer['\168\'] := latin9@Dispatch
+    tokenizer['\180\'] := latin9@Dispatch
+    tokenizer['\184\'] := latin9@Dispatch
+    tokenizer['\173\'] := hyphen@Dispatch	# Short-hyphen
+    tokenizer['\160\'] := space@Dispatch	# Non-breaking space
+
+    tokenizer['e'] := e@Dispatch
+    tokenizer['E'] := e@Dispatch
+    tokenizer['x'] := x@Dispatch
+    tokenizer['X'] := x@Dispatch
+    
+    tokenizer['\sq\'] := apostrophe@Dispatch
+    tokenizer['&'] := amphersand@Dispatch
+    tokenizer['*'] := asterisk@Dispatch
+    tokenizer['@'] := at_sign@Dispatch
+    tokenizer['\bsl\'] := back_slash@Dispatch
+    tokenizer['^'] := caret@Dispatch
+    tokenizer['\cr\'] := carriage_return@Dispatch
+    tokenizer['}'] := close_brace@Dispatch
+    tokenizer[']'] := close_bracket@Dispatch
+    tokenizer[')'] := close_parenthesis@Dispatch
+    tokenizer[':'] := colon@Dispatch
+    tokenizer[','] := comma@Dispatch
+    tokenizer['"'] := double_quote@Dispatch
+    tokenizer['$'] := dollar@Dispatch
+    tokenizer['='] := equals@Dispatch
+    tokenizer['!'] := exclamation_point@Dispatch
+    tokenizer['/'] := forward_slash@Dispatch
+    tokenizer['`'] := grave_accent@Dispatch
+    tokenizer['>'] := greater_than@Dispatch
+    tokenizer['#'] := hash@Dispatch
+    tokenizer['-'] := hyphen@Dispatch
+    tokenizer['<'] := less_than@Dispatch
+    tokenizer['\n\'] := line_feed@Dispatch
+    tokenizer['{'] := open_brace@Dispatch
+    tokenizer['['] := open_bracket@Dispatch
+    tokenizer['('] := open_parenthesis@Dispatch
+    tokenizer['%'] := percent@Dispatch
+    tokenizer['.'] := period@Dispatch
+    tokenizer['+'] := plus_sign@Dispatch
+    tokenizer['?'] := question_mark@Dispatch
+    tokenizer[';'] := semicolon@Dispatch
+    tokenizer[' '] := space@Dispatch
+    tokenizer['\t\'] := tab@Dispatch
+    tokenizer['~'] := tilde@Dispatch
+    tokenizer['_'] := underscore@Dispatch
+    tokenizer['|'] := vertical_bar@Dispatch
+    tokenizer['0'] := zero@Dispatch
+
+    tokenizer.tokens := new@Array[Token]()
+    tokenizer.white_space := new@String()
+    tokenizer.white_spaces := new@Array[String]()
+    return tokenizer
+
+
+routine dispatch_range@Tokenizer
+    takes tokenizer Tokenizer
+    takes low_character Character
+    takes high_character Character
+    takes dispatch Dispatch
+    returns_nothing
+
+    # This routine will set a range of characters from {low_character}
+    # to {high_character} to {dispatch} in the dispatch table of
+    # {tokenizer}.
+
+    dispatch_table :@= tokenizer.dispatch_table
+    low :@= unsigned@(low_character)
+    high :@= unsigned@(high_character)
+    index :@= low
+    while index <= high
+	dispatch_table[index] := dispatch
+	index := index + 1
+
+
+routine finish@Tokenizer
+    takes tokenizer Tokenizer
+    returns_nothing
+
+    # This routine will finish the tokenizing using {tokenizer}.
+
+    do_nothing
+
+
+routine next@Tokenizer
+    takes tokenizer Tokenizer
+    returns Token
+
+    # This routine will return the next token from {tokenizer}.
+
+    buffer :@= tokenizer.buffer
+    contents :@= tokenizer.contents
+    size :@= contents.size
+    messages :@= tokenizer.messages
+    dispatch_table :@= tokenizer.dispatch_table
+    index :@= tokenizer.index
+    lexeme :@= error@Lexeme
+    compiler :@= one_and_only@Compiler()
+
+    # Slurp up {white_space}:
+    anchor :@= index
+    indent :@= 0
+    white_space :@= tokenizer.white_space
+    white_spaces :@= tokenizer.white_spaces
+    pure_white_space :@= true@Logical
+    call trim@(white_space, 0)
+    done :@= false@Logical
+    while !done
+	pure_white_space := true@Logical
+	if index < size
+	    indent_check :@= false@Logical
+	    character :@= contents[index]
+	    dispatch :@= dispatch_table[unsigned@(character)]
+	    switch dispatch
+	      case carriage_return
+		call character_append@(white_space, character)
+		index := index + 1
+		pure_white_space := false@Logical
+	      case space
+		call character_append@(white_space, character)
+		index := index + 1
+		indent := indent + 1
+	      case tab
+		call character_append@(white_space, character)
+		index := index + 1
+		indent := (indent | 7) + 1
+	      case hash
+		previous_token :@= tokenizer.previous
+		switch previous_token.lexeme
+		  case close_indent, end_of_line
+		    # We will pick this up as a comment below:
+		    done := true@Logical
+		    indent_check := true@Logical
+		  default
+		    # End of line comment:
+		    pure_white_space := false@Logical
+		    while !done
+			if index < size
+			    # Slurp until end of line:
+			    character := contents[index]
+			    if character = '\n\'
+				# End of line:
+				done := true@Logical
+			    else
+				# Comment character:
+				call character_append@(white_space, character)
+				index := index + 1
+			else
+			    # End of file:
+			    done := true@Logical
+	      case line_feed
+		# Deal with continuation lines:
+		previous_token := tokenizer.previous
+		if is_continuation@(previous_token.lexeme)
+		    # Skip over the new line:
+		    call character_append@(white_space, character)
+		    index := index + 1
+		    pure_white_space := false@Logical
+		else
+		    # We want to totally skip over blank lines:
+		    line_feed_index :@= index
+		    ahead_index :@= index + 1
+		    while ahead_index < size
+			ahead_character :@= contents[ahead_index]
+			switch dispatch_table[unsigned@(ahead_character)]
+			  case space, tab
+			    ahead_index := ahead_index + 1
+			  case line_feed
+			    line_feed_index := ahead_index
+			    ahead_index := ahead_index + 1
+			  default
+			    break
+		    if index < line_feed_index
+			# We have some blank lines:
+			pure_white_space := 0f
+			while index < line_feed_index
+			    call character_append@(white_space, contents[index])
+			    index := index + 1
+			assert index = line_feed_index
+			
+		    # Process in a normal fashion:
+		    done := true@Logical
+	      default
+		# We have a character to process:
+		indent_check := true@Logical
+
+	    if indent_check
+		previous_token := tokenizer.previous
+		previous_lexeme :@= previous_token.lexeme
+		if previous_lexeme = end_of_line@Lexeme ||
+		  previous_lexeme = close_indent@Lexeme
+		    indents :@= tokenizer.indents
+		    indents_size :@= indents.size
+		    current_indent :@= indents[indents_size - 1]
+		    
+		    #call d@(form@(
+		    #  "indent:%d% indents_size:%d% current_indent:%d%\n\") %
+		    #  f@(indent) % f@(indents_size) / f@(current_indent))
+
+		    if indent > current_indent
+			# New indentation level:
+			index := anchor
+			lexeme := open_indent@Lexeme
+			call trim@(white_space, 0)
+			call append@(indents, indent)
+		    else_if indent < current_indent
+			# Close out indentation level:
+			index := anchor
+			lexeme := close_indent@Lexeme
+			call trim@(indents, indents_size - 1)
+		done := true@Logical
+	else
+	    # End of file:
+	    done := true@Logical
+    #call d@(form"white_space=%qv%\n\") / f@(white_space))
+
+    read_only_white_space :@= ""
+    if pure_white_space
+	white_spaces := tokenizer.white_spaces
+	while white_spaces.size <= indent
+	    call append@(white_spaces, "")
+	read_only_white_space := white_spaces[indent]
+	if !equal@(white_space, read_only_white_space)
+	    read_only_white_space := read_only_copy@(white_space)
+	    white_spaces[indent] := read_only_white_space
+    else
+	read_only_white_space := read_only_copy@(white_space)
+
+    # Do initial {Token} create:
+    token :@= new@Token()
+    token.white_space := read_only_white_space
+    token.file := tokenizer.file
+    token.position := index
+    token.lexeme := error@Lexeme
+    token.value := ""
+
+    # Now fill in actual {Token} value:
+    value :@= ""
+    if lexeme = open_indent@Lexeme || lexeme = close_indent@Lexeme
+	token.white_space := ""
+	token.value := ""
+	token.lexeme := lexeme
+    else_if index < size
+	character := contents[index]
+	dispatch := dispatch_table[unsigned@(character)]
+	switch dispatch
+	  case amphersand
+	    if index + 1 < size && contents[index + 1] = '&'
+		value := "&&"
+		index := index + 2
+		lexeme := conditional_and@Lexeme
+	    else
+		value := "&"
+		index := index + 1
+		lexeme := and@Lexeme
+	  case asterisk
+	    value := "*"
+	    index := index + 1
+	    lexeme := multiply@Lexeme
+	  case at_sign
+	    value := "@"
+	    index := index + 1
+	    lexeme := at_sign@Lexeme
+	    if index < size && contents[index] = '('
+		value := "@("
+		lexeme := type_invoke@Lexeme
+		index := index + 1
+	  case apostrophe, double_quote
+	    quote :@= character
+	    value := new@String()
+	    call character_append@(value, quote)
+	    index := index + 1
+
+	    lexeme := error@Lexeme
+	    while index < size
+		character := contents[index]
+		dispatch :=
+		  dispatch_table[unsigned@(character)]
+		switch dispatch
+		  case apostrophe, double_quote
+		    call character_append@(value, character)
+		    index := index + 1
+		    if character = quote
+			# Closing quote:
+			if character = '\sq\'
+			    lexeme := character@Lexeme
+			else
+			    lexeme := string@Lexeme
+			break
+		  case line_feed, carriage_return, illegal
+		    # Unterminated string:
+		    call log@(compiler, token,
+		      form@("Unterminated string/character %c%...%c%") %
+		      f@(quote) / f@(quote))
+		    break
+		  default
+		    call character_append@(value, character)
+		    index := index + 1
+	  case caret
+	    value := "^"
+	    index := index + 1
+	    lexeme := remainder@Lexeme
+	  case close_brace
+	    value := "}"
+	    index := index + 1
+	    lexeme := close_brace@Lexeme
+	  case close_bracket
+	    value := "]"
+	    index := index + 1
+	    lexeme := close_bracket@Lexeme
+	  case close_parenthesis
+	    value := ")"
+	    index := index + 1
+	    lexeme := close_parenthesis@Lexeme
+	  case colon
+	    if index + 1 < size && contents[index + 1] = '='
+		value := ":="
+		index := index + 2
+		lexeme := assign@Lexeme
+	    else_if index + 2 < size &&
+	      contents[index + 1] = '@' && contents[index + 2] = '='
+		value := ":@="
+		index := index + 3
+		lexeme := define_assign@Lexeme
+	    else
+		value := ":"
+		index := index + 1
+		lexeme := colon@Lexeme
+	  case comma
+	    value := ","
+	    index := index + 1
+	    lexeme := comma@Lexeme
+	  case decimal_digit, octal_digit, period, zero
+	    # Number (or period):
+	    next_character :@= ' '
+	    next_dispatch :@= space@Dispatch
+	    if index + 1 < size
+		next_character := contents[index + 1]
+ 		next_dispatch := dispatch_table[unsigned@(next_character)]
+	    # Figure out if this is a {number} or a {dot}.
+	    is_hex :@= false@Logical
+	    switch dispatch
+	      case period
+		switch next_dispatch
+		  case decimal_digit, octal_digit, zero
+		    # We have a number:
+		    value := new@String()
+		    call character_append@(value, '.')
+		    lexeme := float_number@Lexeme
+		  default
+		    # We have a period:
+		    value := "."
+		    lexeme := dot@Lexeme
+		index := index + 1
+	      case decimal_digit, octal_digit
+		value := new@String()
+		lexeme := number@Lexeme
+	      case zero
+		value := new@String()
+		lexeme := number@Lexeme
+		switch next_dispatch
+		  case x
+		    index := index + 2
+		    lexeme := number@Lexeme
+		    call string_append@(value, "0x")
+		    is_hex := true@Logical
+	    switch lexeme
+	      case number, float_number
+		# We have a decimal or float number:
+		while index < size
+		    character := contents[index]
+		    dispatch := dispatch_table[unsigned@(character)]
+		    switch dispatch
+		      case period
+			switch lexeme
+			  case float_number
+			    call character_append@(value, '.')
+			    call log@(compiler, token,
+			      form@("Multiple decimal points in number (%v%)") /
+			      f@(value))
+			    lexeme := error@Lexeme
+			    break
+			  case number
+			    call character_append@(value, '.')
+			    index := index + 1
+			    lexeme := float_number@Lexeme
+			  default
+			    assert false@Logical
+		      case zero, octal_digit, decimal_digit
+			call character_append@(value, character)
+			index := index + 1
+		      case e
+			# Floating point exponent?:
+			call character_append@(value, character)
+			index := index + 1
+			if lexeme = float_number@Lexeme
+			    # E Format exponent:
+			    have_digit :@= false@Logical
+			    have_sign :@= false@Logical
+			    while index < size
+				character := contents[index]
+				dispatch := dispatch_table[unsigned@(character)]
+				switch dispatch
+				  case hyphen, plus_sign
+				    if have_digit
+					# This is a following operator +/-:
+					break
+				    if have_sign
+					# Multiple signs:
+					call log@(compiler, token,
+					  "Multple exponent signs")
+				        break
+				    else
+					# We have an exponent sign:
+					call character_append@(value, character)
+					have_sign := true@Logical
+				  case zero, decimal_digit, octal_digit
+				    call character_append@(value, character)
+				    have_digit := true@Logical
+				  default
+				    break
+				index := index + 1
+			    if !have_digit
+				call log@(compiler, token,
+				  form@("No floating point exponent (%v%)") /
+				  f@(value))
+			    #call d@(form@("float=%v%\n\") / f@(value))
+			    break
+			else_if !is_hex
+			    call character_append@(value, character)
+			    call log@(compiler, token,
+			      form@("Decimal number with hex digit ((%v%))") /
+			      f@(value))
+			    break
+		      case hex_letter
+			call character_append@(value, character)
+			index := index + 1
+			if !is_hex && character != 'f' && character != 'F' &&
+			  character != 'b' && character != 'B'
+			    call character_append@(value, character)
+			    call log@(compiler, token,
+			      form@("Decimal number with hex digit (%v%)") /
+			      f@(value))
+			    break
+		      default
+			break
+		switch lexeme
+		  case number
+		    character := contents[index]
+		    if character = 'b' || character = 'B' ||
+		      character = 'f' || character = 'F' ||
+		      character = 'i' || character = 'I' ||
+		      character = 'i' || character = 'I' ||
+		      character = 's' || character = 'S' ||
+		      character = 't' || character = 'T' ||
+		      character = 'u' || character = 'U'
+			call character_append@(value, character)
+			index := index + 1
+		    else_if character = 'l' || character = 'L'
+			if index + 1 < size
+			    character2 :@= contents[index + 1]
+			    if character2 = 'i' || character2 = 'I' ||
+			      character2 = 'u' || character2 = 'U'
+				call character_append@(value, character)
+				call character_append@(value, character2)
+				index := index + 2
+		  case float_number
+		    character := contents[index]
+		    if character = 'f' || character = 'F' ||
+		      character = 'd' || character = 'D' ||
+		      character = 'q' || character = 'Q'
+			call character_append@(value, character)
+			index := index + 1
+	  case e, hex_letter, letter, x, underscore
+	    # Symbol:
+	    value := new@String()
+	    done := false@Logical
+	    while !done
+		character := contents[index]
+		dispatch := dispatch_table[unsigned@(character)]
+		switch dispatch
+		  case decimal_digit, e, hex_letter, letter,
+		   octal_digit, x, underscore, zero
+		    call character_append@(value, character)
+		    index := index + 1
+		  default
+		    #call d@(form@("symbol: c=%qv% d=%d%\n\") %
+		    #  f@(character) / f@(dispatch))
+		    done := true@Logical
+	    lexeme := symbol@Lexeme
+	  case equals
+	    # One of "=" or  "==":
+	    if index + 1 < size && contents[index + 1] = '='
+		value := "=="
+		index := index + 2
+		lexeme := identical@Lexeme
+	    else
+		value := "="
+		index := index + 1
+		lexeme := equals@Lexeme
+	  case exclamation_point
+	    # One of "!", "!=", or "!==":
+	    if index + 1 < size && contents[index + 1] = '='
+		if index + 2 < size && contents[index + 2] = '='
+		    value := "!=="
+		    index := index + 3
+		    lexeme := not_identical@Lexeme
+		else
+		    value := "!="
+		    index := index + 2
+		    lexeme := not_equal@Lexeme
+	    else
+		value := "!"
+		index := index + 1
+		lexeme := logical_not@Lexeme
+	  case forward_slash
+	    # "/":
+	    value := "/"
+	    index := index + 1
+	    lexeme := divide@Lexeme
+	  case greater_than
+	    value := ">"
+	    index := index + 1
+	    lexeme := greater_than@Lexeme
+	    if index < size
+		next_character := contents[index]
+		next_dispatch :=
+		  dispatch_table[unsigned@(next_character)]
+		switch next_dispatch
+		  case equals
+		    value := ">="
+		    index := index + 1
+		    lexeme := greater_than_or_equal@Lexeme
+		  case greater_than
+		    value := ">>"
+		    index := index + 1
+		    lexeme := right_shift@Lexeme
+	  case hash
+	    # Comment:
+	    value := new@String()
+	    done := false@Logical
+	    while !done
+		if index < size
+		    character := contents[index]
+		    if character = '\n\'
+			done := true@Logical
+		    else
+			call character_append@String(value, character)
+			index := index + 1
+		else
+		    done := true@Logical
+	    lexeme := comment@Lexeme
+	  case hyphen
+	    # Hyphen ('-'):
+	    value := "-"
+	    index := index + 1
+	    lexeme := minus@Lexeme
+	  case illegal
+	    # Illegal character
+	    value := new@String()
+	    call character_append@(value, character)
+	    index := index + 1
+	    lexeme:= error@Lexeme
+	  case less_than
+	    # One of "<", "<=", or "<<":
+	    value := "<"
+	    index := index + 1
+	    lexeme := less_than@Lexeme
+	    if index < size
+		next_character := contents[index]
+		next_dispatch :=
+		  dispatch_table[unsigned@(next_character)]
+		switch next_dispatch
+		  case equals
+		    value := "<="
+		    index := index + 1
+		    lexeme := less_than_or_equal@Lexeme
+		  case less_than
+		    value := "<<"
+		    index := index + 1
+		    lexeme := left_shift@Lexeme
+	  case line_feed
+	    value := "\n\"
+	    index := index + 1
+	    lexeme := end_of_line@Lexeme
+	  case open_brace
+	    value := "{"
+	    index := index + 1
+	    lexeme := open_brace@Lexeme
+	  case open_bracket
+	    value := "["
+	    index := index + 1
+	    lexeme := open_bracket@Lexeme
+	  case open_parenthesis
+	    value := "("
+	    index := index + 1
+	    lexeme := open_parenthesis@Lexeme
+	  case percent
+	    value := "%"
+	    index := index + 1
+	    lexeme := remainder@Lexeme
+	  case plus_sign
+	    value := "+"
+	    index := index + 1
+	    lexeme := add@Lexeme
+	  case question_mark
+	    value := "?"
+	    index := index + 1
+	    lexeme := question_mark@Lexeme
+	  case semicolon
+	    value := ";"
+	    index := index + 1
+	    lexeme := semicolon@Lexeme
+	  case tilde
+	    value := "~"
+	    index := index + 1
+	    lexeme := not@Lexeme
+	  case vertical_bar
+	    if index + 1 < size && contents[index + 1] = '|'
+		value := "||"
+		index := index + 2
+		lexeme := conditional_or@Lexeme
+	    else
+		value := "|"
+		index := index + 1
+		lexeme := or@Lexeme
+	  default
+	    call log@(compiler, token, form@("Illegal character %v% (%d%)") %
+	      f@(character) / f@(dispatch))
+	    index := index + 1
+
+	token.value := read_only_copy@(value)
+	token.lexeme := lexeme
+    else
+	# End of file:
+	indents := tokenizer.indents
+	indents_size := indents.size
+
+	#call d@(form@("indents_size=%d%\n\") / f@(indents_size))
+
+	if indents.size > 1
+	    token.white_space := ""
+	    token.value := ""
+	    token.lexeme := close_indent@Lexeme
+	    call trim@(indents, indents_size - 1)
+	else
+	    token.value := ""
+	    token.lexeme := end_of_file@Lexeme
+
+    tokenizer.previous := token
+    tokenizer.index := index
+    return token
+
+
+routine start@Tokenizer
+    takes tokenizer Tokenizer
+    takes file File
+    returns_nothing
+
+    # This routine will start the tokenizing process for {File} using
+    # {tokenizer}.
+
+    token :@= new@Token()
+    token.lexeme := end_of_line@Lexeme
+    token.value := "\n\"
+    token.white_space := ""
+
+    indents :@= new@Array[Unsigned]()
+    call append@(indents, 0)
+
+    tokenizer.buffer := new@String()
+    tokenizer.contents := file.contents
+    # dispatch_table is alreay set up
+    tokenizer.file := file
+    tokenizer.index := 0
+    tokenizer.indents := indents
+    tokenizer.previous := token
+    tokenizer.tokens := file.tokens
+
+
+routine store1@Tokenizer
+    takes tokenizer Tokenizer
+    takes character Character
+    takes dispatch Dispatch
+    returns_nothing
+
+    # This routine will set {character} in dispatch table of {tokenizer}
+    # to {dispatch}.
+
+    index :@= unsigned@(character)
+    tokenizer.dispatch_table[index] := dispatch
+
+
+routine tokenize@Tokenizer
+    takes tokenizer Tokenizer
+    takes file File
+    returns_nothing
+
+    # This routine will convert {file} into a sequence of {Token} objects.
+
+    call start@(tokenizer, file)
+    anchor_index :@= 0
+    tokens :@= tokenizer.tokens
+    assert tokens.size = 0
+    while true@Logical
+	token :@= next@(tokenizer)
+
+	if false@Logical
+	    # Dump the tokens:
+	    call d@(form@("Tokens[%d%]:%t%\n\") %
+	      f@(tokens.size) / f@(token))
+
+	switch token.lexeme
+	  case end_of_line, close_indent, open_indent
+	    anchor_index := tokens.size + 1
+	  case end_of_file
+	    call append@(tokens, token)
+	    break
+	  case assign, define_assign
+	    # We need to splice in a set lexeme:
+	    anchor_token :@= tokens[anchor_index]
+	    set_token :@= new@Token()
+	    set_token.file := anchor_token.file
+	    set_token.lexeme := set@Lexeme
+	    set_token.position := anchor_token.position
+	    set_token.value := ""
+	    set_token.white_space := anchor_token.white_space
+	    anchor_token.white_space := ""
+	    call insert@(tokens, anchor_index, set_token)
+	call append@(tokens, token)
+
+    call finish@(tokenizer)
+
+    assert tokens.size != 0
+
+
+

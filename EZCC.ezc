@@ -1,0 +1,1354 @@
+easy_c 1.0
+
+# Copyright (c) 2004-2011 by Wayne C. Gramlich.
+# All rights reserved.
+
+library Compiler
+library Easy_C
+library Parse
+library Token
+library Unix
+
+define C_Root
+    record
+	c_declarations Array[C_Declaration]
+	end_of_file Token
+    generate parse, traverse
+
+define C_Declaration
+    variant kind C_Declaration_Kind
+	typedef C_Typedef
+	struct C_Struct
+	extern C_Extern
+	error C_Error
+    generate parse, traverse
+
+define C_Struct
+    record
+	struct Keyword
+	name Token
+	open_brace Token
+	fields Array[C_Field]
+	close_brace Token
+	semicolon Token
+    generate parse, traverse
+
+define C_Extern
+    variant kind C_Extern_Kind
+	extern1 C_Extern1
+	extern2 C_Extern2
+    generate parse, traverse
+
+define C_Extern1
+    record
+	extern Keyword
+	return_type C_Type
+	name Token
+	open_parenthesis Token
+	arguments Comma_Separated[C_Argument]
+	close_parenthesis Token
+	attribute Token
+	nest C_Nest1
+	semicolon Token
+    generate parse, traverse
+
+define C_Extern2
+    record
+	extern Keyword
+	return_type C_Type
+	name Token
+	open_parenthesis Token
+	arguments Comma_Separated[C_Argument]
+	close_parenthesis Token
+	semicolon Token
+    generate parse, traverse
+
+define C_Typedef
+    record
+	typedef Keyword
+	type C_Type
+	name Token
+	semicolon Token
+    generate traverse
+
+define C_Field
+    variant kind C_Field_Kind
+	field1 C_Field1
+	field2 C_Field2
+    generate parse, traverse
+
+define C_Field1
+    record
+	type C_Type
+	name Token
+	open_bracket Token
+	number Token	
+	close_bracket Token
+	semicolon Token
+    generate parse, traverse
+
+define C_Field2
+    record
+	type C_Type
+	name Token
+	semicolon Token
+    generate parse, traverse
+
+define C_Error
+    record
+	tokens Array[Token]
+	semicolon Token
+    generate traverse
+
+define C_Argument
+    record
+	type C_Type
+	name Token
+    generate parse, traverse
+
+define C_Type
+    record
+	type String
+
+define C_Nest1
+    record
+	open_parenthesis Token
+	nest C_Nest2
+	close_parenthesis Token
+    generate parse, traverse
+
+define C_Nest2
+    record
+	open_parenthesis Token
+	nothrow Token
+	close_parenthesis Token
+    generate parse, traverse
+
+# Parse tree for #defines:
+
+define Define_Root
+    record
+	defines Array[Define]
+	end_of_file Token
+    generate parse, traverse
+
+define Define
+    variant kind Define_Kind
+	end_of_line Token
+	define_line Define_Line
+	error Error
+    generate parse, traverse
+	
+define Define_Line
+    record
+	define Keyword
+	name Token
+	number Token
+	end_of_line Token
+    generate parse, traverse
+
+
+define Options
+    record
+	command_name String		# Initial command name
+	compile_only Logical		# -c
+	compiler_executable String	# -C {compiler executable}
+	debug Logical			# -d
+	executable_name String		# Executable name
+	executable_directory String	# Executable directory
+	interface_extract String	# -X {interface}
+	linker_executable String	# -l {linker executable}
+	linker_searches Array[String]	# -L {linker search directory}
+	linker_options String		# Linker options
+	optimize Logical		# -O
+	plain_main Logical		# -M
+	profile Logical			# -p
+	require_bases Array[String]     # require bases
+	search_options String		# "-I..."
+	searches Array[String]		# -I {search_directory}
+	source_bases Array[String]      # file...
+	suffix String			# -S {suffix}
+	trace_line Unsigned		# -T line
+	verbose Logical			# -v
+
+# {Easy_C} routines:
+
+routine main@Easy_C
+    takes arguments Array[String]
+    returns Integer
+
+    # This is where the compiler starts:
+
+    call fail_routine_set@System(compiler_fail@Easy_C)
+
+    #system :@= one_and_only@System()
+    #call reset@System(system)
+
+    #call put@String("Starting....\n\", error@Out_Stream)
+
+    # Get the {Comiler} object created:
+    options :@= extract@Options(arguments)
+    if options == null@Options
+	return 1i
+
+    options.debug := true@Logical
+
+    compile_only :@= options.compile_only
+    compiler_executable :@= options.compiler_executable
+    linker_executable :@= options.linker_executable
+    debug :@= options.debug
+    executable_name :@= options.executable_name
+    interface_extract :@= options.interface_extract
+    search_options :@= options.search_options
+    suffix :@= options.suffix
+    trace_line :@= options.trace_line
+    source_bases :@= options.source_bases
+
+    messages :@= create@Messages(error@Out_Stream)
+    temporary :@= new@String()
+    errors :@= 0
+
+    compiler :@= create@Compiler(options, messages)
+    tokenizer :@= compiler.tokenizer
+    library_bases :@= compiler.library_bases
+    interface_bases :@= compiler.interface_bases
+
+    if interface_extract !== null@String
+	return framus@Easy_C(interface_extract, compiler, options, messages)
+    
+    # Phase 1 Seed {sources} with the source bases:
+    sources :@= compiler.sources
+    size :@= source_bases.size
+    index :@= 0
+    while index < size
+	call source_register@(compiler, source_bases[index], null@Token)
+	index := index + 1
+    if messages_dump@(compiler)
+	return 1i
+
+    # Phase 2: Find all of the possible source files:
+    #if phase@(compiler, "2", read_library_find_type@Source)
+    #	return 1i
+    # {sources} now contains the transitive closure of all needed source files:
+
+    if 0f
+	index := 0
+	size := sources.size
+	while index < size
+	    source :@= sources[index]
+	    call d@(form@("Source[%d%]:%v%\n\") %
+	      f@(index) / f@(source.base_name))
+	    call show@(source)
+	    index := index + 1
+
+    # Check for duplicate define declarations:
+    call defines_check@(compiler)
+    if messages_dump@(compiler)
+	return 1i
+
+    # Phase 3: Fill in more data structures for each {Source} object:
+    #if phase@(compiler, "3", defines_needed_find@Source)
+    #	return 1i
+    #index := 0
+    #size := sources.size
+    #while index <  size
+    #	source :@= sources[index]
+    #	call defines_needed_find@(source, compiler)
+    #	index := index + 1
+
+    # Phase 4: Fill in the {all_needed} structure for each {Source} object:
+    #if phase@(compiler, "4", all_needed_find@Source)
+    #	return 1i
+    #index := 0
+    #while index < size
+    #  	source :@= sources[index]
+    #	call all_needed_find@(source, source.all_needed)
+    #	call all_needed_clear@(source)
+    #	index := index + 1
+
+    # Phase 5: Now generate .ezg files:
+    if phase@(compiler, "5a", prefix_scan@Source)
+	return 1i
+    if phase@(compiler, "5b", ezg_generate@Source)
+	return 1i
+
+    # Phase 6: Scan .ezg files for types
+    #if phase@(compiler, "6", ezg_defines_find@Source)
+    #	return 1i
+
+    # Phase 7: Now extract {Typed_Name_Object}'s:
+    if phase@(compiler, "7", typed_name_object_find@Source)
+	return 1i
+
+    # Phase 8: Now generate .h files:
+    if phase@(compiler, "8", h_emit@Source)
+	return 1i
+
+    # Phase 9: Now generate .c files:
+    if phase@(compiler, "9", c_emit@Source)
+	return 1i
+
+    # Phase 10: Now compile .c files:
+    size := sources.size
+    index := 0
+    while index < size
+	source :@= sources[index]
+	call c_compile@(source, compiler)
+	index := index + 1
+    if messages_dump@(compiler)
+	return 1i
+
+    # Phase 11: Now link everything together:
+    first_source_base :@= source_bases[0]
+    main_file_name :@= read_only_copy@(form@("/tmp/%s%%s%.c") %
+      f@(first_source_base) / f@(compiler.middlefix))
+
+    main_file :@= new@String()
+    call string_append@(main_file,
+      "typedef struct Array__Struct *Array;\n\")
+    call string_append@(main_file,
+      "typedef struct String__Struct *String;\n,n\")
+
+    call string_append@(main_file,
+      "extern Array Array__new(void);\n\")
+    call string_append@(main_file,
+      "extern String String__new(void);\n\")
+    call string_append@(main_file,
+      "extern void String__unix_append(String, char *);\n\")
+    call string_append@(main_file,
+      "extern Array__append(Array, String);\n,n\")
+    call string_append@(main_file,
+      "extern int Easy_C__main(Array);\n\")
+
+    call string_append@(main_file, "int main(\n\")
+    call string_append@(main_file, "  int argc,\n\")
+    call string_append@(main_file, "  char **argv)\n\")
+    call string_append@(main_file, "{\n\")
+
+    call string_append@(main_file, "    int index;\n\")
+    call string_append@(main_file, "    int phase;\n\")
+    call string_append@(main_file, "    Array arguments;\n\")
+    call string_append@(main_file, "    String argument;\n,n\")
+
+    call string_append@(main_file,
+      "    arguments = Array__new();\n\")
+    call string_append@(main_file,
+      "    for (index = 0; index < argc; index++) {\n\")
+    call string_append@(main_file,
+      "\t\argument = String__new();\n\")
+    call string_append@(main_file,
+      "\t\String__unix_append(argument, argv[index]);\n\")
+    call string_append@(main_file,
+      "\t\Array__append(arguments, argument);\n\")
+    call string_append@(main_file, "    }\n\")
+
+    link_command :@= new@String()
+    call string_append@(link_command, linker_executable)
+
+    collection0 :@= sources[0].collection
+    library_generate :@= collection0 !== null@Collection
+    
+    
+    library_full_name :@= null@String
+    library_partial_name :@= null@String
+    if library_generate
+	library_full_name :=
+	  read_only_copy@(form@("lib%s%.so.%d%.%d%") % f@(collection0.name) %
+	  f@(collection0.version_major) / f@(collection0.version_minor))
+	library_partial_name :=
+	  read_only_copy@(form@("lib%s%.so.%d%") %
+	  f@(collection0.name) / f@(collection0.version_major))
+	call string_append@(link_command,
+	  form@(" -shared -Wl,-soname,%s%") / f@(library_partial_name))
+
+    excutable_name :@= options.executable_name
+    if options.debug
+	call string_append@(link_command, " -g")
+    if options.optimize
+	call string_append@(link_command, " -O2")
+    call string_append@(link_command, " -o ")
+    if executable_name.size = 0
+	if library_generate
+	    call string_append@(link_command,
+	      form@("%s% ") / f@(library_full_name))
+	else
+	    call string_append@(link_command,
+	      form@("%s%%s% ") % f@(first_source_base) / f@(compiler.middlefix))
+    else
+	call string_append@(link_command,
+	  form@("%s% ") / f@(executable_name))
+
+    if !options.plain_main && !library_generate
+	call string_append@(link_command, main_file_name)
+
+    scanned_types :@= new@Array[Type]()
+    loads :@= new@Array[String]()
+    index := 0
+    size := sources.size
+    while index < size
+	source :@= sources[index]
+	collection :@= source.collection
+	if library_generate
+	    if collection == collection0
+		call string_append@(link_command,
+		  form@(" %s%.o") / f@(source.base_name))
+	else_if collection == null@Collection
+	    call link_scan@(source, compiler)
+	    call array_append@(scanned_types, compiler.scanned_types)
+	    call array_append@(loads, compiler.loads)
+	    call trim@(compiler.scanned_types, 0)
+	    call trim@(compiler.loads, 0)
+
+	    call string_append@(link_command, form@(" %s%%s%.o") %
+	      f@(source.base_name) / f@(compiler.middlefix))
+	index := index + 1
+
+    call string_append@(main_file, "\n\")
+
+    call sort@(scanned_types, compare@Type)
+    call unique@(scanned_types, equal@Type)
+    call sort@(loads, compare@String)
+    call unique@(loads, equal@String)
+
+    size := scanned_types.size
+    index := 0
+    while index < size
+	scanned_type :@= scanned_types[index]
+	call string_append@(main_file,
+	  form@("    %s%__Initialize();\n\") /
+	  f@(base_name@Type(scanned_type)))
+	index := index + 1
+
+    # Make sure that {require_bases} files are compiled:
+    require_bases :@= options.require_bases
+    call sort@(require_bases, compare@String)
+    call unique@(require_bases, equal@String)
+
+    size := require_bases.size
+    if size != 0
+	middlefix :@= compiler.middlefix
+
+	index := 0
+	while index < size
+	    require_base :@= require_bases[index]
+
+	    require_file :@=
+	      read@File(require_base, "", ".c", compiler)
+	    if require_file !== null@File
+		# We found it:
+		compile_command :@= new@String()
+		call string_append@(compile_command,
+		  options.compiler_executable)
+		if options.debug
+		    call string_append@(compile_command, " -g")
+		if options.optimize
+		    call string_append@(compile_command, " -O2")
+		call string_append@(compile_command,
+		  form@(" -c -o %s%%s%.o %s% %s%/%s%.c") %
+		  f@(require_base) % f@(middlefix) % f@(search_options) %
+		  f@(require_file.directory) / f@(require_base))
+		call d@(form@("%s%\n\") / f@(compile_command))
+		call execute@System(compile_command)
+
+	    call string_append@(link_command,
+	      form@(" %s%%s%.o") % f@(require_base) / f@(middlefix))
+	    index := index + 1
+
+    if options.profile
+	call string_append@(link_command, " -pg ")
+
+    if !library_generate
+	collections :@= compiler.collections
+	size := collections.size
+	if size != 0
+	    call string_append@(link_command, options.linker_options)
+	    index := 0
+	    while index < size
+		collection :@= collections[index]
+		call string_append@(link_command,
+		  form@(" -l%s%") / f@(collection.name)) 
+		index := index + 1
+
+    size := loads.size
+    index := 0
+    while index < size
+	call string_append@(link_command, form@(" %s%") / f@(loads[index]))
+	index := index + 1
+
+    #call buffer_append@(" -lc", link_command)
+
+    call string_append@(main_file,
+      "    return Easy_C__main(arguments);\n\")
+    call string_append@(main_file, "}\n\")
+
+    # Write out the file:
+    if !library_generate
+	main_stream :@= open@Out_Stream(main_file_name)
+	assert main_stream !== null@Out_Stream
+	call put@(main_file, main_stream)
+	call close@Out_Stream(main_stream)
+
+    #if options.verbose
+    call d@(form@("link command: %v%\n\") / f@(link_command))
+
+    call execute@System(link_command)
+
+    if messages_dump@(compiler)
+	return 1i
+
+    return 0i
+
+
+
+routine compiler_fail@Easy_C
+    takes kind String
+    takes file_name String
+    takes line_number Unsigned
+    returns_nothing
+
+    compiler :@= one_and_only@Compiler()
+    messages :@= compiler.messages
+    error_kinds :@= compiler.error_kinds
+    error_tokens :@= compiler.error_tokens
+    error_kinds_size :@= error_kinds.size
+    error_tokens_size :@= error_tokens.size
+    if error_kinds_size != 0 && error_tokens_size != 0
+	call log@(messages, error_tokens[error_tokens_size - 1],
+	  form@("Processing a %s% caused a %s% failure in %v% at line %d% (phase %s%)") %
+	  f@(error_kinds[error_kinds_size - 1]) %
+	  f@(kind) % f@(file_name) % f@(line_number) / f@(compiler.phase))
+    call dump@(messages, error@Out_Stream)
+
+    call d@(form@("%s% failure in %v% at line %d%\n\") %
+      f@(kind) % f@(file_name) / f@(line_number))
+    call flush@(error@Out_Stream)
+    call abort@System()
+
+
+routine framus@Easy_C
+    takes interface_extract String
+    takes compiler Compiler
+    takes options Options
+    takes messages Messages
+    returns Integer
+
+    compiler_executable :@= options.compiler_executable
+    tokenizer :@= compiler.tokenizer
+    search_options :@= options.search_options
+
+    # Extract the typedefs, struct, externs, unions, etx..."
+    c_stream :@= pipe_read@In_Stream(
+      form@("%s% -E %s%.x.h | grep -v '#'") %
+      f@(compiler_executable) / f@(interface_extract))
+    c_contents :@= all_read@(c_stream, null@String)
+    call close@(c_stream)
+    #call put@(c_contents, error@Out_Stream)
+
+    c_tokens :@= new@Array[Token]()
+    indents :@= new@Array[Unsigned]()
+    call append@(indents, 0)
+
+    tokenizer.contents := c_contents
+    tokenizer.tokens := c_tokens
+    tokenizer.index := 0
+    tokenizer.indents := indents
+
+    while true@Logical
+	    token :@= next@(tokenizer)
+	    switch token.lexeme
+	      case end_of_file
+		call append@(c_tokens, token)
+		break
+	      case open_indent, end_of_line, close_indent
+		do_nothing
+	      default
+		call append@(c_tokens, token)
+
+    parser :@= create@Parser(c_tokens, messages)
+    c_root :@= parse@C_Root(parser)
+
+    # Extract the #defines:
+    define_stream :@= pipe_read@In_Stream(
+      form@("%s% -dM -E %s% -I. %s%.x.h | sed s,#,,g | sed /[0-9]EE/d | sed /[0-9]D[DLF]/d") %
+      f@(compiler_executable) % f@(search_options) / f@(interface_extract))
+    define_contents :@= all_read@(define_stream, null@String)
+    call close@(define_stream)
+    #call put@(define_contents, error@Out_Stream)
+
+    define_tokens :@= new@Array[Token]()
+    indents := new@Array[Unsigned]()
+    call append@(indents, 0)
+
+    tokenizer.contents := define_contents
+    tokenizer.tokens := define_tokens
+    tokenizer.index := 0
+    tokenizer.indents := indents
+
+    error_list :@= messages.errors
+    error_indices :@= new@Array[Unsigned]()
+
+    error_list_size :@= error_list.size
+    lexeme :@= at_sign@Lexeme
+    while lexeme != end_of_file@Lexeme
+	    token :@= next@(tokenizer)
+	    lexeme := token.lexeme
+	    call append@(define_tokens, token)
+	    if error_list.size != error_list_size
+		error_list_size := error_list.size
+		call append@(error_indices, define_tokens.size)
+
+    s :@= error_indices.size
+    i :@= 0
+    while i < s
+	    ex :@= error_indices[i]
+	    call d@(form@("[-2]:%v% [-1]:%v% [0]:%v% [+1]%v%\n\") %
+	      f@(define_tokens[ex-2]) %
+	      f@(define_tokens[ex-1]) %
+	      f@(define_tokens[ex]) /
+	      f@(define_tokens[ex+1]))
+	    i := i + 1
+	
+    parser := create@Parser(define_tokens, messages)
+    define_root :@= parse@Define_Root(parser)
+
+    # Now grunt out the .exc file:
+    #FIXME: type_invoke continuation!!!
+
+    extract_file :@= new@String()
+    call string_append@(extract_file, "library Easy_C\n,n\")
+
+    call string_append@(extract_file, 
+      form@("include %s%_C\n,n\") / f@(interface_extract))
+
+    # Output the define clauses first:
+    c_declarations :@= c_root.c_declarations
+    size :@= c_declarations.size
+    index :@= 0
+    while index < size
+	    c_declaration :@= c_declarations[index]
+	    switch c_declaration.kind
+	      case struct
+		struct :@= c_declaration.struct
+		struct_name :@= new@String()
+		call string_append@(struct_name, struct.name.value)
+		struct_name[0] := upper_case@(struct_name[0])
+
+		if struct_name[0] != '_'
+		    call string_append@(extract_file,
+		      form@("define %s%\n\") / f@(struct_name))
+		    call string_append@(extract_file, "    external\n,n\")
+	    index := index + 1
+
+    # Output the defined routines:
+    xarguments :@= new@Comma_Separated[C_Argument]()
+    return_type :@= null@C_Type
+    routine_name :@= null@String
+    index := 0
+    while index < size
+	    c_declaration :@= c_declarations[index]
+	    switch c_declaration.kind
+	      case extern
+		extern :@= c_declaration.extern
+		switch extern.kind
+		  case extern1
+		    extern1 :@= extern.extern1
+		    return_type := extern1.return_type
+		    routine_name := extern1.name.value
+		    xarguments := extern1.arguments
+		  case extern2
+		    extern2 :@= extern.extern2
+		    return_type := extern2.return_type
+		    routine_name := extern2.name.value
+		    xarguments := extern2.arguments
+
+		call string_append@(extract_file,
+		  form@("routine %s%@%s%\n\") %
+		  f@(routine_name) / f@(interface_extract))
+
+		xarguments_size :@= xarguments.size
+		xarguments_index :@= 0
+		while xarguments_index < xarguments_size
+		    xargument :@= xarguments[xarguments_index]
+		    name :@= new@String()
+		    call string_append@(name, xargument.name.value)
+		    while name.size != 0 && name[0] = '_'
+			call character_delete@(name, 0)
+
+		    call string_append@(extract_file,
+		      form@("    takes %s% %s%\n\") %
+		      f@(name) / f@(xargument.type.type))
+		    xarguments_index := xarguments_index + 1
+
+		return_type_name :@= return_type.type
+		if equal@(return_type_name, "")
+		    call string_append@(extract_file, "    returns_nothing\n\")
+		else
+		    call string_append@(extract_file,
+		      form@("    returns %s%\n\") / f@(return_type_name))
+
+		call string_append@(extract_file,
+		  form@("    external %s%\n,n\") / f@(routine_name))
+	    index := index + 1
+
+    # Now output the access routines:
+    struct_name :@= new@String()
+    size := c_declarations.size
+    index := 0
+    while index < size
+	    c_declaration :@= c_declarations[index]
+	    switch c_declaration.kind
+	      case struct
+		struct :@= c_declaration.struct
+		call trim@(struct_name, 0)
+		call string_append@(struct_name, struct.name.value)
+		struct_name[0] := upper_case@(struct_name[0])
+		lower_struct_name :@= new@String()
+		call  lower_case_append@(lower_struct_name, struct_name)
+
+		if struct_name[0] != '_'
+		    fields :@= struct.fields
+		    fields_size :@= fields.size
+		    fields_index :@= 0
+		    while fields_index < fields_size
+			field :@= fields[fields_index]
+			switch field.kind
+			  case field1
+			    field1 :@= field.field1
+			  case field2
+			    field2 :@= field.field2
+
+			    # Do the get routine first:
+			    call string_append@(extract_file,
+			      form@("routine %s%_get@%s%\n\") %
+			      f@(field2.name.value) / f@(struct_name))
+
+			    call string_append@(extract_file,
+			      form@("    takes %s% %s%\n\") %
+			      f@(lower_struct_name) / f@(struct_name))
+
+			    call string_append@(extract_file,
+			      form@("    returns %s%\n\") /
+			      f@(field2.type.type))
+
+			    call string_append@(extract_file,
+			      form@("    external %s%__%s%_get\n,n\") %
+			      f@(struct_name) / f@(field2.name.value))
+
+			    # Do the set routine next:
+			    call string_append@(extract_file,
+			      form@("routine %s%_set@%s%\n\") %
+			      f@(field2.name.value) / f@(struct_name))
+
+			    call string_append@(extract_file,
+			      form@("    takes %s% %s%\n\") %
+			      f@(lower_struct_name) / f@(struct_name))
+
+			    call string_append@(extract_file,
+			      form@("    takes %s% %s%\n\") %
+			      f@(field2.name.value) / f@(field2.type.type))
+
+			    call string_append@(extract_file,
+			      "    returns_nothing\n\")
+
+			    call string_append@(extract_file,
+			      form@("    external %s%__%s%_set\n,n\") %
+			      f@(struct_name) / f@(field2.name.value))
+			fields_index := fields_index + 1
+	    index := index + 1
+
+    # Now output the defines:
+    interface_lower_case :@= new@String()
+    call lower_case_append@(interface_lower_case, interface_extract)
+    defines :@= define_root.defines
+    define_lines :@= new@Array[Define_Line]()
+    size := defines.size
+    index := 0
+    while index < size
+	    define :@= defines[index]
+	    switch define.kind
+	      case define_line
+		call append@(define_lines, define.define_line)
+	    index := index + 1
+
+    call sort@(define_lines, compare@Define_Line)
+    size := define_lines.size
+    lower_case :@= new@String()
+    index := 0
+    while index < size
+	    define_line :@= define_lines[index]
+	    call trim@(lower_case, 0)
+	    call lower_case_append@(lower_case, define_line.name.value)
+	    if lower_case[0] != '_'
+		call string_append@(extract_file,
+		  form@("external %s%_%s%@Unsigned\t\# =%s%\n\") %
+		  f@(interface_lower_case) % f@(lower_case) /
+		  f@(define_line.number.value))
+	    index := index + 1
+
+    # Write out the extracted file:
+    file_name :@= new@String()
+    call string_append@(file_name, form@("%s%.ezc") / f@(interface_extract))
+    extract_stream :@= open@Out_Stream(file_name)
+    assert extract_stream !== null@Out_Stream
+    call put@(extract_file, extract_stream)
+    call close@(extract_stream)
+
+    # Now generate the corresponding *_C.h file:
+    call trim@(extract_file, 0)
+    call string_append@(extract_file,
+      form@("#include \dq\%s%.x.h\dq\/*EZCC1*/\n\") / f@(interface_extract))
+
+    call string_append@(extract_file,
+      "#include \dq\EasyC_C.h\dq\/*EZCC2*/\n\")
+
+    struct_name := new@String()
+    lower_struct_name :@= new@String()
+    size := c_declarations.size
+    index := 0
+    while index < size
+	    c_declaration :@= c_declarations[index]
+	    switch c_declaration.kind
+	      case struct
+		struct :@= c_declaration.struct
+		call trim@(struct_name, 0)
+		call string_append@(struct_name, struct.name.value)
+		struct_name[0] := upper_case@(struct_name[0])
+		call trim@(lower_struct_name, 0)
+		call lower_case_append@(lower_struct_name, struct_name)
+
+		if struct_name[0] != '_'
+		    call string_append@(extract_file, 
+		      form@("typedef struct %s% *%s%;\n\") %
+		      f@(lower_struct_name) / f@(struct_name))
+	    index := index + 1
+    call string_append@(extract_file, "\n\")
+
+    call trim@(file_name, 0)
+    call string_append@(file_name, form@("%s%_C.h") / f@(interface_extract))
+    extract_stream := open@Out_Stream(file_name)
+    assert extract_stream !== null@Out_Stream
+    call put@(extract_file, extract_stream)
+    call close@(extract_stream)
+
+    # Now output the *_C.c file:
+    call trim@(extract_file, 0)
+    call string_append@(extract_file,
+      form@("#include \dq\%s%_C.h\dq\/*EZCC3*/\n,n\") /
+      f@(interface_extract))
+
+    # Output the extern declarations:
+    # Now output the access routines:
+    size := c_declarations.size
+    index := 0
+    while index < size
+	    c_declaration :@= c_declarations[index]
+	    switch c_declaration.kind
+	      case struct
+		struct :@= c_declaration.struct
+		call trim@(struct_name, 0)
+		call string_append@(struct_name, struct.name.value)
+		struct_name[0] := upper_case@(struct_name[0])
+		call trim@(lower_struct_name, 0)
+		call  lower_case_append@(lower_struct_name, struct_name)
+
+		if struct_name[0] != '_'
+		    # Output Null:
+		    call string_append@(extract_file,
+		      form@("%s% %s%__null;\n,n\") %
+		      f@(struct_name) / f@(struct_name))
+
+		    # Output new routine:
+		    call string_append@(extract_file,
+		      form@("%s% %s%__new(void)\n\") %
+		      f@(struct_name) / f@(struct_name))
+
+		    call string_append@(extract_file, "{\n\")
+
+		    call string_append@(extract_file, 
+		      form@("    %s% %s%;\n\") %
+		      f@(struct_name) / f@(lower_struct_name))
+
+		    call string_append@(extract_file,
+		      "    extern void *malloc(unsigned int);\n,n\")
+
+		    call string_append@(extract_file,
+		      form@("    %s% = (%s%)malloc(sizeof(*%s%));\n\") %
+		      f@(lower_struct_name) % f@(struct_name) /
+		      f@(lower_struct_name))
+
+		    call string_append@(extract_file,
+		      form@("    return %s%;\n\") / f@(lower_struct_name))
+
+		    call string_append@(extract_file, "}\n,n\")
+
+		    define_lines_size :@= define_lines.size
+		    define_lines_index :@= 0
+		    while define_lines_index < define_lines_size
+			define_line :@= define_lines[define_lines_index]
+			call trim@(lower_case, 0)
+			name :@= define_line.name.value
+			call lower_case_append@(lower_case, name)
+			if lower_case[0] != '_' && is_upper_case@(name[0])
+			    call string_append@(extract_file,
+			      form@("Unsigned Unsigned__%s%_%s%;\n\") %
+			      f@(interface_lower_case) / f@(lower_case))
+			define_lines_index := define_lines_index + 1
+
+		    # Output Initialize routine:
+		    call string_append@(extract_file,
+		      form@("void %s%__Initialize(void)\n\") / f@(struct_name))
+
+		    call string_append@(extract_file, "{\n\")
+
+		    call string_append@(extract_file,
+		      form@("void %s%__Initialize(void)\n\") / f@(struct_name))
+
+		    call string_append@(extract_file,
+		      form@("    %s%__null = %s%__new();\n\") %
+		      f@(struct_name) / f@(struct_name))
+
+		    define_lines_index := 0
+		    while define_lines_index < define_lines_size
+			define_line :@= define_lines[define_lines_index]
+			call trim@(lower_case, 0)
+			name :@= define_line.name.value
+			call lower_case_append@(lower_case, name)
+			if lower_case[0] != '_' && is_upper_case@(name[0])
+			    call string_append@(extract_file,
+			      form@("    Unsigned__%s%_%s% = %s%;\n\") %
+			      f@(interface_lower_case) % f@(lower_case) /
+			      f@(define_line.name.value))
+			define_lines_index := define_lines_index + 1
+
+		    call string_append@(extract_file, "}\n,n")
+
+		    # Output the get and set routines:
+		    fields :@= struct.fields
+		    fields_size :@= fields.size
+		    fields_index :@= 0
+		    while fields_index < fields_size
+			field :@= fields[fields_index]
+			switch field.kind
+			  case field1
+			    field1 :@= field.field1
+			  case field2
+			    field2 :@= field.field2
+
+			    # Do the get routine first:
+			    call string_append@(extract_file,
+			      form@("%s% %s%__%s%_get(%s% %s%)\n\") %
+			      f@(field2.type.type) % f@(struct_name) %
+			      f@(field2.name.value) % f@(struct_name) /
+			      f@(lower_struct_name))
+
+			    call string_append@(extract_file, "{\n\")
+
+			    call string_append@(extract_file,
+			      form@("    return %s%->%s%;\n\") %
+			      f@(lower_struct_name) / f@(field2.name.value))
+
+			    call string_append@(extract_file, "}\n,n\")
+
+			    # Do the set routine next:
+			    call string_append@(extract_file, form@(
+			      "extern void %s%__%s%_set(%s% %s%, %s% %s%)\n\") %
+			      f@(struct_name) % f@(field2.name.value) %
+			      f@(struct_name) % f@(lower_struct_name) %
+			      f@(field2.type.type) / f@(field2.name.value))
+
+			    call string_append@(extract_file, "{\n\")
+
+			    call string_append@(extract_file, 
+			      form@("    %s%->%s% = %s%;\n\") %
+			      f@(lower_struct_name) % f@(field2.name.value) /
+			      f@(field2.name.value))
+
+			    call string_append@(extract_file, "}\n,n\")
+			fields_index := fields_index + 1
+	    index := index + 1
+
+    call trim@(file_name, 0)
+    call string_append@(file_name, form@("%s%_C.c") / f@(interface_extract))
+    extract_stream := open@Out_Stream(file_name)
+    assert extract_stream !== null@Out_Stream
+    call put@(extract_file, extract_stream)
+    call close@(extract_stream)
+
+    return 0i
+
+
+routine parse@C_Error
+    takes parser Parser
+    returns C_Error
+
+    # This routine always succeeds and returns a {C_Error} object.
+
+    c_error :@= new@C_Error()
+    tokens :@= c_error.tokens
+    parser_tokens :@= parser.tokens
+    index :@= parser.index
+    while true@Logical
+	token :@= parser_tokens[index]
+	switch token.lexeme
+	  case semicolon
+	    # We are done:
+	    c_error.semicolon := token
+	    index := index + 1
+	    break
+	  case end_of_file
+	    index := index - 1
+	    break
+	  default
+	    call append@(tokens, token)
+	index := index + 1
+    parser.index := index
+    return c_error
+
+
+routine parse@C_Type
+    takes parser Parser
+    returns C_Type
+
+    type :@= null@String
+    c_type :@= null@C_Type
+    tokens :@= parser.tokens
+    index :@= parser.index
+    token :@= tokens[index]
+    if token.lexeme != symbol@Lexeme
+	return null@C_Type
+    name :@= token.value
+    index := index + 1
+
+    # Skip over any "__const" prefixes:
+    while equal@(name, "__const") || equal@(name, "const")
+	token := tokens[index]
+	index := index + 1
+	if token.lexeme != symbol@Lexeme
+	    return null@C_Type
+	name := token.value
+
+    # Now start processing:
+    if equal@(name, "unsigned")
+	# Modifier:
+	type := "Unsigned"
+	token := tokens[index]
+	if token.lexeme = symbol@Lexeme
+	    name := token.value
+	    index := index + 1
+	    if equal@(name, "int")
+		# Unsigned Integer:
+		type := "Integer"
+	    else_if equal@(name, "char")
+		# Unsigned Character:
+		type := "Character"
+    else_if equal@(name, "int")
+	# Integer:
+	type := "Integer"
+    else_if equal@(name, "void")
+	# Integer:
+	type := ""
+    else_if equal@(name, "char")
+	type := "Character"
+    else_if equal@(name, "float")
+	type := "Float"
+    else_if equal@(name, "double")
+	type := "Double"
+    else_if equal@(name, "struct")
+	token := tokens[index]
+	index := index + 1
+	if token.lexeme != symbol@Lexeme
+	    return null@C_Type
+	type := new@String()
+	call string_append@(type, token.value)
+	type[0] := upper_case@(type[0])
+	token := tokens[index]
+	if token.lexeme = multiply@Lexeme
+	    index := index + 1
+    else
+	type := lookup@Hash_Table[String, String](parser.c_typedefs, name)
+
+    if type !== null@String
+	c_type := new@C_Type()
+	c_type.type := type
+	parser.index := index
+    return c_type
+
+
+routine traverse@C_Type
+    takes c_type C_Type
+    takes traverser Traverser
+    returns_nothing
+
+    do_nothing
+
+
+routine parse@C_Typedef
+    takes parser Parser
+    returns C_Typedef
+
+    index :@= parser.index
+    typedef :@= parse@Keyword(parser, "typedef")
+    if typedef == null@Keyword
+	parser.index := index
+	return null@C_Typedef
+
+    type :@= parse@C_Type(parser)
+    if type == null@C_Type
+	parser.index := index
+	return null@C_Typedef
+
+    name :@= parse@Token(parser, symbol@Lexeme)
+    if name == null@Token
+	parser.index := index
+	return null@C_Typedef
+
+    semicolon :@= parse@Token(parser, semicolon@Lexeme)
+    if semicolon == null@Token
+	parser.index := index
+	return null@C_Typedef
+
+    c_typedef :@= new@C_Typedef()
+    c_typedef.typedef := typedef
+    c_typedef.type := type
+    c_typedef.name := name
+    c_typedef.semicolon := semicolon
+
+    # Insert into table here
+    call insert@Hash_Table[String, String](parser.c_typedefs,
+      name.value, type.type)
+
+    return c_typedef
+
+
+routine compare@Define_Line
+    takes define_line1 Define_Line
+    takes define_line2 Define_Line
+    returns Integer
+
+
+    return compare@(define_line1.name.value, define_line2.name.value)
+
+# {Options} routines:
+
+routine extract@Options
+    takes arguments Array[String]
+    returns Options
+
+    # This routine will process the command line options in {arguments}
+    # and return them stored in an {Options} object.  Any error messages
+    # are output to {error@Out_Stream}.  If any errors occur, {null@Options}
+    # is returned.
+
+    # Print out a helper message:
+    options :@= new@Options()
+    options.command_name := null@String
+    options.compile_only := 0f
+    options.compiler_executable := null@String
+    options.debug := 0f
+    options.executable_name := null@String
+    options.executable_directory := null@String
+    options.interface_extract := null@String
+    options.linker_executable := null@String
+    options.linker_options := new@String()
+    options.linker_searches := new@Array[String]()
+    options.optimize := 0f
+    options.plain_main := 0f
+    options.profile := 0f
+    options.require_bases := new@Array[String]()
+    options.search_options := null@String
+    options.searches := new@Array[String]()
+    options.source_bases := new@Array[String]()
+    options.suffix := null@String
+    options.trace_line := 0
+    options.verbose := 0f
+
+    linker_searches :@= options.linker_searches
+    searches :@= options.searches
+    errors :@= false@Logical
+    source_bases :@= options.source_bases
+
+    # Print out a usage string if no arguments presented:
+    size :@= arguments.size
+    if size <= 1
+	call d@("Usage: [-[c]]* [-[CIoS] arg]* base\n\")
+	errors := true@Logical
+    else
+	options.command_name := arguments[0]
+
+    # Perform command line argument parsing:
+    index :@= 1
+    while index < size
+	# Process the next argument:
+	argument :@= arguments[index]
+	argument_size :@= argument.size
+	if argument_size = 2 && argument[0] = '-'
+	    # We have an option:
+	    letter :@= argument[1]
+
+	    # Figure out whether we have a simple option, or an option
+	    # with a following value:
+	    letters :@= "CILoSTX"
+	    letters_size :@= letters.size
+	    letters_index :@= 0
+	    while letters_index < letters_size &&
+	      letter != letters[letters_index]
+		letters_index := letters_index + 1
+
+	    if letters_index < letters_size
+		# We have an option with a following argument:
+		previous_value :@= null@String
+		value :@= null@String
+		index := index + 1
+		if index >= size
+		    call d@(form@("No value after %v%\n\") / f@(argument))
+		    errors := true@Logical
+		else
+		    value := arguments[index]
+		
+		if letter = 'C'
+		    # -C {compiler_executable}:
+		    previous_value := options.compiler_executable
+		    options.compiler_executable := value
+	        else_if letter = 'I'
+		    # -I {seach directory}:
+		    call append@(searches, value)
+		else_if letter = 'l'
+		    # -l {linker_executable}:
+		    previous_value := options.linker_executable
+		    assert value.size != 0
+		    options.linker_executable := value
+		else_if letter = 'L'
+		    # -L {linker_search_directory}:
+		    call append@(linker_searches, value)
+		else_if letter = 'o'
+		    # -o {executable_name}
+		    previous_value := options.executable_name
+		    options.executable_name := value
+		else_if letter = 'S'
+		    # -S {suffix}:
+		    previous_value := options.suffix
+		    options.suffix := value
+		else_if letter = 'T'
+		    # -T {trace_line}:
+		    trace_line :@= options.trace_line
+		    if trace_line != 0
+			previous_value :=
+			  read_only_copy@(form@("%d%") / f@(trace_line))
+		    options.trace_line := unsigned_convert@(value)
+		else_if letter = 'X'
+		    # -X {interface_extract}:
+		    previous_value := options.interface_extract
+		    options.interface_extract := value
+		else
+		    # {letters} has an extraneous value
+		    assert false@Logical
+
+		# Check for duplication options:
+		if previous_value !== null@String
+		    call d@(form@("Duplicate %v% option replaces previous\n\") /
+		      f@(argument))
+		    errors := true@Logical
+	    else_if letter = 'c'
+		# -c:
+		options.compile_only := true@Logical
+	    else_if letter = 'd'
+		# -d: Enable debugging:
+		options.debug := true@Logical
+	    else_if letter = 'M'
+		# -M: Generate plain main:
+		options.plain_main := true@Logical
+	    else_if letter = 'O'
+		# -O: Optimize:
+		options.optimize := true@Logical
+	    else_if letter = 'p'
+		# -p: Enable profiling:
+		options.profile := true@Logical
+	    else_if letter = 'v'
+		# -v: Enable verbosity:
+		options.verbose := true@Logical
+	    else
+		call d@(form@("Unrecognized command line option %v%\n\") /
+		  f@(argument))
+		errors := true@Logical
+	else_if argument_size != 0 && argument[0] = '-'
+	    call d@(form@("Unrecognized command line option %v%\n\") /
+	      f@(argument))
+	    errors := true@Logical
+	else
+	    # File to compile:
+	    call append@(source_bases, argument)
+	index := index + 1
+
+    # Make sure that the compiler directory is on the search path:
+    executable_directory :@= new@String()
+    assert !executable_directory_lookup@Unix(options.command_name,
+      executable_directory)
+    options.executable_directory := executable_directory
+
+    # Figure out if {executable_directory} is the same as the current working
+    # directory (".")
+    current_working_directory :@= new@String()
+    call real_path@Unix(".", current_working_directory)
+
+    #call d@(form@("size=%d% exec_dir=%v% cwd=%v%\n\") % f@(searches.size) %
+    #  f@(executable_directory) / f@(current_working_directory))
+
+    if !equal@(current_working_directory, executable_directory)
+	# The executable is not coming out of current working directory (".");
+	# That means we want to explicity search the {executable_directory}
+	# to find standard libraries such as "Easy_C" and "Math":
+	call append@(searches, executable_directory)
+
+    # Construct {search_options}, a list of -Idir options to feed to
+    # compiler command line:
+    search_options :@= new@String()
+    size := searches.size
+    index := 0
+    while index < size
+	search :@= searches[index]
+	if options.verbose
+	    call d@(form@("searches[%d%]: %v%\n\") %
+	      f@(index) / f@(searches[index]))
+	call string_append@(search_options, form@("-I%s% ") / f@(search))
+	index := index + 1
+
+    call append@(searches, ".")
+
+    call string_append@(search_options, "-I. ")
+    options.search_options := search_options
+
+    linker_options :@= options.linker_options
+    size := linker_searches.size
+    index := 0
+    while index < size
+	linker_search :@= linker_searches[index]
+	call string_append@(linker_options, form@(" -L%s%") / f@(linker_search))
+	index := index + 1
+
+    # Deal with -C and -l options:
+    compiler_executable :@= options.compiler_executable
+    if options.linker_executable == null@String
+	# Do not have -l:
+	if compiler_executable == null@String
+	    # Have neither -L nor -C:
+	    options.compiler_executable := "gcc"
+	    options.linker_executable := "gcc"
+	else
+	    # Do not have -l, but do have -C:
+	    options.linker_executable := compiler_executable
+    else
+	# Have -l:
+	if compiler_executable == null@String
+	    # Have -l, but no -C:
+	    options.compiler_executable := "gcc"
+	#else
+	#    # Have both -C and -l:
+	#    do_nothing
+    linker_executable :@= options.linker_executable
+    assert linker_executable !== null@String
+    assert linker_executable.size != 0
+	    
+    if errors
+	options := null@Options
+    return options
+
