@@ -157,14 +157,23 @@ TAR_FILES :=	\
 
 BOOTSTRAP_FILES := \
     Compiler.ez.c \
+    Compiler.ez.h \
     Declaration.ez.c \
+    Declaration.ez.h \
     Easy_C.ez.c \
+    Easy_C.ez.h \
     Expression.ez.c \
+    Expression.ez.h \
     EZCC.ez.c \
+    EZCC.ez.h \
     Parse.ez.c \
+    Parse.ez.h \
     Statement.ez.c \
+    Statement.ez.h \
     Token.ez.c \
+    Token.ez.h \
     Unix.ez.c \
+    Unix.ez.h \
     ezcc.ez.c
 
 .PHONY: all clean
