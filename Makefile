@@ -175,6 +175,7 @@ BOOTSTRAP_FILES := \
     Unix.ez.c \
     Unix.ez.h \
     ezcc.ez.c \
+    Easy_C.h \
     Unix.h
 
 .PHONY: all clean
