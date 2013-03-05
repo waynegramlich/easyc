@@ -1534,7 +1534,7 @@ routine new_emit@Define_Declaration
 	call string_append@(buffer,
 	  form@("    %k% %lk%;\n\") % f@(define_name) / f@(define_name))
 
-	call buffer_append@("    extern void *malloc(unsigned int);\n\",
+	call buffer_append@("    extern void *malloc(size_t);\n\",
 	  buffer)
         call buffer_append@("\n\", buffer)
 
