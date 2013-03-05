@@ -1,7 +1,8 @@
 # Copyright (c) 2004-2010 by Wayne C. Gramlich.
 # All rights reserved.
 
-ROOT := ..
+#ROOT := ..
+ROOT := .
 
 include $(ROOT)/Makefile_common.mk
 include $(ROOT)/Makefile_private.mk
