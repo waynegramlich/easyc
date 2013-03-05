@@ -167,7 +167,7 @@ void Unix_File_Set__erase(
 Unix_File_Set Unix_File_Set__new(void)
 {
     Unix_File_Set unix_file_set;
-    extern void *malloc(unsigned int);
+    extern void *malloc(size_t);
 
     unix_file_set = (Unix_File_Set)malloc(sizeof(*unix_file_set));
     Unix_File_Set__erase(unix_file_set);
