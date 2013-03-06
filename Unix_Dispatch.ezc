@@ -118,6 +118,14 @@ library Easy_C
 library Unix
 library Unix_Termios
 
+include "fcntl.h"			# Unix File Control definitions
+include "sys/select.h"
+include "sys/socket.h"
+include "Unix_C.h"
+include "errno.h"
+
+defines_prefix unix_so_ = SO_ @ Integer	# Grab the "SO_*" defines
+
 # {Unix_Dispatch} routines:
 
 define Unix_Dispatch[Globals]

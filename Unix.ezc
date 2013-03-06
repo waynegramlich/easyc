@@ -14,7 +14,6 @@ include "errno.h"
 defines_prefix unix_errno_ = E @ Unsigned	# Grab the "E" errno's:
 defines_prefix unix_file_f_ = F_ @ Integer	# Grab the "F_*" defines
 defines_prefix unix_file_o_ = O_ @ Unsigned	# Grab the "O_*" defines:
-#defines_prefix unix_so_ = SO_ @ Integer	# Grab the "SO_*" defines
 
 
 define Unix_Directory_Stream			# DIR *
