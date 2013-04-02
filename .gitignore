@@ -42,6 +42,8 @@ Termios_Test*
 Test*
 Token.[ch]
 Unix.[ch]
+Unix_Test
+Unix_Test.[ch]
 backtrace*
 easyc.tar*
 ezcc

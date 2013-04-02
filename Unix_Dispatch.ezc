@@ -133,21 +133,21 @@ define Unix_Dispatch[Globals]
 	close_when_done Logical		# Flag to auto close on write flush
 	globals Globals			# {Globals} object
 	except Logical			# Dispatch on exception
-	except_routine [<= Unix_Dispatch[Globals]] # Exception routine
+	except_routine [<= Unix_Dispatch[Globals], String] # Exception routine
 	file_socket_number Integer	# File/Socket number
 	input_buffer String		# Input buffer of data read
 	io_routine [<= Unix_Dispatch[Globals], Logical, Logical, Logical]
 	name String			# Name of dispatch object
 	output_buffer String		# Output buffer of data to write
 	read Logical			# Dispatch on read available
-	read_routine [<= Unix_Dispatch[Globals]] # Read routine
+	read_routine [<= Unix_Dispatch[Globals], String] # Read routine
 	write Logical			# Dispatch on write available
 
 
 routine accept@Unix_Dispatch[Globals]
     takes listen Unix_Dispatch[Globals]
     takes connect Unix_Dispatch[Globals]
-    takes read_routine [<= Unix_Dispatch[Globals]]
+    takes read_routine [<= Unix_Dispatch[Globals], String]
     returns_nothing
 
     # This routine will will accept a connection on the listen socket
@@ -176,13 +176,15 @@ routine accept_io_routine@Unix_Dispatch[Globals]
 
     # Process any available input data:
     if read
-	call dispatch.read_routine(dispatch)
+	call dispatch.read_routine(dispatch, "accept_io_routine@Unix_Dispatch")
 
     if write
-	call dispatch.except_routine(dispatch)
+	call dispatch.except_routine(dispatch,
+	  "accept_io_routine@Unix_Displatch")
 
     if except
-	call dispatch.except_routine(dispatch)
+	call dispatch.except_routine(dispatch,
+	  "accept_io_routine@Unix_Displatch")
 
 
 routine auto_close@Unix_Dispatch[Globals]
@@ -244,6 +246,7 @@ routine fail_io_routine@Unix_Dispatch[Globals]
 
 routine fail_routine@Unix_Dispatch[Globals]
     takes dispatch Unix_Dispatch[Globals]
+    takes from String
     returns_nothing
 
     # This is a routine that simply fails.  It is typically attached
@@ -252,8 +255,8 @@ routine fail_routine@Unix_Dispatch[Globals]
 
     error :@= errno@Unix()
     text :@= errno_convert@Unix(null@String, error)
-    call d@(form@("Dispatch object %v% failed %d% (=%v%)\n\") %
-      f@(dispatch.name) % f@(error) / f@(text))
+    call d@(form@("Dispatch object %v% failed %d% (=%v%) (from=%v%)\n\") %
+      f@(dispatch.name) % f@(error) % f@(text) / f@(from))
     assert 0f
 
 
@@ -268,7 +271,7 @@ routine input_disable@Unix_Dispatch[Globals]
 
 routine input_enable@Unix_Dispatch[Globals]
     takes dispatch Unix_Dispatch[Globals]
-    takes input_routine [<= Unix_Dispatch[Globals]]
+    takes input_routine [<= Unix_Dispatch[Globals], String]
     returns_nothing
 
     # This routine will enable {dispatch} for reading data.  Each time
@@ -287,7 +290,7 @@ routine listen@Unix_Dispatch[Globals]
     takes address String
     takes port_number Unsigned
     takes queue_length Unsigned
-    takes accept_routine [<= Unix_Dispatch[Globals]]
+    takes accept_routine [<= Unix_Dispatch[Globals], String]
     returns Logical
 
     # This routine will allocate a listen socket and bind it to listen
@@ -331,7 +334,7 @@ routine listen@Unix_Dispatch[Globals]
 routine open_read@Unix_Dispatch[Globals]
     takes file Unix_Dispatch[Globals]
     takes file_name String
-    takes read_routine [<= Unix_Dispatch[Globals]]
+    takes read_routine [<= Unix_Dispatch[Globals], String]
     returns Logical
 
     # This routine will open {file_name} and attach it {dispatch} for
@@ -361,7 +364,7 @@ routine serial_open@Unix_Dispatch[Globals]
     takes serial Unix_Dispatch[Globals]
     takes serial_device_name String
     takes baud_rate Unsigned
-    takes read_routine [<= Unix_Dispatch[Globals]]
+    takes read_routine [<= Unix_Dispatch[Globals], String]
     returns Logical
 
     # This routine will 
@@ -382,7 +385,7 @@ routine socket_connect@Unix_Dispatch[Globals]
     takes connect Unix_Dispatch[Globals]
     takes address String
     takes port_number Unsigned
-    takes read_routine [<= Unix_Dispatch[Globals]]
+    takes read_routine [<= Unix_Dispatch[Globals], String]
     returns_nothing
 
     socket_number :@= socket_stream_create@Unix()
@@ -421,7 +424,8 @@ routine standard_io_routine@Unix_Dispatch[Globals]
 
     # Process exceptions first:
     if except
-	call dispatch.except_routine(dispatch)
+	call dispatch.except_routine(dispatch,
+	  "standard_io_routine@Unix_Dispatch")
 
     # Process writes next:
     if write
@@ -458,7 +462,8 @@ routine standard_io_routine@Unix_Dispatch[Globals]
 		    call range_delete@(output_buffer, 0, written)
 	    else
 		# We had a failure:
-		call dispatch.except_routine(dispatch)
+		call dispatch.except_routine(dispatch,
+		  "standard_io_routine@Unix_Dispatch")
 	    
     # Finally process any reads:
     if read
@@ -474,13 +479,15 @@ routine standard_io_routine@Unix_Dispatch[Globals]
 	    # We got some data and it was appended to {input_buffer}:
 
 	    # No call out to the user's {read_routine} to process it:
-	    call dispatch.read_routine(dispatch)
+	    call dispatch.read_routine(dispatch,
+	      "standard_io_routine@Unix_Displatch")
 
 	    # Clear {input_buffer} for the next time:
 	    call trim@(input_buffer, 0)
 	else
 	    # We had a failure:
-	    call dispatch.except_routine(dispatch)
+	    call dispatch.except_routine(dispatch,
+	      "standard_io_routine@Unix_Dispatch")
 
 
 routine io_enable@Unix_Dispatch[Globals]
@@ -581,7 +588,7 @@ routine connect_allocate@Unix_Dispatcher[Globals]
     takes name String
     takes address String
     takes port_number Unsigned
-    takes read_routine [<= Unix_Dispatch[Globals]]
+    takes read_routine [<= Unix_Dispatch[Globals], String]
     returns Unix_Dispatch[Globals]
 
     # This routine will allocate and return a {Unix_Dispatch} object
@@ -596,7 +603,7 @@ routine connect_allocate@Unix_Dispatcher[Globals]
 routine console_allocate@Unix_Dispatcher[Globals]
     takes dispatcher Unix_Dispatcher[Globals]
     takes name String
-    takes read_routine [<= Unix_Dispatch[Globals]]
+    takes read_routine [<= Unix_Dispatch[Globals], String]
     returns Unix_Dispatch[Globals]
 
     # This routine will allocate a {Unix_Dispatch} object that is attached
@@ -711,7 +718,7 @@ routine listen_allocate@Unix_Dispatcher[Globals]
     takes address String
     takes port_number Unsigned
     takes queue_length Unsigned
-    takes connect_routine [<= Unix_Dispatch[Globals]]
+    takes connect_routine [<= Unix_Dispatch[Globals], String]
     returns Unix_Dispatch[Globals]
 
     # This routine will allocate and return {Unix_Dispatch} object with a name
@@ -730,7 +737,7 @@ routine open_file_number_allocate@Unix_Dispatcher[Globals]
     takes dispatcher Unix_Dispatcher[Globals]
     takes name String
     takes file_number Integer
-    takes read_routine [<= Unix_Dispatch[Globals]]
+    takes read_routine [<= Unix_Dispatch[Globals], String]
     returns Unix_Dispatch[Globals]
 
     dispatch :@= closed_allocate@(dispatcher, name)
@@ -746,7 +753,7 @@ routine serial_allocate@Unix_Dispatcher[Globals]
     takes name String
     takes serial_device_name String
     takes baud_rate Unsigned
-    takes read_routine [<= Unix_Dispatch[Globals]]
+    takes read_routine [<= Unix_Dispatch[Globals], String]
     returns Unix_Dispatch[Globals]
 
     # This routine will allocate and return a {Unix_Dispatch} object
